@@ -719,7 +719,7 @@ function ctex(w, h, paint){
 }
 function plane(w, h, base = true){ const g = new THREE.PlaneGeometry(w, h); if (base) g.translate(0, h/2, 0); return g; }
 function cutout(geo, m){ const me = new THREE.Mesh(geo, m); scene.add(me); return me; }
-function swapTex(t, im){ t.image = im; t.magFilter = THREE.LinearFilter; t.needsUpdate = true; }
+function swapTex(t, im){ t.dispose(); t.image = im; t.magFilter = THREE.LinearFilter; t.needsUpdate = true; }   // 한 번 올라간 그림판은 버리고 새 크기로 다시 올림
 function fitGeo(me, h, im, base = true){ const w = h*im.width/im.height; me.geometry = plane(w, h, base); return w; }   // 높이는 그대로, 너비는 그림 비율대로
 
 /* 그림판 그림들 (assets/ 그림이 있으면 그걸로 바뀜) */
@@ -1006,7 +1006,7 @@ const FIREFLY_TEX = ctex(8, 8, (g) => { g.fillStyle = '#fff6a0'; g.beginPath(); 
 
 function onAsset(k, im){
   if (ART[k]) { ART[k].forEach(f => { try { f(im); } catch (e) {} }); return; }
-  const swap = t => { t.image = im; t.magFilter = THREE.LinearFilter; t.needsUpdate = true; };
+  const swap = t => swapTex(t, im);
   if (k === 'player_walk') { loadPersonFrames(im); return; }
   const extra = { butterfly:BFLY_TEX, fire:FIRE_TEX, log:LOG_TEX, cliff:CLIFF_TEX, waterfall_flow:FLOW_TEX };
   if (extra[k]) { swap(extra[k]); extra[k].magFilter = THREE.LinearFilter; return; }
@@ -1612,7 +1612,7 @@ fireStyle.textContent = `.firebar{position:fixed;right:calc(env(safe-area-inset-
 @media (max-width:640px){.firebar{bottom:calc(env(safe-area-inset-bottom,0px) + 110px)}}`;
 document.head.append(fireStyle);
 const fireBar = document.createElement('div'); fireBar.className = 'firebar'; fireBar.hidden = true;
-fireBar.innerHTML = `<span class="title">모닥불</span><div class="row2 keys" id="keys" hidden></div><div class="row2" id="instRow"></div><div class="row2" id="cookRow"></div><div class="row2"><button id="sitBtn" type="button">앉기 (F)</button></div>`;
+fireBar.innerHTML = `<span class="title">모닥불</span><div class="row2 keys" id="keys" hidden></div><div class="row2" id="instRow" hidden></div><div class="row2" id="cookRow"></div><div class="row2"><button id="sitBtn" type="button">앉기 (F)</button></div>`;
 document.body.append(fireBar);
 const $keys = fireBar.querySelector('#keys'), $instRow = fireBar.querySelector('#instRow'), $sitBtn = fireBar.querySelector('#sitBtn'), $cookRow = fireBar.querySelector('#cookRow');
 for (let i = 0; i < 8; i++) { const b = document.createElement('button'); b.type = 'button'; b.textContent = i + 1; b.addEventListener('pointerdown', e => { e.preventDefault(); myPlay(i); }); $keys.append(b); }
@@ -1625,7 +1625,6 @@ function paintFire(){
   if (cooking) note(`${RECIPES[cooking.r].name} 굽는 중…`);
   else {
     const can = RECIPES.map((r, i) => [r, i]).filter(([r]) => canMake(r));
-    if (!can.length) note('숲에서 바나나·망고·카카오를 주워 오면 구울 수 있어요');
     can.forEach(([r, i], j) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = r.name + (j === 0 && !MOBILE ? ' (G)' : ''); b.addEventListener('click', () => { startCook(i); cv.focus(); }); $cookRow.append(b); });
   }
   for (const b of $instRow.children) { const k = b.dataset.k, h = instHolder(k), taken = !!h && h.id !== ME.id;
@@ -1652,7 +1651,7 @@ addEventListener('keydown', e => {
   if (e.target === $say || modalOpen() || fireBar.hidden) return;
   if (e.code === 'KeyF') toggleSit();
   else if (e.code === 'KeyG') startCook(RECIPES.findIndex(canMake));
-  else if (/^Digit[1-8]$/.test(e.code) && instrument) myPlay(+e.code.slice(5) - 1);
+
 });
 
 function updateFire(dt, camX, camZ){
@@ -1802,7 +1801,7 @@ const CUP_TEX = ctex(96, 36, (g) => { g.fillStyle = '#a0583a'; g.strokeStyle = R
 for (const it of Object.values(ITEMS)) it.stick = ctex(96, 36, (g) => { g.strokeStyle = '#6b4a2a'; g.lineWidth = 3; g.beginPath(); g.moveTo(0, 32); g.lineTo(96, 12); g.stroke(); g.drawImage(it.tex.userData.canvas, 32, -4, 40, 40); });
 for (const [k, it] of Object.entries(ITEMS)) onArt('fruit_' + k, im => {
   const c = it.tex.userData.canvas, g = c.getContext('2d'); c.width = c.height = 128; const s = Math.min(128/im.width, 128/im.height);
-  g.drawImage(im, (128 - im.width*s)/2, (128 - im.height*s)/2, im.width*s, im.height*s); it.tex.needsUpdate = true;
+  g.drawImage(im, (128 - im.width*s)/2, (128 - im.height*s)/2, im.width*s, im.height*s); it.tex.dispose(); it.tex.needsUpdate = true;
   const sc = it.stick.userData.canvas, sg = sc.getContext('2d'); sg.clearRect(0, 0, sc.width, sc.height); sg.strokeStyle = '#6b4a2a'; sg.lineWidth = 3; sg.beginPath(); sg.moveTo(0, 32); sg.lineTo(96, 12); sg.stroke(); sg.drawImage(c, 32, -4, 40, 40); it.stick.needsUpdate = true;
 });
 const RECIPES = [
