@@ -632,6 +632,7 @@ function step(dt){
     P.fx = wx; P.fy = wz; P.x += wx*sp; P.y += wz*sp;
     const ox = wd(P.x - pl.x, W), oz = wd(P.y - pl.y, H), od = Math.hypot(ox, oz) || 1, cl = Math.max(pl.inner, Math.min(pl.r, od));
     P.x = wrapX(pl.x + ox/od*cl); P.y = wrapY(pl.y + oz/od*cl);
+    if (od >= pl.r && pl.down && wdist(P.x, P.y, pl.ladder.x, pl.ladder.z) < 1.1 && (ox*wx + oz*wz) > 0) pl.down();   // 사다리 쪽 끝에서 바깥으로 걸으면 타고 내려감
   } else if (P.moving) {
     // 화면 기준 입력(오른쪽 dx, 위쪽 -dy)을 숲 속 방향으로
     const wx = Math.cos(yaw)*dx + Math.sin(yaw)*dy, wz = -Math.sin(yaw)*dx + Math.cos(yaw)*dy;
@@ -2354,6 +2355,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
   };
   const climb = up => { if (P.climb) return; const lx = SPOT.ladder.x, lz = SPOT.ladder.z, ix = wd(hub.x - lx, W), iz = wd(hub.y - lz, H), il = Math.hypot(ix, iz);
     P.climb = { up, t0:clock, x0:P.x, y0:P.y, bx:lx, bz:lz, tx:wrapX(lx + ix/il*.6), tz:wrapY(lz + iz/il*.6) }; P.sit = false; pzSfx.rope(.06); };
+  plat.ladder = SPOT.ladder; plat.down = () => climb(false);   // 사다리 쪽 끝으로 걸어가면 내려감
   function throwOrange(){   // 원숭이가 내 머리를 겨냥해 오렌지를 던짐
     if (SL.orange) return; POKE_SND.jesters(.8*near());
     const under = wdist(P.x, P.y, SPOT.sloth.x, SPOT.sloth.z) < .85;
