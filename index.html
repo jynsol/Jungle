@@ -2788,7 +2788,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     if (clock - (WP.lastN || -9) > 4) WP.prog = 0;   // 한참 쉬었다 부르면 처음부터
     WP.lastN = clock;
     if (s.n !== MEL[WP.prog] && s.n === MEL[0]) WP.prog = 0;   // 틀린 뒤 첫 음부터 다시 부르면 그 음부터 셈
-    if (s.n === MEL[WP.prog]) { WP.prog++; WP.okT = clock; setTimeout(() => voice('otter', s.n, .12*near()), 380); pzSfx.rope(.04*near());
+    if (s.n === MEL[WP.prog]) { WP.prog++; setTimeout(() => voice('otter', s.n, .12*near()), 380); pzSfx.rope(.04*near());
       if (WP.prog >= MEL.length) setPzStep(WP, 1); }
     else { WP.prog = 0; WP.wrongT = clock; pzSfx.hm(.07*near()); WP.melT = 1.5; }
   });
@@ -2826,9 +2826,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     if (st >= 2 && type[id(rg.stones[0].tx, rg.stones[0].ty)] !== FLOOR) setPath(true);
     if (!WP.snd) { WP.snd = true; if (st === 1 && el < .3) { const v = near(); pzSfx.thump(.25*v); [0, .4, .8].forEach(d => setTimeout(() => tick(260, .8, .08*v), d*1000)); setTimeout(() => pzSfx.chime(.08*near()), 4800); } }
   };
-  WP.overlay = () => { const st = pzStep(WP);
-    if (st === 0 && clock - (WP.okT || -9) < .9) { const s = toScreen(DAM.x, 1.4, DAM.z), k = (clock - WP.okT)/.9; if (s) { ctx.fillStyle = `rgba(255,246,200,${1 - k})`; ctx.font = '15px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; for (let j = 0; j < WP.prog; j++) { const a = j*1.26 - 1.6; ctx.fillText('✦', s[0] + Math.cos(a)*(22 + k*14), s[1] + Math.sin(a)*(22 + k*14)); } } }   // 맞은 음마다 둑 둘레에 별이 하나씩 늘어남
-    if (st !== 2) return; const s = toScreen(C.x, .5, C.z); if (!s || Math.sin(clock*3) < .3) return; ctx.fillStyle = '#fff6c8'; ctx.font = '16px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText('✦', s[0] + 10, s[1]); };
+  WP.overlay = () => { const st = pzStep(WP); if (st !== 2) return; const s = toScreen(C.x, .5, C.z); if (!s || Math.sin(clock*3) < .3) return; ctx.fillStyle = '#fff6c8'; ctx.font = '16px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText('✦', s[0] + 10, s[1]); };
   PUZZLES.push(WP);
 }
 
