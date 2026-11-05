@@ -1914,6 +1914,7 @@ function hintButterflies(list){   // 노란 나비 공터 쪽으로 길 잃은 �
 }
 const STRAY_LABELS = ['나무?', '이건 덤불', '풀', '이름이 뭐였더라', '나무', '잎'];
 function drawHintOverlay(){   // 이름표 마을 근처엔 식물에 이름표가 하나둘
+  return;   // 정보량이 많아서 뺌
   const lb = SITE.labels, n = nearness(lb.cx, lb.cy, 16);
   if (n <= 0) return;
   ctx.font = '10px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -2149,7 +2150,7 @@ function draw(dt = .016){
   if (sketchFlash > 0) { ctx.fillStyle = `rgba(255,250,235,${sketchFlash*1.6})`; ctx.fillRect(0, 0, vw, vh); sketchFlash -= dt; }
   drawObsOverlay(1, dt);
   ctx.font = '11px system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  for (const L of LABELS) {
+  for (const L of []) {   // 이름표 마을의 이름표는 뺌
     const near = wdist(L.x, L.y, P.x, P.y) < 1.9;
     L.a += ((near ? 1 : 0) - L.a) * Math.min(1, dt*12);
     if (L.a < .02) continue;
