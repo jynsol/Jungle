@@ -1227,7 +1227,7 @@ for (let k = 0; k < W*H; k++) {
   if (type[k] === BUSH) { const n = MOBILE ? 3 : 4; for (let j = 0; j < n; j++) addFlat(k, pickSpeciesAt(hash(k*7 + j), k, j), tx + .5 + (hash(k*3 + j) - .5)*.75, ty + .5/n + j/n, j); }
   else if (type[k] === FLOOR) {
     // 모닥불과 기적의 자리는 비워 둠
-    if (TRAIL[k] || wdist(tx + .5, ty + .5, FIRE.x, FIRE.y) < 3.4 || REGIONS.some(r => wdist(tx + .5, ty + .5, r.hub.x, r.hub.y) < 3) || SITES.some(s => wdist(tx + .5, ty + .5, s.cx, s.cy) < 2.3) || VISTA_CLEAR.some(v => wdist(tx + .5, ty + .5, v.x, v.y) < v.r)) continue;
+    if (TRAIL[k] || wdist(tx + .5, ty + .5, FIRE.x, FIRE.y) < 3.4 || REGIONS.some(r => wdist(tx + .5, ty + .5, r.hub.x, r.hub.y) < 3) || SITES.some(s => wdist(tx + .5, ty + .5, s.cx, s.cy) < 2.3) || (window.CAVE && window.CAVE.inside(tx + .5, ty + .5)) || VISTA_CLEAR.some(v => wdist(tx + .5, ty + .5, v.x, v.y) < v.r)) continue;
     if (hash(k*53) < (MOBILE ? .35 : .55)) addFlat(k, GRASS, tx + .5 + (hash(k*61) - .5)*.6, ty + .3, 5);
     if (hash(k*59) < .08) addFlat(k, AGAVE, tx + .5, ty + .6, 6);
     else if (hash(k*67) < .14) addFlat(k, FERN, tx + .5 + (hash(k*71) - .5)*.5, ty + .7, 7);
@@ -3861,7 +3861,7 @@ function draw(dt = .016){
   scene.background.copy(DAY_SKY).lerp(NIGHT_SKY, nt).lerp(DUSK_SKY, dusk*.75).lerp(STORM_SKY, st*.65); hazeCol.copy(FAR_COL).multiply(tintCol); scene.fog.color.copy(scene.background).lerp(hazeCol, .6).lerp(deepTmp.copy(DEEP_COL).multiply(tintCol), .45);   // 멀수록 흐려지되, 숲 그늘 쪽으로 조금 가라앉은 안개
   openS += (Math.max(0, Math.min(1, (openness() - .35)/.5)) - openS)*Math.min(1, dt*1.2);   // 덤불이 적은 곳일수록
   const view = (1 + elevP*.4)*(1 + openS*1.4)*(energy < 30 ? .55 + .45*energy/30 : 1)*(MOBILE ? .85 : 1);   // 바위 위에선 멀리, 지치면 가까이
-  scene.fog.near = 6 - 2*nt; scene.fog.far = Math.min(44 + elevP*10, (38 - 10*nt - 9*st)*view); ringR = Math.max(10, Math.min(27 + elevP*4, scene.fog.far));   // 높은 곳에선 훨씬 멀리 U.uCull.value = ringR;   // 더 멀리까지 보이게 (안개는 천천히)
+  scene.fog.near = 6 - 2*nt; scene.fog.far = Math.min(44 + elevP*10, (38 - 10*nt - 9*st)*view); ringR = Math.max(10, Math.min(27 + elevP*4, scene.fog.far)); U.uCull.value = MOBILE ? Math.min(ringR, 23) : ringR;   // 높은 곳에선 훨씬 멀리, 안개 끝까지 그림 (폰은 조금 덜)
   updateRings(camX, CAM_H + elevP, camZ, elevP);
   // 낮엔 옅은 해, 해질녘엔 크고 붉은 해(「해 질 녘의 처녀림」), 밤엔 큰 달(「뱀 부리는 여인」)
   sky.material.map = nt > .55 ? MOON_TEX : dusk > .35 ? RED_SUN_TEX : SUN_TEX;
@@ -3915,7 +3915,8 @@ function draw(dt = .016){
 
   // 겹쳐 그리기
   ctx.clearRect(0, 0, vw, vh);
-  if (st > .02) {   // 빗줄기와 번개
+  const roofed = (window.CAVE && window.CAVE.inside(P.x, P.y)) || (window.TEMPLE_IN && window.TEMPLE_IN());
+  if (st > .02 && !roofed) {   // 빗줄기와 번개 (동굴·신전 안에선 안 보임)
     const f = clock*60 | 0, n = 220*st | 0; ctx.strokeStyle = 'rgba(230,236,226,.35)'; ctx.lineWidth = 1; ctx.beginPath();
     for (let i = 0; i < n; i++) { const x = hash(i*7 + f)*(vw + 100) - 50, y = hash(i*13 + f*3)*vh; ctx.moveTo(x, y); ctx.lineTo(x - 6, y + 18); }
     ctx.stroke();
