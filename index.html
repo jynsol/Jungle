@@ -1934,17 +1934,36 @@ function collectPick(p){   // 걸어서 지나가거나, 눌러서 주움
   pickFx.push({ key:p.key, x:p.x, z:p.z, t:clock }); pickChime();
 }
 // 주운 열매: 천천히 떠올라 돌다가 빛 알갱이로 흩어짐
-const pickFx = [];
+const pickFx = [], popFx = [];
+function popAt(x, z, h = .3, keep = null){ popFx.push({ x, z, h, t:clock, keep }); sfx((ac, t) => { const out = ac.createGain(); out.gain.value = .06; out.connect(ac.destination); out.connect(reverb(ac));   // 무언가 나왔다! (반짝 고리 + 올라가는 세 음)
+  [[784, 0], [1046.5, .1], [1568, .2]].forEach(([f, d]) => { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'triangle'; o.frequency.value = f; g.gain.setValueAtTime(.0001, t + d); g.gain.exponentialRampToValueAtTime(1, t + d + .02); g.gain.exponentialRampToValueAtTime(.0001, t + d + .9); o.connect(g).connect(out); o.start(t + d); o.stop(t + d + 1); }); }); }
 function pickChime(){ sfx((ac, t) => { const out = ac.createGain(); out.gain.value = .05; out.connect(ac.destination); out.connect(reverb(ac));
   for (const [f, d] of [[1318.5, 0], [1975.5, .09]]) { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = f; g.gain.setValueAtTime(.0001, t + d); g.gain.exponentialRampToValueAtTime(1, t + d + .02); g.gain.exponentialRampToValueAtTime(.0001, t + d + 1.4); o.connect(g).connect(out); o.start(t + d); o.stop(t + d + 1.5); } }); }
-function drawPickFx(){
+function drawPickFx(){   // 얻은 것: 그 자리에서 크게 튀어 올라 반짝 → 바구니로 날아 들어감 (나왔다!)
+  const br = $bag.getBoundingClientRect(), bx = br.width ? br.right - 14 : 30, by = br.height ? br.top + br.height/2 : 30;
   for (let i = pickFx.length - 1; i >= 0; i--) {
-    const f = pickFx[i], k = (clock - f.t)/1.6; if (k >= 1) { pickFx.splice(i, 1); continue; }
-    const s = toScreen(f.x, .3 + k*1.3, f.z); if (!s) continue;
-    const im = f.img || ITEMS[f.key].tex.userData.canvas, sz = 30*(1 - k*.6);
-    ctx.save(); ctx.globalAlpha = k < .55 ? 1 : 1 - (k - .55)/.45; ctx.translate(s[0], s[1]); ctx.rotate(Math.sin(k*5)*.4); try { ctx.drawImage(im, -sz/2, -sz/2, sz, sz); } catch (e) {} ctx.restore();
-    ctx.fillStyle = '#fff6c8';
-    for (let j = 0; j < 7; j++) { const a = j*.9 + f.t, r = 6 + k*34; if (k < .35) continue; ctx.globalAlpha = (1 - k)*.9; ctx.beginPath(); ctx.arc(s[0] + Math.cos(a)*r, s[1] + Math.sin(a)*r*.6 - k*10, 1.6, 0, Math.PI*2); ctx.fill(); }
+    const f = pickFx[i], T = clock - f.t, k = T/1.9; if (k >= 1) { pickFx.splice(i, 1); $bag.animate && $bag.animate([{ transform:'scale(1.35)' }, { transform:'scale(1)' }], { duration:350, easing:'ease-out' }); continue; }
+    const s0 = toScreen(f.x, .3, f.z); if (s0) f.s = s0; const s = f.s; if (!s) continue;
+    const im = f.img || ITEMS[f.key].tex.userData.canvas;
+    let x = s[0], y = s[1], sz;
+    if (T < .45) { const u = T/.45, e = 1 - (1 - u)*(1 - u); y -= e*90; sz = 30 + e*44 + Math.sin(u*Math.PI)*12; }   // 튀어 오름
+    else if (T < 1.15) { y -= 90 + Math.sin((T - .45)*6)*4; sz = 74; }   // 잠깐 떠서 보여 줌
+    else { const u = Math.min(1, (T - 1.15)/.75), e = u*u; x = x + (bx - x)*e; y = (y - 90) + (by - (y - 90))*e - Math.sin(u*Math.PI)*40; sz = 74 - e*50; }   // 바구니로
+    const cy = T < 1.15 ? y : y;
+    if (T < 1.15) {   // 뒤에 빛 둥글게
+      const g = ctx.createRadialGradient(x, cy, 0, x, cy, sz*.95); g.addColorStop(0, 'rgba(255,246,200,.75)'); g.addColorStop(1, 'rgba(255,246,200,0)');
+      ctx.fillStyle = g; ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(x, cy, sz*.95, 0, Math.PI*2); ctx.fill();
+      const rk = Math.min(1, T/.6); ctx.strokeStyle = '#fff6c8'; ctx.lineWidth = 3*(1 - rk); ctx.globalAlpha = 1 - rk; ctx.beginPath(); ctx.arc(s[0], s[1] - 40*rk, 20 + rk*70, 0, Math.PI*2); ctx.stroke();   // 퍼지는 고리
+      ctx.fillStyle = '#fff6c8'; for (let j = 0; j < 10; j++) { const a = j*.63 + f.t, r = sz*.55 + T*40; ctx.globalAlpha = Math.max(0, 1 - T/1.15); ctx.beginPath(); ctx.arc(x + Math.cos(a)*r, cy + Math.sin(a)*r*.8, 2.2, 0, Math.PI*2); ctx.fill(); }
+    }
+    ctx.save(); ctx.globalAlpha = 1; ctx.translate(x, y); ctx.rotate(T < 1.15 ? Math.sin(T*7)*.12 : 0); try { ctx.drawImage(im, -sz/2, -sz/2, sz, sz); } catch (e) {} ctx.restore();
+  }
+  for (let i = popFx.length - 1; i >= 0; i--) {   // 나왔다!: 퍼지는 고리 두 겹과 튀는 빛
+    const f = popFx[i], T = clock - f.t; if (T > 1.4 && !(f.keep && f.keep())) { popFx.splice(i, 1); continue; }
+    const s = toScreen(f.x, f.h, f.z); if (!s) continue;
+    if (T > 1.4) { const k = ((T - 1.4) % 1.6)/1.6, a = Math.sin(k*Math.PI); ctx.fillStyle = '#fff6c8'; ctx.globalAlpha = a*.9; ctx.beginPath(); for (let j = 0; j < 8; j++) { const r = j % 2 ? 2.5 : 11*a + 3, q = j*Math.PI/4 + k; ctx.lineTo(s[0] + Math.cos(q)*r, s[1] - 14 + Math.sin(q)*r); } ctx.closePath(); ctx.fill(); continue; }   // 줍기 전까지 작게 반짝
+    for (const d of [0, .25]) { const k = Math.max(0, Math.min(1, (T - d)/.9)); if (k <= 0 || k >= 1) continue; ctx.strokeStyle = '#fff6c8'; ctx.lineWidth = 4*(1 - k); ctx.globalAlpha = 1 - k; ctx.beginPath(); ctx.ellipse(s[0], s[1], 16 + k*80, (16 + k*80)*.45, 0, 0, Math.PI*2); ctx.stroke(); }
+    ctx.fillStyle = '#fff6c8'; for (let j = 0; j < 12; j++) { const a = j*.52 + f.t, r = 10 + T*70; ctx.globalAlpha = Math.max(0, 1 - T/1.4); ctx.beginPath(); ctx.arc(s[0] + Math.cos(a)*r, s[1] - Math.abs(Math.sin(a))*r*.9 - T*20, 2.4, 0, Math.PI*2); ctx.fill(); }
   }
   ctx.globalAlpha = 1;
 }
@@ -2591,7 +2610,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
       if (tossM.material.map !== ITEMS[toss.key].tex) { tossM.material.map = ITEMS[toss.key].tex; tossM.material.needsUpdate = true; }
       const up = !toss.flipped, u = Math.min(1, k), ax = up ? toss.x0 : SPOT.monkey.x, az = up ? toss.z0 : SPOT.monkey.z, bx = up ? SPOT.monkey.x : P.x, bz = up ? SPOT.monkey.z : P.y, ah = up ? 1.4 : MY + .15, bhh = up ? MY + .15 : 1.4;
       const [x, z] = wrapNear(ax + wd(bx - ax, W)*u, az + wd(bz - az, H)*u, camX, camZ); tossM.visible = true; tossM.position.set(x, ah + (bhh - ah)*u + Math.sin(u*Math.PI)*1.5, z); tossM.lookAt(camera.position);
-      if (k >= 1 && up) { if (toss.back) { toss.flipped = true; toss.t = clock; POKE_SND.jesters(.7); } else { toss = null; tossM.visible = false; pzSave.monkeyFed = 1; savePz(); POKE_SND.jesters(1); pzSfx.thump(.1); } }
+      if (k >= 1 && up) { if (toss.back) { toss.flipped = true; toss.t = clock; POKE_SND.jesters(.7); } else { toss = null; tossM.visible = false; pzSave.monkeyFed = 1; savePz(); POKE_SND.jesters(1); pzSfx.thump(.1); popAt(LENS_DROP.x, LENS_DROP.z, .3, () => !pzSave.lens); } }
       else if (k >= 1) { tick(560, .1, .1, 'triangle'); stars = { t:clock }; bag[toss.key] = (bag[toss.key] || 0) + 1; saveBag(); paintBag(); toss = null; tossM.visible = false; } }
     { const [x, z] = at(SPOT.chest); chest.position.set(x, DECK, z); face(chest, x, z); chest.material.map = st >= 6 ? CH.open : CH.shut; }
     { const [x, z] = at(SPOT.spy); spy.position.set(x, DECK, z); face(spy, x, z); }
@@ -2884,7 +2903,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     WP.lastN = clock;
     if (s.n !== MEL[WP.prog] && s.n === MEL[0]) WP.prog = 0;   // 틀린 뒤 첫 음부터 다시 부르면 그 음부터 셈
     if (s.n === MEL[WP.prog]) { WP.prog++; setTimeout(() => voice('otter', s.n, .12*near()), 380); pzSfx.rope(.04*near());
-      if (WP.prog >= MEL.length) setPzStep(WP, 1); }
+      if (WP.prog >= MEL.length) { setPzStep(WP, 1); setTimeout(() => popAt(BRANCH_AT.x, BRANCH_AT.z, .3, () => pzSave.stick !== 1), 1800); } }
     else { WP.prog = 0; WP.wrongT = clock; pzSfx.hm(.07*near()); WP.melT = 1.5; }
   });
   WP.targets = () => {
@@ -2892,7 +2911,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     FROGS.forEach((f, i) => L.push({ key:'pz-frog', noSeen:true, x:f.x, h:.5, z:f.z, reach:5, me:frogs[i], act:() => { f.pop = clock; frogVoice(NOTE_OF[i], .1); } }));
     otters.forEach((m, i) => L.push({ key:'pz-otter', noSeen:true, x:DAM.x, h:1.6, z:DAM.z, me:m, reach:7, act:() => { WP.dive = clock; tick(1500, .1, .05); } }));
     L.push({ key:'pz-dam', noSeen:true, x:DAM.x, h:.8, h0:.1, h1:1.5, z:DAM.z, me:dam });
-    if (st >= 1 && pzSave.stick !== 1) L.push({ key:'pz-branches', noSeen:true, x:BRANCH_AT.x, h:.15, z:BRANCH_AT.z, reach:2.5, me:branches, act:() => { pzSave.stick = 1; savePz(); paintBag(); pickChime(); } });   // 마른 가지 (횃불감)
+    if (st >= 1 && pzSave.stick !== 1) L.push({ key:'pz-branches', noSeen:true, x:BRANCH_AT.x, h:.15, z:BRANCH_AT.z, reach:2.5, me:branches, act:() => { pzSave.stick = 1; savePz(); paintBag(); pickFx.push({ img:branches.material.map.image, x:BRANCH_AT.x, z:BRANCH_AT.z, t:clock }); pickChime(); } });   // 마른 가지 (횃불감)
     return L;
   };
   WP.update = (dt, camX, camZ) => {
@@ -3065,7 +3084,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     { const [x, z] = at(ROOM), fly = st >= 2 ? Math.min(1, el/3) : 0;
       bats.forEach((b, i) => { b.m.visible = fly < 1; b.a += dt*(st >= 2 ? 3 : .2); b.m.position.set(x + Math.cos(b.a)*b.r*(1 + fly*6), b.h + fly*fly*12, z + Math.sin(b.a)*b.r*(1 + fly*6)); b.m.lookAt(camera.position); b.m.scale.set(1, st >= 2 ? .6 + Math.abs(Math.sin(clock*14 + i))*.6 : 1, 1); });
       const [ox, oz] = at(C); outBats.forEach((b, i) => { b.m.visible = nt > .5 && st < 2; if (!b.m.visible) return; const a = clock*.6 + b.a; b.m.position.set(ox + Math.cos(a)*b.r, 5 + Math.sin(a*1.7 + i)*.8 + (i % 3)*.5, oz + Math.sin(a)*b.r); b.m.lookAt(camera.position); b.m.scale.set(1, .6 + Math.abs(Math.sin(clock*12 + i))*.5, 1); });
-      const moonIn = st >= 2 && pzSave.moon; shaft.visible = moonIn; shaft.material.opacity = moonIn ? .5 : 0;   // 박쥐가 비킨 지붕 틈으로, 괘종시계가 열두 시면 달빛이 들어옴 shaft.position.set(x, 0, z); face(shaft, x, z);
+      const moonIn = st >= 2 && pzSave.moon; shaft.visible = moonIn; shaft.material.opacity = moonIn ? .5 : 0;   shaft.position.set(x, 0, z); face(shaft, x, z);   // 박쥐가 비킨 지붕 틈으로, 괘종시계가 열두 시면 달빛이 들어옴
       { const [ix, iz] = at({ x:ROOM.x - .9, z:ROOM.z }); idol.position.set(ix, 0, iz); face(idol, ix, iz); idol.material.map = st >= 3 ? IDOL.open : IDOL.shut;
         capy.visible = st === 3; capy.position.set(ix, .95 + Math.sin(clock*2)*.05, iz); face(capy, ix, iz); }
       { const [mx, mz] = at({ x:ROOM.x + .9, z:ROOM.z + .9 }); mirrors.position.set(mx, 0, mz); face(mirrors, mx, mz); } }
@@ -3190,7 +3209,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     TC.update = (dt, camX, camZ) => { const st = pzStep(TC), g = clock - TC.gotT;
       place(nest, NEST, DECK + .7, camX, camZ); { const [x, z] = wrapNear(NEST.x + .9, NEST.z, camX, camZ); branch.position.set(x, DECK + .72, z); face(branch, x, z, camX, camZ); }
       place(bird, NEST, DECK + .95 + (g < 1 ? Math.sin(g*Math.PI)*.25 : 0), camX, camZ); bird.rotation.z = g < 1.5 ? Math.sin(g*12)*.15 : Math.sin(clock*.7)*.05;
-      crank.visible = st === 1; if (crank.visible) { const f = Math.min(1, (clock - (TC.dropT || (TC.dropT = clock)))/.9); const [x, z] = wrapNear(NEST.x + (DROP.x - NEST.x)*f, NEST.z + (DROP.z - NEST.z)*f, camX, camZ); crank.position.set(x, (DECK + .7)*(1 - f*f) + .02, z); face(crank, x, z, camX, camZ); if (f >= 1 && !TC.thud) { TC.thud = true; pzSfx.thump(.12); } } };
+      crank.visible = st === 1; if (crank.visible) { const f = Math.min(1, (clock - (TC.dropT || (TC.dropT = clock)))/.9); const [x, z] = wrapNear(NEST.x + (DROP.x - NEST.x)*f, NEST.z + (DROP.z - NEST.z)*f, camX, camZ); crank.position.set(x, (DECK + .7)*(1 - f*f) + .02, z); face(crank, x, z, camX, camZ); if (f >= 1 && !TC.thud) { TC.thud = true; pzSfx.thump(.12); popAt(DROP.x, DROP.z, .3, () => pzStep(TC) === 1); } } };
     PUZZLES.push(TC); }
 
   /* 4. 축음기: 태엽 손잡이를 끼우고 돌리면 개구리 노래를 천천히 틀어 줌. 나팔 아래 서랍에서 새우 그물 */
@@ -3203,7 +3222,8 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
       if (st === 1) L.push({ key:'pz-net', noSeen:true, x:NETP.x, h:.3, z:NETP.z, reach:2.5, act:() => { take('net', NET_T, NETP.x, NETP.z); setPzStep(GR, 2); } });
       return L; };
     GR.update = (dt, camX, camZ) => { const st = pzStep(GR), gd = wdist(P.x, P.y, at.x, at.z);
-      if (st === 0 && gd < 11 && (GR.hissT = (GR.hissT ?? 0) - dt) <= 0) { GR.hissT = 1.6; const v = .035*(1 - gd/11); for (let i = 0; i < 5; i++) setTimeout(() => tick(2600 + Math.random()*1800, .02, v, 'square'), i*260 + Math.random()*120); }   // 바늘이 판을 긁는 소리: 다가가면 들림 netM.visible = st === 1; if (netM.visible) place(netM, NETP, 0, camX, camZ);
+      if (st === 0 && gd < 11 && (GR.hissT = (GR.hissT ?? 0) - dt) <= 0) { GR.hissT = 1.6; const v = .035*(1 - gd/11); for (let i = 0; i < 5; i++) setTimeout(() => tick(2600 + Math.random()*1800, .02, v, 'square'), i*260 + Math.random()*120); }   // 바늘이 판을 긁는 소리: 다가가면 들림
+      netM.visible = st === 1; if (netM.visible) { const f = Math.min(1, (clock - (GR.netT || (GR.netT = clock)))/.8), [x, z] = wrapNear(at.x + (NETP.x - at.x)*f, at.z + (NETP.z - at.z)*f, camX, camZ); netM.position.set(x, 1 + f*.6 - f*f*1.6 + .02, z); face(netM, x, z, camX, camZ); if (f >= 1 && !GR.landed) { GR.landed = true; pzSfx.thump(.1); popAt(NETP.x, NETP.z, .3, () => pzStep(GR) === 1); } }   // 나팔에서 그물이 툭 튀어나와 땅에 떨어짐
       handle.visible = st >= 1 || pzSave.crank === 2; if (handle.visible) { const [x, z] = wrapNear(at.x + .35, at.z, camX, camZ); handle.position.set(x, .55, z); face(handle, x, z, camX, camZ); handle.rotation.z = clock - GR.playT < 6 ? clock*4 : 0; } };
     PUZZLES.push(GR); }
 
@@ -4046,11 +4066,11 @@ function draw(dt = .016){
   ALTARS.forEach(face); TIGERS.forEach(face); MONKEYS.forEach(face); critters.forEach(c => face(c.me));
   for (const st of STORIES) { face(st.me); if (st.key === 'swing') st.me.rotation.z = Math.sin(clock*.8)*.12; }
   updateChair(dt); updateLamp(nt, camX, camZ);
-  // 이불, 나비, 흩날리는 잎, 반딧불, 재규어 눈
+  // 이불, 나비, 흩날리는 잎, 반딧불, 재규어 눈 (공터 나비 떼는 구슬 퍼즐을 푼 뒤에만: 그 전엔 구슬 위 나비가 눈에 띄게)
   sheetMeshes.forEach((me, i) => { const s = sheets[i]; me.visible = !!s; if (s) { me.position.set(s.x + Math.sin(clock + i)*.3 + (s.h - 1)*.15, s.h, s.z); me.rotation.set(0, yaw, Math.sin(clock*2 + i)*.25); me.scale.setScalar(1 + s.h*.05); proj(me, false); } });
   const bf = [];
   const bs = SITE.butterflies;
-  for (let i = 0; i < 9; i++) bf.push([bs.cx + Math.sin(clock*.7 + i*2.3)*2.2, .8 + Math.sin(clock*1.3 + i)*.4, bs.cy + Math.cos(clock*.9 + i*1.7)*1.8, i]);
+  if (((pzSave.butterfly && pzSave.butterfly.step) || 0) >= 2) for (let i = 0; i < 9; i++) bf.push([bs.cx + Math.sin(clock*.7 + i*2.3)*2.2, .8 + Math.sin(clock*1.3 + i)*.4, bs.cy + Math.cos(clock*.9 + i*1.7)*1.8, i]);
   const followers = [{ x:P.x, y:P.y, on:!!found.butterflies }, ...[...others.values()].map(o => ({ x:o.rx, y:o.ry, on:o.bf }))];
   for (const f of followers) if (f.on) for (let i = 0; i < 3; i++) bf.push([f.x + Math.cos(clock*1.3 + i*2.1)*.6, 1.2 + Math.sin(clock*1.7 + i*2.1)*.25, f.y + Math.sin(clock*1.1 + i*2.1)*.4, i]);
   hintButterflies(bf);
