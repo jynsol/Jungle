@@ -98,7 +98,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 /* ================= 그래픽 교체용 =================
    assets/ 폴더에 아래 이름의 png를 넣으면 기본 그림 대신 그 그림판으로 바뀌어요. 크기와 비율은 README 참고.
    모두 정면에서 본 모습, 투명 배경, 아래가 땅에 닿게. */
-const ASSET_NAMES = ['agave','grass','broadleaf','fern','lily','whitespike','heartleaf','banana','sansevieria','palm','tree','orangetree','lotus','flamingo','tiger','monkey','ruin','player','parrot','leaf'];
+const ASSET_NAMES = ['agave','grass','broadleaf','fern','lily','whitespike','heartleaf','banana','sansevieria','palm','tree','orangetree','lotus','flamingo','tiger','monkey','ruin','player','parrot','leaf','player_walk','butterfly','fire','log','cliff','waterfall_flow'];
 const ASSETS = Object.fromEntries(ASSET_NAMES.map(n => [n, 'assets/' + n + '.png']));
 const COLORS = {
   // 앙리 루소 「적도의 정글」(1909)에서 고른 색
@@ -880,6 +880,33 @@ const ALTAR_TEX = ctex(160, 80, (g, w, h) => {
   g.fillStyle = '#f0b884'; for (let x = 36; x < w-30; x += 22) { g.beginPath(); g.arc(x, 62, 3, 0, Math.PI*2); g.fill(); }
 });
 let playerImg = null;
+let personFrames = null;
+// Atlas rows: back, front, right profile. Each row contains four walking frames.
+function loadPersonFrames(im){
+  const cw = im.width/4, ch = im.height/3;
+  personFrames = Array.from({length:3}, (_, row) => Array.from({length:4}, (_, col) =>
+    ctex(256, 384, g => g.drawImage(im, col*cw, row*ch, cw, ch, 0, 0, 256, 384))));
+}
+function personPose(fx, fy, viewYaw, moving, sitting, elapsed){
+  const side = fx*Math.cos(viewYaw) - fy*Math.sin(viewYaw);
+  const depth = fx*Math.sin(viewYaw) + fy*Math.cos(viewYaw);
+  const row = Math.abs(side) > Math.abs(depth) ? 2 : depth > 0 ? 1 : 0;
+  return { row, flip:row === 2 && side < 0 ? -1 : 1,
+    frame:moving && !sitting ? Math.floor(elapsed*7)%4 : 0 };
+}
+function animatePerson(mesh, actor, moving, dt){
+  const active = moving && !actor.sit;
+  mesh.userData.walkTime = active ? (mesh.userData.walkTime || 0) + dt : 0;
+  const pose = personPose(actor.fx ?? 0, actor.fy ?? -1, yaw, active, actor.sit, mesh.userData.walkTime);
+  if (personFrames) {
+    mesh.material.map = personFrames[pose.row][pose.frame];
+    mesh.scale.set(pose.flip, actor.sit ? .72 : 1, 1);
+  } else {
+    const side = (actor.fx || 0)*Math.cos(yaw) - (actor.fy || 0)*Math.sin(yaw);
+    if (moving && Math.abs(side) > .2) actor.flip = side < 0 ? -1 : 1;
+    mesh.scale.set(actor.flip || 1, actor.sit ? .72 : 1, 1);
+  }
+}
 const personCache = {};
 function personTex(color){
   if (personCache[color]) return personCache[color];
@@ -891,7 +918,7 @@ function personTex(color){
     g.fillStyle = '#1a120a'; g.beginPath(); g.arc(37, 29, 2, 0, Math.PI*2); g.fill();
     g.fillStyle = '#e8c36a'; g.beginPath(); g.ellipse(32, 19, 21, 5, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.fillRect(24, 7, 16, 12); g.strokeRect(24, 7, 16, 12);
   });
-  if (playerImg) { t.image = playerImg; t.magFilter = THREE.NearestFilter; t.needsUpdate = true; }
+  if (playerImg) { t.image = playerImg; t.magFilter = THREE.LinearFilter; t.needsUpdate = true; }
   return personCache[color] = t;
 }
 const OLDMAN_TEX = ctex(64, 96, (g) => {
@@ -931,7 +958,10 @@ const EYES_TEX = ctex(32, 12, (g) => { g.fillStyle = COLORS.jaguar; for (const x
 const FIREFLY_TEX = ctex(8, 8, (g) => { g.fillStyle = '#fff6a0'; g.beginPath(); g.arc(4, 4, 3.6, 0, Math.PI*2); g.fill(); });
 
 function onAsset(k, im){
-  const swap = t => { t.image = im; t.magFilter = THREE.NearestFilter; t.needsUpdate = true; };
+  const swap = t => { t.image = im; t.magFilter = THREE.LinearFilter; t.needsUpdate = true; };
+  if (k === 'player_walk') { loadPersonFrames(im); return; }
+  const extra = { butterfly:BFLY_TEX, fire:FIRE_TEX, log:LOG_TEX, cliff:CLIFF_TEX, waterfall_flow:FLOW_TEX };
+  if (extra[k]) { swap(extra[k]); extra[k].magFilter = THREE.LinearFilter; return; }
   const si = SPECIES.findIndex(p => p.key === k), ti = TREES.findIndex(p => p.key === k);
   if (si >= 0) swap(SP_TEX[si]);
   else if (ti >= 0) swap(TREE_TEX[ti]);
@@ -2279,17 +2309,14 @@ function draw(dt = .016){
   if (st > .5 && Math.random() < dt*.22) { flash = 1; setTimeout(thunder, 500 + Math.random()*900); }
   flash = Math.max(0, flash - dt*3);
   if (audio && audio.rg) audio.rg.gain.setTargetAtTime(soundOn ? st*.1 : 0, audio.ac.currentTime, .3);
-  // 사람들 (판은 늘 카메라 쪽을 봄, 걷는 방향으로 좌우 뒤집힘)
-  const rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  // 사람들: 카메라 기준 앞/뒤/옆 모습과 각자의 걷기 프레임.
   myMesh.position.set(P.x, elevP, P.y); myMesh.rotation.y = yaw;
-  if (P.moving) { const s = P.fx*rx + P.fy*rz; if (Math.abs(s) > .2) P.flip = s < 0 ? -1 : 1; }
-  myMesh.scale.set(P.flip || 1, P.sit ? .72 : 1, 1); myMesh.visible = e < .6;
+  animatePerson(myMesh, P, P.moving, dt); myMesh.visible = e < .6;
   for (const [key, o] of others) {
     let me = peopleMeshes.get(key);
     if (!me || me.userData.color !== o.color) { if (me) scene.remove(me); me = cutout(personGeo, mat(personTex(o.color))); me.userData.color = o.color; peopleMeshes.set(key, me); }
     me.position.set(o.rx, elevAt(o.rx, o.ry), o.ry); me.rotation.y = yaw;
-    if (o.m) { const s = o.fx*rx + o.fy*rz; if (Math.abs(s) > .2) o.flip = s < 0 ? -1 : 1; }
-    me.scale.set(o.flip || 1, o.sit ? .72 : 1, 1);
+    animatePerson(me, o, o.m, dt);
   }
   for (const [key, me] of peopleMeshes) if (!others.has(key)) { scene.remove(me); peopleMeshes.delete(key); }
   PARROTS.forEach((p, i) => { p.mesh.rotation.y = yaw; p.mesh.position.y = Math.abs(Math.sin(clock*3 + i))*.03; });
