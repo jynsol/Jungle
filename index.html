@@ -113,7 +113,7 @@ const ASSETS = Object.fromEntries(ASSET_NAMES.map(n => [n, 'assets/' + n + '.png
 const ART = {};   // 그림 이름 → 그림이 오면 할 일 (그림판 바꾸고 비율 맞추기)
 const onArt = (k, fn) => (ART[k] || (ART[k] = [])).push(fn);
 let pzSave = {}; try { pzSave = JSON.parse(localStorage.getItem('denggul-puzzles')) || {}; } catch (e) {}   // 퍼즐 진행, 들고 있는 돛, 범선에 건 돛
-if ((pzSave.v || 0) < 3) { pzSave = { v:3 }; try { localStorage.setItem('denggul-puzzles', JSON.stringify(pzSave)); } catch (e) {} }   // 퍼즐을 새로 만들어서 예전 진행은 비움
+if ((pzSave.v || 0) < 4) { pzSave = { v:4 }; try { localStorage.setItem('denggul-puzzles', JSON.stringify(pzSave)); } catch (e) {} }   // 퍼즐을 새로 만들어서 예전 진행은 비움
 // 글 대신 쓰는 작은 그림 아이콘
 const ICON = (d, col = '#f3e6c8', sz = 22) => `<svg viewBox="0 0 24 24" width="${sz}" height="${sz}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const IC = {
@@ -2094,6 +2094,17 @@ function pianoNote(f, v){ sfx((ac, t) => {
     o.connect(gn).connect(out); o.start(t); o.stop(t + d + .05); }
 }); }
 
+// 숲 사이 골짜기에 낮게 깔린 물안개 띠: 높은 데서 내려다보면 숲이 겹겹이, 땅에선 먼 나무 사이가 뿌옇게
+const MIST_BANKS = Array.from({ length:40 }, (_, i) => { const r = rng(9100 + i); const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map:SMOKE_TEX, transparent:true, depthWrite:false, opacity:0, color:'#e8ecdf' }));
+  m.renderOrder = 3; scene.add(m); return { m, x:r()*W, z:r()*H, y:2.6 + r()*1.8, w:10 + r()*10, h:2.6 + r()*1.6, ph:r()*6 }; });
+function updateMist(dt, camX, camZ, nt, elevP){
+  const high = Math.min(1, elevP/6);
+  for (const b of MIST_BANKS) { b.x = wrapX(b.x + dt*.08);
+    const [x, z] = wrapNear(b.x, b.z, camX, camZ), d = Math.hypot(x - camX, z - camZ);
+    b.m.position.set(x, b.y + Math.sin(clock*.1 + b.ph)*.2, z); b.m.scale.set(b.w, b.h, 1); b.m.lookAt(camera.position.x, b.m.position.y, camera.position.z);
+    b.m.material.opacity = Math.max(0, Math.min(1, (d - 8)/10))*(.16 + high*.22)*(1 - nt*.4); b.m.material.color.set(nt > .5 ? '#9aa8c0' : '#e8ecdf'); }
+  if (window.VINE_MESH) window.VINE_MESH.visible = elevP < 3;   // 높은 데선 늘어진 덩굴이 길쭉한 막대처럼 보여서 숨김
+}
 function updateScenes(dt, camX, camZ, nt, storm){
   const day = 1 - nt;
   // 범선
@@ -2247,7 +2258,7 @@ const pzSfx = {
    ④ 사다리로 올라가 발판 위를 걸음: 상자 속 돛 두루마리, 망원경(다음 갈 곳이 크게 보임), 오두막 */
 const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
 {
-  const hub = REGIONS[0].hub, DECK = 5.6;
+  const hub = REGIONS[0].hub, DECK = 8, MY = DECK + 2.1;   // 발판은 숲 지붕 위, 원숭이는 그 위 잎 덩어리
   const W_ = (dx, dz) => ({ x:wrapX(hub.x + dx), z:wrapY(hub.y + dz) });   // 나무 둘레의 고정된 자리 (모닥불 쪽이 +z)
   const SPOT = { sloth:W_(1.4, 1.6), ladder:W_(-1.4, 1.6), vine:W_(.35, 2.05), monkey:W_(.7, .9), hut:W_(-.5, -1.25), chest:W_(1.05, -.85), spy:W_(1.75, -.1) };
   const plat = { x:hub.x, y:hub.y, r:2.15, inner:.55, h:DECK }; PLATS.push(plat);
@@ -2346,10 +2357,10 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     g.save(); g.translate(32, 40); g.rotate(-.35); g.fillStyle = '#b08a3a'; g.strokeStyle = '#4a3220'; g.lineWidth = 2; g.fillRect(-26, -7, 52, 14); g.strokeRect(-26, -7, 52, 14); g.fillStyle = '#d8b860'; g.fillRect(14, -9, 12, 18); g.restore();
   });
   const ORANGE_T = ctex(32, 32, (g) => { g.fillStyle = '#f2992e'; g.strokeStyle = '#8a4a1a'; g.lineWidth = 2; g.beginPath(); g.arc(16, 17, 12, 0, Math.PI*2); g.fill(); g.stroke(); leafShape(g, 16, 6, 9, -.6, RG.mid, .35); });
-  const tree = cutout(plane(7, 10.5), mat(TREE_T));
+  const tree = cutout(plane(7.5, 13), mat(TREE_T));
   const deck = cutout(new THREE.CircleGeometry(2.45, 40), mat(DECK_T, true, { alphaTest:.3 })); deck.rotation.x = -Math.PI/2;
   const sloth = cutout(plane(1.1, 1.45), mat(ST.idle));
-  const vine = cutout(plane(.38, 4.3), mat(VINE_T));
+  const vine = cutout(plane(.38, DECK - 1.3), mat(VINE_T));
   const basket = cutout(plane(.95, .72), mat(BASKET_T));
   const inBasket = cutout(plane(.42, .42), mat(ITEMS.banana.tex));
   const rope = cutout(plane(.04, 1), new THREE.MeshBasicMaterial({ color:'#7a5a32' }));
@@ -2364,9 +2375,9 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
   const lensM = cutout(plane(.22, .22, false), mat(LENS_T)); const tossM = cutout(plane(.3, .3, false), mat(ITEMS.mango.tex)); tossM.visible = false;
   const birdM = cutout(plane(.36, .36, false), mat(BIRDHEAD_T)); birdM.visible = false;
   const hutGlow = cutout(plane(2.2, 2.2, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.5 }));
-  onArt('bigtree', im => { swapTex(TREE_T, im); fitGeo(tree, 10.5, im); });
+  onArt('bigtree', im => { swapTex(TREE_T, im); fitGeo(tree, 13, im); });
   for (const k of ['idle', 'eat', 'sleep']) onArt('sloth_' + k, im => { swapTex(ST[k], im); if (k === 'idle') fitGeo(sloth, 1.45, im); });
-  onArt('vine', im => { swapTex(VINE_T, im); fitGeo(vine, 4.3, im); });
+  onArt('vine', im => { swapTex(VINE_T, im); fitGeo(vine, DECK - 1.3, im); });
   onArt('basket', im => { swapTex(BASKET_T, im); fitGeo(basket, .72, im); });
   onArt('item_sail', im => swapTex(ROLL_T, im));
   onArt('ladder', im => swapTex(LADDER_T, im)); onArt('ladder_rolled', im => swapTex(ROLLED_T, im)); onArt('treehut', im => { swapTex(HUT_T, im); fitGeo(hut, 2.1, im); });
@@ -2375,12 +2386,12 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
   window.SAIL_ROLL_T = ROLL_T;
   // 단계: 0 잠듦, 1 깨어남, 2 바나나 바구니 올라감(먹음), 3 기어가서 매듭 풂, 4 사다리 풀려 내려옴, 5 사다리 내려와 있음, 6 상자에서 두루마리 꺼냄
   const SL = { id:'sloth', x:hub.x, y:hub.y, done:6, t:0, last:-1, react:null, trial:null, bi:null, orange:null, throwT:3, snd:false, thumb:() => ST.idle.image };
-  const LOW = .02, HIGH = 3.3, near = (r = 14) => Math.max(0, 1 - wdist(P.x, P.y, hub.x, hub.y)/r);
+  const LOW = .02, HIGH = DECK - 2.3, near = (r = 14) => Math.max(0, 1 - wdist(P.x, P.y, hub.x, hub.y)/r);
   let bh = LOW, slothAt = { ...SPOT.sloth }, stars = null, spyOn = null, toss = null, birdT = -9, doorT = -9, blurT = -9;
   const LENS_DROP = W_(.2, 2.6);   // 원숭이가 떨어뜨린 렌즈가 놓이는 곳
   // 원숭이에게 열매 던지기: 망고면 받고 렌즈를 떨어뜨림, 다른 건 도로 던짐
   const tossTo = { x:0, z:0, give(k){ bag[k]--; saveBag(); paintBag(); toss = { key:k, t:clock, x0:P.x, z0:P.y, back:k !== 'mango' }; tick(700, .12, .05); },
-    want(){ wants.push({ x:SPOT.monkey.x, h:8.5, z:SPOT.monkey.z, key:'mango', until:clock + 3 }); POKE_SND.jesters(.8); } };
+    want(){ wants.push({ x:SPOT.monkey.x, h:MY + .8, z:SPOT.monkey.z, key:'mango', until:clock + 3 }); POKE_SND.jesters(.8); } };
   // 상자 자물쇠: 그림 다이얼 셋을 가까이 들여다보고 돌림
   const lockBox = document.createElement('div'); lockBox.hidden = true; lockBox.setAttribute('role', 'dialog'); lockBox.setAttribute('aria-label', '상자 자물쇠');
   lockBox.style.cssText = 'position:fixed;inset:0;z-index:20;background:rgba(8,6,4,.72);display:flex;align-items:center;justify-content:center';
@@ -2396,8 +2407,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     b.addEventListener('click', () => { dialVal[n] = (dialVal[n] + 1) % SYMS.length; tick(900 + n*90, .06, .07, 'square'); paintDials();
       if (dialVal.every((d, i) => d === LOCK_ANS[i])) { [1046, 1318, 1568].forEach((f, i) => setTimeout(() => tick(f, .3, .06), 200 + i*110)); setTimeout(() => { lockBox.hidden = true; openChest(); }, 700); } });
     return b; })); }
-  function openChest(){ if (pzStep(SL) !== 5) return; { const other = Object.keys(MASKS).find(k => !(pzSave.masks || []).includes(k)); if (other) { giveMask(other); pickFx.push({ img:MASK_TEX[other][1].userData.canvas, x:SPOT.chest.x, z:SPOT.chest.z, t:clock + .4 }); } }   // 상자엔 아직 없는 탈도
-    pzSave.carry = (pzSave.carry || 0) + 1; savePz(); paintBag(); pickFx.push({ img:ROLL_T.userData.canvas, x:SPOT.chest.x, z:SPOT.chest.z, t:clock }); pzSfx.chime(.1); setPzStep(SL, 6); }
+  function openChest(){ if (pzStep(SL) !== 5) return; giveMask('otter'); pickFx.push({ img:MASK_TEX.otter[1].userData.canvas, x:SPOT.chest.x, z:SPOT.chest.z, t:clock }); pzSfx.chime(.1); setPzStep(SL, 6); }   // 상자엔 수달 탈
   const onGround = () => !P.onPlat && !P.climb;
   const putIn = { x:SPOT.basket, z:0,
     give(k){ if (SL.trial || pzStep(SL) >= 2) return; bag[k]--; saveBag(); paintBag(); paintFire(); pzSfx.thump(.08); SL.bi = k; },
@@ -2420,7 +2430,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     const st = pzStep(SL), L = [], up = !!P.onPlat;
     L.push({ key:'pz-tree', noSeen:true, x:hub.x, h:1.4, h0:.2, h1:4.5, z:hub.y, reach:4, me:tree,
       act:() => { [0, .16].forEach(d => setTimeout(() => tick(170, .12, .14, 'triangle'), d*1000));
-        for (let i = 0; i < 6; i++) { const a = Math.random()*6.28; parts.push({ x:hub.x + Math.cos(a)*1.8, y:hub.y + Math.sin(a)*1.8, vx:(Math.random() - .5)*.3, vy:(Math.random() - .5)*.3, life:3.4, rot:a, h:7.5 + Math.random(), vh:-.2 }); } } });
+        for (let i = 0; i < 6; i++) { const a = Math.random()*6.28; parts.push({ x:hub.x + Math.cos(a)*1.8, y:hub.y + Math.sin(a)*1.8, vx:(Math.random() - .5)*.3, vy:(Math.random() - .5)*.3, life:3.4, rot:a, h:DECK - 1 + Math.random(), vh:-.2 }); } } });
     L.push({ key:'sloth', noSeen:true, x:slothAt.x, h:4.8, h0:4.1, h1:5.5, z:slothAt.z, reach:5.5, me:sloth,
       act:() => { const s = pzStep(SL); if (s === 0) { pzSfx.hm(.05); sfx((ac, t) => { const src = ac.createBufferSource(), lp = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = noiseBuf(ac, 1.2); lp.type = 'lowpass'; lp.frequency.value = 300; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.08, t + .5); g.gain.exponentialRampToValueAtTime(.0001, t + 1.1); src.connect(lp).connect(g).connect(ac.destination); src.start(t); src.stop(t + 1.2); }); }
         else if (s === 1) putIn.want(); else { SL.react = { kind:'blink', t:clock }; pzSfx.hm(.05); } } });
@@ -2430,10 +2440,10 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
         act:() => { if (SL.trial || bh > .3 || pzStep(SL) >= 2) return;
           if (SL.bi) { bag[SL.bi] = (bag[SL.bi] || 0) + 1; saveBag(); paintBag(); pickFx.push({ key:SL.bi, x:SPOT.sloth.x, z:SPOT.sloth.z, t:clock }); SL.bi = null; pickChime(); return; }
           putIn.x = SPOT.sloth.x; putIn.z = SPOT.sloth.z; openFeed(putIn); } });
-      L.push({ key:'orangemonkey', noSeen:true, x:SPOT.monkey.x, h:8.1, h0:7.75, h1:8.4, z:SPOT.monkey.z, reach:8, me:monkey,
+      L.push({ key:'orangemonkey', noSeen:true, x:SPOT.monkey.x, h:MY + .35, h0:MY, h1:MY + .65, z:SPOT.monkey.z, reach:11, me:monkey,
         act:() => { if (st === 0) throwOrange(); else if (!pzSave.monkeyFed && !toss) { tossTo.x = P.x; tossTo.z = P.y; openFeed(tossTo); } else POKE_SND.jesters(.6); } });
       if (pzSave.monkeyFed && !pzSave.lens) L.push({ key:'pz-lens', noSeen:true, x:LENS_DROP.x, h:.2, z:LENS_DROP.z, reach:3, act:() => { pzSave.lens = 1; savePz(); paintBag(); pickFx.push({ img:LENS_T.userData.canvas, x:LENS_DROP.x, z:LENS_DROP.z, t:clock }); pickChime(); } });
-      L.push({ key:'pz-hole', noSeen:true, x:hub.x, h:3.3, z:hub.y, reach:4.5, act:() => { birdT = clock; [0, .15, .3].forEach(d => setTimeout(() => tick(2600 + Math.random()*400, .08, .05), d*1000)); } });
+      L.push({ key:'pz-hole', noSeen:true, x:hub.x, h:4.4, z:hub.y, reach:4.5, act:() => { birdT = clock; [0, .15, .3].forEach(d => setTimeout(() => tick(2600 + Math.random()*400, .08, .05), d*1000)); } });
     }
     if (st >= 5) L.push({ key:'pz-ladder', noSeen:true, x:SPOT.ladder.x, h:up ? DECK + .4 : 1.6, h0:up ? DECK - 1.5 : 0, h1:up ? DECK + .8 : DECK, z:SPOT.ladder.z, reach:up ? 3 : 3.6, act:() => climb(!up) });
     else L.push({ key:'pz-rolled', noSeen:true, x:SPOT.ladder.x, h:DECK + .2, z:SPOT.ladder.z, me:rolled });
@@ -2450,17 +2460,17 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     const st = pzStep(SL); if (st !== SL.last) { SL.t = clock; SL.last = st; SL.snd = false; }
     const el = clock - SL.t, d = wdist(P.x, P.y, hub.x, hub.y);
     const at = p => wrapNear(p.x, p.z, camX, camZ), face = (me, x, z) => { me.rotation.y = Math.atan2(camX - x, camZ - z); };
-    const [hx, hz] = at({ x:hub.x, z:hub.y }); tree.position.set(hx, 0, hz); face(tree, hx, hz);
+    const [hx, hz] = at({ x:hub.x, z:hub.y }); tree.position.set(hx, 0, hz); face(tree, hx, hz); tree.visible = (P.upH || 0) < DECK - 1.5;   // 발판 위에선 코앞의 큰 나무 그림을 숨김
     deck.position.set(hx, DECK, hz);
     // 오두막·상자·망원경 (발판 위)
     { const [x, z] = at(SPOT.hut); hut.position.set(x, DECK, z); face(hut, x, z); const on = dayState().dark > .45; hutGlow.visible = on; if (on) { hutGlow.position.set(x, DECK + .9, z); hutGlow.lookAt(camera.position); } }
     { const dk = clock - doorT; hut.material.map = dk > .5 && dk < 1.6 ? HUT_PEEK_T : HUT_T; if (dk > 1.6 && dk < 1.7 && !SL.slam) { SL.slam = true; pzSfx.thump(.25); pokes.push({ me:hut, t:clock }); } if (dk < 1) SL.slam = false; }   // 두드리면 문틈으로 눈이 내다보다가 쾅
-    { const bk = clock - birdT; birdM.visible = bk < 1.8; if (birdM.visible) { const [x, z] = at({ x:hub.x, z:hub.y }), ang = Math.atan2(camX - x, camZ - z), pop = Math.sin(Math.min(1, bk/1.8)*Math.PI); birdM.position.set(x + Math.sin(ang)*.35, 3.15 + pop*.12, z + Math.cos(ang)*.35); birdM.scale.setScalar(Math.max(.05, pop)); face(birdM, x, z); } }
+    { const bk = clock - birdT; birdM.visible = bk < 1.8; if (birdM.visible) { const [x, z] = at({ x:hub.x, z:hub.y }), ang = Math.atan2(camX - x, camZ - z), pop = Math.sin(Math.min(1, bk/1.8)*Math.PI); birdM.position.set(x + Math.sin(ang)*.35, 4.25 + pop*.12, z + Math.cos(ang)*.35); birdM.scale.setScalar(Math.max(.05, pop)); face(birdM, x, z); } }
     { const lens = !pzSave.monkeyFed ? SPOT.monkey : !pzSave.lens ? LENS_DROP : null; lensM.visible = !!lens;   // 원숭이 손의 반짝이는 렌즈 → 떨어진 렌즈
-      if (lens) { const [x, z] = at(lens); lensM.position.set(x + .2, pzSave.monkeyFed ? .08 : 7.95, z); lensM.lookAt(camera.position); } }
+      if (lens) { const [x, z] = at(lens); lensM.position.set(x + .2, pzSave.monkeyFed ? .08 : MY + .2, z); lensM.lookAt(camera.position); } }
     if (toss) { const k = (clock - toss.t)/(toss.back ? .7 : .8);
       if (tossM.material.map !== ITEMS[toss.key].tex) { tossM.material.map = ITEMS[toss.key].tex; tossM.material.needsUpdate = true; }
-      const up = !toss.flipped, u = Math.min(1, k), ax = up ? toss.x0 : SPOT.monkey.x, az = up ? toss.z0 : SPOT.monkey.z, bx = up ? SPOT.monkey.x : P.x, bz = up ? SPOT.monkey.z : P.y, ah = up ? 1.4 : 7.9, bhh = up ? 7.9 : 1.4;
+      const up = !toss.flipped, u = Math.min(1, k), ax = up ? toss.x0 : SPOT.monkey.x, az = up ? toss.z0 : SPOT.monkey.z, bx = up ? SPOT.monkey.x : P.x, bz = up ? SPOT.monkey.z : P.y, ah = up ? 1.4 : MY + .15, bhh = up ? MY + .15 : 1.4;
       const [x, z] = wrapNear(ax + wd(bx - ax, W)*u, az + wd(bz - az, H)*u, camX, camZ); tossM.visible = true; tossM.position.set(x, ah + (bhh - ah)*u + Math.sin(u*Math.PI)*1.5, z); tossM.lookAt(camera.position);
       if (k >= 1 && up) { if (toss.back) { toss.flipped = true; toss.t = clock; POKE_SND.jesters(.7); } else { toss = null; tossM.visible = false; pzSave.monkeyFed = 1; savePz(); POKE_SND.jesters(1); pzSfx.thump(.1); } }
       else if (k >= 1) { tick(560, .1, .1, 'triangle'); stars = { t:clock }; bag[toss.key] = (bag[toss.key] || 0) + 1; saveBag(); paintBag(); toss = null; tossM.visible = false; } }
@@ -2504,12 +2514,12 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     if (r && r.kind === 'vine' && re < 1.4) { vw += Math.sin(re*12)*.08*(1 - re/1.4); vy -= Math.sin(Math.min(1, re/.5)*Math.PI)*.35; }
     { const [x, z] = at(SPOT.vine); vine.position.set(x, vy, z); face(vine, x, z); vine.rotation.z = vw; }
     // 원숭이: 나무 아래로 오면 오렌지를 던짐 (나무늘보가 깨면 그만)
-    { const [x, z] = at(SPOT.monkey); monkey.position.set(x, 7.75 + Math.abs(Math.sin(clock*1.3))*.03, z); face(monkey, x, z); monkey.rotation.z = Math.sin(clock*.7)*.05; }
+    { const [x, z] = at(SPOT.monkey); monkey.position.set(x, MY + Math.abs(Math.sin(clock*1.3))*.03, z); face(monkey, x, z); monkey.rotation.z = Math.sin(clock*.7)*.05; }
     if (onGround() && d < 4.2) pitchHint = .75;   // 나무 밑에선 위를 보게
     if (st === 0 && onGround() && d < 4.5 && !SL.orange && (SL.throwT -= dt) <= 0) { SL.throwT = 3.5 + Math.random()*2.5; throwOrange(); }
     const o = SL.orange;
     if (o) { const k = clock - o.t; orange.visible = true; let px, pz, py;
-      if (k < .9) { const u = k/.9; px = o.x0 + wd(o.x1 - o.x0, W)*u; pz = o.z0 + wd(o.z1 - o.z0, H)*u; py = 7.7 + (1.5 - 7.7)*u + Math.sin(u*Math.PI)*1.2; }
+      if (k < .9) { const u = k/.9; px = o.x0 + wd(o.x1 - o.x0, W)*u; pz = o.z0 + wd(o.z1 - o.z0, H)*u; py = MY - .05 + (1.5 - MY + .05)*u + Math.sin(u*Math.PI)*1.6; }
       else if (o.under) { const u = Math.min(1, (k - .9)/.6); px = o.x1; pz = o.z1; py = 1.5 + (DECK - 1.6 - 1.5)*Math.sin(u*Math.PI/2);   // 머리에서 튀어 올라 나무늘보에게
         if (u >= 1 && !o.hit2) { o.hit2 = true; tick(520, .1, .1, 'triangle'); if (o.wakes) setPzStep(SL, 1); else SL.react = { kind:'blink', t:clock }; }
         if (k > 1.5) { const u2 = Math.min(1, (k - 1.5)/.7); py = DECK - 1.6 - (DECK - 1.8)*u2*u2; } }
@@ -2602,10 +2612,10 @@ for (const k of Object.keys(MASKS)) {
   b.addEventListener('click', () => { pzSave.masks = [k]; pzSave.mask = k; savePz(); maskVeil.hidden = true; paintMaskBtn(); sendPresence(true); singChime(k); cv.focus(); });
   maskVeil.querySelector('#maskPick').append(b);
 }
-setInterval(() => { if (!pzSave.masks && ME.name && document.getElementById('nameVeil').hidden && $popVeil.hidden) maskVeil.hidden = false; }, 800);
+// 탈은 고르지 않음: 퍼즐을 풀면 얻음 (오두막 → 수달, 물가 → 오셀롯)
 // 메뉴: 가진 탈을 돌려 가며 쓰기 (탈 벗기 포함)
 const $maskBtn = document.createElement('button'); $maskBtn.type = 'button'; $maskBtn.className = 'ic';
-function paintMaskBtn(){ const k = pzSave.mask; $maskBtn.replaceChildren(); const c = document.createElement('canvas'); c.width = c.height = 96; c.style.cssText = 'width:24px;height:24px';
+function paintMaskBtn(){ const k = pzSave.mask; $maskBtn.style.display = pzSave.masks && pzSave.masks.length ? '' : 'none'; $maskBtn.replaceChildren(); const c = document.createElement('canvas'); c.width = c.height = 96; c.style.cssText = 'width:24px;height:24px';
   if (k && MASK_TEX[k]) c.getContext('2d').drawImage(MASK_TEX[k][1].userData.canvas, 0, 0); else { const g = c.getContext('2d'); g.strokeStyle = '#f3e6c8'; g.lineWidth = 6; g.beginPath(); g.arc(48, 48, 32, 0, Math.PI*2); g.stroke(); }
   const lb = document.createElement('span'); lb.className = 'lb'; lb.textContent = k ? MASKS[k].name + ' 탈' : '탈'; $maskBtn.append(c, lb); $maskBtn.setAttribute('aria-label', '탈 바꾸기'); }
 $maskBtn.addEventListener('click', () => { const own = [...(pzSave.masks || []), null], i = own.indexOf(pzSave.mask ?? null); pzSave.mask = own[(i + 1) % own.length]; savePz(); paintMaskBtn(); sendPresence(true); if (pzSave.mask) singChime(pzSave.mask); });
@@ -2700,7 +2710,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
   const pads = [...rg.stones.map(s => ({ x:s.tx + .5, z:s.ty + .5, step:true })), { x:C.x - 2.6, z:C.z + 1.2 }, { x:C.x + 2.2, z:C.z + 2.4 }, { x:C.x + 2.9, z:C.z - 1.2 }]
     .map(p => { const m = cutout(new THREE.PlaneGeometry(.95, .95), mat(PAD_T, true, { alphaTest:.4 })); m.rotation.x = -Math.PI/2; return { ...p, m }; });
   const pour = cutout(plane(1.1, .9), mat(FLOW_TEX, true, { alphaTest:.3 })); pour.visible = false;
-  const roll = cutout(plane(.6, .3), mat(window.SAIL_ROLL_T || ITEMS.banana.tex));
+  const roll = cutout(plane(.5, .5), mat(MASK_TEX.ocelot[1]));   // 섬의 돌 위에 놓인 오셀롯 탈
   const WP = { id:'pond', x:hub.x, y:hub.y, done:3, t:0, last:-1, prog:0, snd:false, wrongT:-9, melT:4, melI:-1, flee:0, thumb:() => FROG_T.image };
   const setPath = on => { for (const s of rg.stones) setT(s.tx, s.ty, on ? FLOOR : WATER); };
   if (pzStep(WP) >= 2) setPath(true);
@@ -2721,7 +2731,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     FROGS.forEach((f, i) => L.push({ key:'pz-frog', noSeen:true, x:f.x, h:.5, z:f.z, reach:5, me:frogs[i], act:() => { f.pop = clock; frogVoice(NOTE_OF[i], .1); } }));
     otters.forEach((m, i) => L.push({ key:'pz-otter', noSeen:true, x:DAM.x, h:1.6, z:DAM.z, me:m, reach:7, act:() => { WP.dive = clock; tick(1500, .1, .05); } }));
     L.push({ key:'pz-dam', noSeen:true, x:DAM.x, h:.8, h0:.1, h1:1.5, z:DAM.z, me:dam });
-    if (st === 2) L.push({ key:'pz-roll', noSeen:true, x:C.x, h:.3, z:C.z, reach:2.6, act:() => { pzSave.carry = (pzSave.carry || 0) + 1; savePz(); paintBag(); pickFx.push({ img:window.SAIL_ROLL_T.userData.canvas, x:C.x, z:C.z, t:clock }); pzSfx.chime(.1); setPzStep(WP, 3); } });
+    if (st === 2) L.push({ key:'pz-roll', noSeen:true, x:C.x, h:.3, z:C.z, reach:2.6, act:() => { giveMask('ocelot'); pickFx.push({ img:MASK_TEX.ocelot[1].userData.canvas, x:C.x, z:C.z, t:clock }); pzSfx.chime(.1); setPzStep(WP, 3); } });   // 섬엔 오셀롯 탈
     return L;
   };
   WP.update = (dt, camX, camZ) => {
@@ -2744,7 +2754,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     // 물이 차오름: 진흙 그늘이 걷히고 연잎이 떠오름
     { const [x, z] = at(C); mud.position.set(x, .025, z); const rise = st >= 2 ? 1 : st === 1 ? Math.min(1, el/5) : 0; mud.material.opacity = 1 - rise*.95;
       pads.forEach(p => { const [px, pz] = at(p); p.m.position.set(px, -.2 + rise*.24, pz); p.m.visible = rise > .05 || !p.step; });
-      roll.visible = st < 3; roll.position.set(x, .15, z); face(roll, x, z); if (window.SAIL_ROLL_T && roll.material.map !== window.SAIL_ROLL_T) { roll.material.map = window.SAIL_ROLL_T; roll.material.needsUpdate = true; } }
+      roll.visible = st < 3; roll.position.set(x, .2, z); face(roll, x, z); }
     if (st === 1 && el > 5.2) { setPath(true); setPzStep(WP, 2, { auto:true }); }
     if (st >= 2 && type[id(rg.stones[0].tx, rg.stones[0].ty)] !== FLOOR) setPath(true);
     if (!WP.snd) { WP.snd = true; if (st === 1 && el < .3) { const v = near(); pzSfx.thump(.25*v); [0, .4, .8].forEach(d => setTimeout(() => tick(260, .8, .08*v), d*1000)); setTimeout(() => pzSfx.chime(.08*near()), 4800); } }
@@ -2816,7 +2826,7 @@ for (const b of TP) for (const j of [0, 1]) if (hash(b.k*211 + j) < .7) VINES.pu
 { const vgeo = new THREE.PlaneGeometry(.5, 3.3); vgeo.translate(0, 3.0, 0);
   const vm = new THREE.InstancedMesh(vgeo, billboard(mat(VINE_TEX)), Math.max(1, VINES.length)); vm.frustumCulled = false;
   VINES.forEach((v, i) => { dummy.position.set(v.x, 0, v.z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, v.s, 1); dummy.updateMatrix(); vm.setMatrixAt(i, dummy.matrix); });
-  scene.add(vm); }
+  scene.add(vm); window.VINE_MESH = vm; }
 
 /* ---- 기운, 젖음, 쓰러짐 ---- */
 let energy = 100, wet = false, faint = 0, fainted = false, faintMsg = null, speedMul = 1;
@@ -3370,7 +3380,7 @@ function draw(dt = .016){
     e.me.visible = nt > .55 && d > 3 && d < 16 && Math.sin(clock*.8 + e.k) < .9;
     e.mk.visible = nt < .45 && d > 4 && d < 14 && Math.sin(clock*.3 + e.k) > -.2;   // 낮엔 원숭이가 수풀 사이로 내다봄
   }
-  updateFire(dt, camX, camZ); updatePicks(camX, camZ); updateSmoke(dt, nt); updateWaterfall(dt, camX, camZ); updateLookout(camX, camZ); updateEnergy(dt); updateHints(dt, camX, camZ, nt); updateScenes(dt, camX, camZ, nt, st); updatePuzzles(dt, camX, camZ); updateCompass(); updateRibbons(camX, camZ); updateHammocks(dt, camX, camZ); updateLie(); updateAmbience(dt, nt);
+  updateFire(dt, camX, camZ); updatePicks(camX, camZ); updateSmoke(dt, nt); updateWaterfall(dt, camX, camZ); updateLookout(camX, camZ); updateEnergy(dt); updateHints(dt, camX, camZ, nt); updateScenes(dt, camX, camZ, nt, st); updateMist(dt, camX, camZ, nt, elevP); updatePuzzles(dt, camX, camZ); updateCompass(); updateRibbons(camX, camZ); updateHammocks(dt, camX, camZ); updateLie(); updateAmbience(dt, nt);
   for (const o of scene.children) if (o.isMesh && !o.isInstancedMesh && o !== ground && o !== sky) { o.position.x = camX + wd(o.position.x - camX, W); o.position.z = camZ + wd(o.position.z - camZ, H); }
   renderer.render(scene, camera);
 
