@@ -336,13 +336,20 @@ $sound.addEventListener('click', () => {
   try { localStorage.setItem('denggul-sound', soundOn ? '1' : '0'); } catch (e) {}
   if (soundOn) startAudio(); else if (audio) audio.g.gain.setTargetAtTime(0, audio.ac.currentTime, .05);
 });
-function rustle(){
+let rustleTile = -1, rustleT = -9;
+function rustle(){   // 덤불 칸에 새로 들어설 때만 짧게 "슥" 한 번 (자주 나지 않게)
   if (!audio || !soundOn) return;
-  let v = P.moving && tileAt(P.x,P.y) === BUSH ? 1 : 0;
-  for (const o of others.values()) if (o.m && tileAt(o.rx,o.ry) === BUSH) v = Math.max(v, 1 - wdist(o.rx, o.ry, P.x, P.y)/6);
-  const wob = .6 + .4*Math.abs(Math.sin(clock*11)) * (.7 + .3*Math.sin(clock*3.7));
-  audio.g.gain.setTargetAtTime(v*.05*wob, audio.ac.currentTime, .08);   // 덤불 헤치는 소리는 작게
-  audio.bp.frequency.setTargetAtTime(2200 + 1200*Math.random(), audio.ac.currentTime, .1);
+  audio.g.gain.setTargetAtTime(0, audio.ac.currentTime, .05);
+  const k = id(Math.floor(P.x), Math.floor(P.y));
+  if (!P.moving || tileAt(P.x, P.y) !== BUSH) { rustleTile = -1; return; }
+  if (k === rustleTile) return; rustleTile = k;
+  if (clock - rustleT < 1.6 || Math.random() < .35) return; rustleT = clock;
+  try {
+    const { ac } = audio, t = ac.currentTime, src = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = noiseBuf(ac, .3); bp.type = 'bandpass'; bp.frequency.value = 2000 + Math.random()*1200; bp.Q.value = .9;
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.03 + Math.random()*.015, t + .05); g.gain.exponentialRampToValueAtTime(.0001, t + .28);
+    src.connect(bp).connect(g).connect(ac.destination); src.start(t); src.stop(t + .3);
+  } catch (e) {}
 }
 function squawk(){
   if (!audio || !soundOn) return;
