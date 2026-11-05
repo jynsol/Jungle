@@ -1591,8 +1591,21 @@ const smoke = Array.from({ length:30 }, (_, i) => {
   const m = new THREE.Mesh(plane(1, 1, false), new THREE.MeshBasicMaterial({ map:SMOKE_TEX, transparent:true, depthWrite:false, fog:false, opacity:.5 }));
   m.renderOrder = 6; scene.add(m); return { m, t:i/30, i };
 });
+const beacon = Array.from({ length:22 }, (_, i) => {
+  const m = new THREE.Mesh(plane(1, 1, false), new THREE.MeshBasicMaterial({ map:SMOKE_TEX, transparent:true, depthWrite:false, depthTest:false, fog:false, opacity:.6 }));
+  m.renderOrder = 7; scene.add(m); return { m, t:i/22, i };
+});
 function updateSmoke(dt, nt){
-  const far = wdist(camera.position.x, camera.position.z, FIRE.x, FIRE.y) > ringR*.8 - 1;
+  // 나무 꼭대기 위의 굵은 연기 기둥: 숲 어디서든 하늘에 보임
+  for (const s of beacon) {
+    s.t += dt/22; if (s.t > 1) s.t -= 1;
+    const t = s.t, drift = Math.sin(t*4 + s.i)*.5 + U.uWind.value*t*20;
+    s.m.position.set(FIRE.x + drift, 6.5 + t*18, FIRE.y + Math.cos(t*3 + s.i)*.4);
+    s.m.scale.setScalar(1.6 + t*4.5);
+    s.m.material.opacity = .72*Math.min(1, t*5)*(1 - t*t);
+    s.m.material.color.copy(SMOKE_DAY).lerp(SMOKE_NIGHT, nt*.6);
+    s.m.lookAt(camera.position);
+  }
   for (const s of smoke) {
     s.t += dt/16; if (s.t > 1) s.t -= 1;
     const t = s.t, sway = Math.sin(t*5 + s.i)*.35 + U.uWind.value*t*14;
@@ -1601,7 +1614,6 @@ function updateSmoke(dt, nt){
     s.m.material.opacity = .5*Math.min(1, t*7)*(1 - t);
     s.m.material.color.copy(SMOKE_DAY).lerp(SMOKE_NIGHT, nt);
     s.m.lookAt(camera.position);
-    s.m.material.depthTest = far === false;
   }
 }
 
@@ -1830,6 +1842,22 @@ function drawTouchHelp(dt){
   ctx.globalAlpha = 1;
 }
 
+/* 모닥불이 화면 밖에 있으면 가장자리에 방향 표시 */
+function drawFireArrow(){
+  const rx = wd(FIRE.x - P.x, W), rz = wd(FIRE.y - P.y, H), dist = Math.hypot(rx, rz);
+  if (dist < 8) return;
+  const fx = rx*Math.cos(yaw) - rz*Math.sin(yaw), fz = -rx*Math.sin(yaw) - rz*Math.cos(yaw);
+  const half = Math.atan(Math.tan(camera.fov*Math.PI/360)*camera.aspect)*.85;
+  if (fz > 0 && Math.abs(Math.atan2(fx, fz)) < half) return;   // 보이는 쪽이면 연기를 보면 됨
+  const ang = Math.atan2(fx, fz), cx = vw/2, cy = vh/2, R = Math.min(vw, vh)*.4;
+  const x = cx + Math.sin(ang)*R, y = cy - Math.cos(ang)*R*.75;
+  ctx.save(); ctx.globalAlpha = .7; ctx.translate(x, y); ctx.rotate(ang);
+  ctx.fillStyle = '#f2a93b'; ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(9, 6); ctx.lineTo(-9, 6); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  ctx.globalAlpha = .75; ctx.fillStyle = '#f6ead2'; ctx.font = '12px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText(`모닥불 ${Math.round(dist)}걸음`, x, y + 12); ctx.globalAlpha = 1;
+}
+
 function draw(dt = .016){
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
   updateObs(dt); const e = 0;   // 시점은 늘 같음. 멈춰 있으면 동물만 나옴
@@ -1902,7 +1930,7 @@ function draw(dt = .016){
     ctx.stroke();
   }
   if (flash > .01) { ctx.fillStyle = `rgba(255,255,240,${flash*.55})`; ctx.fillRect(0, 0, vw, vh); }
-  drawTwinkles(); drawFireOverlay(); drawEnergyOverlay(); drawTouchHelp(dt);
+  drawTwinkles(); drawFireOverlay(); drawEnergyOverlay(); drawTouchHelp(dt); drawFireArrow();
   drawObsOverlay(1, dt);
   ctx.font = '11px system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const L of LABELS) {
