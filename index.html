@@ -433,7 +433,7 @@ function parrotTalk(p, i, dt){
   let ni = 0, nd = 1e9; PARROTS.forEach((q, j) => { const d = wdist(q.x, q.y, P.x, P.y); if (d < nd) { nd = d; ni = j; } });
   if (ni !== i) return;   // 가장 가까운 한 마리만
   const hint = Math.random() < .35 ? parrotHint() : null, learned = parrotLine(i);
-  if (hint) parrotShow(p, hint); else if (learned) p.bubble = { text:learned, until:clock + 5 };   // 사람에게 배운 말만 따라 함
+  if (hint) parrotShow(p, hint); else p.bubble = { text:learned && Math.random() < .8 ? learned : PARROT_SEED[Math.random()*PARROT_SEED.length | 0], until:clock + 5 };   // 배운 말, 아니면 제 말버릇
   p.cool = 16 + Math.random()*14; lastParrot = clock; squawk();
 }
 
@@ -2653,8 +2653,10 @@ function parrotHint(best){
   const t = c[best || Math.random() < .7 ? 0 : Math.min(c.length - 1, 1)];
   t.img = placeThumb(t.kind, t.key); return t.img ? t : null;
 }
-function parrotShow(p, t){   // 그림 풍선을 띄우고 그쪽으로 고개를 돌림
-  wants.push({ x:p.x, h:1.15, z:p.y, img:t.img, until:clock + 7 });
+const PLACE_WORD = { waterfall:'폭포', lookout:'바위', sloth:'나무늘보' };
+function placeWord(t){ if (t.kind === 'site') return SITE[t.key].name.split(' ').pop(); if (t.kind === 'story') return STORY_INFO[t.key].name.split(' ').pop(); return PLACE_WORD[t.key || t.kind] || '저기'; }
+function parrotShow(p, t){   // 앵무새답게 이름을 두 번 외치고 그쪽으로 고개를 돌림
+  const w = placeWord(t); p.bubble = { text:`${w}! ${w}!`, until:clock + 6 };
   p.lookAt = { x:t.x, y:t.y, until:clock + 7 };
 }
 /* ---- 나침반: 북쪽만 가리킴 ---- */
