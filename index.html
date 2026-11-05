@@ -256,7 +256,7 @@ cv.addEventListener('pointerdown', e => {
   startAudio(); $say.blur(); cv.focus();
   if (e.pointerType === 'mouse' || e.clientX > innerWidth*.6) look = { id:e.pointerId, x:e.clientX };
   else joy = { id:e.pointerId, sx:e.clientX, sy:e.clientY, x:e.clientX, y:e.clientY };
-  cv.setPointerCapture(e.pointerId);
+  try { cv.setPointerCapture(e.pointerId); } catch (er) {}
 });
 cv.addEventListener('pointermove', e => {
   if (joy && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; }
@@ -562,9 +562,10 @@ function dayState(){
 }
 
 /* ---- 무대: 그림판들을 간격을 두고 세우고, 뒤에서 따라가며 봄 ---- */
+const MOBILE = matchMedia('(pointer:coarse)').matches;   // 휴대폰·태블릿
 const CAM_D = 2.3, CAM_H = 1.4;
-const renderer = new THREE.WebGLRenderer({ canvas:cv, antialias:true });
-renderer.setPixelRatio(Math.min(1.5, devicePixelRatio || 1));
+const renderer = new THREE.WebGLRenderer({ canvas:cv, antialias:!MOBILE, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(MOBILE ? 1.25 : 1.5, devicePixelRatio || 1));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, 1, .1, 90);
@@ -586,7 +587,7 @@ function thunder(){
     src.connect(lp).connect(g).connect(ac.destination); src.start();
   } catch (e) {}
 }
-function fitRenderer(){ renderer.setSize(vw, vh, false); camera.aspect = vw / vh; camera.updateProjectionMatrix(); }
+function fitRenderer(){ renderer.setSize(vw, vh, false); camera.aspect = vw / vh; camera.fov = camera.aspect < 1 ? 76 : 62; camera.updateProjectionMatrix(); }   // 세로 화면은 시야를 넓게
 fitRenderer(); addEventListener('resize', fitRenderer);
 
 const tinted = [];
@@ -966,11 +967,11 @@ function addFlat(k, sp, x, z, j){
 }
 for (let k = 0; k < W*H; k++) {
   const tx = k % W, ty = k / W | 0;
-  if (type[k] === BUSH) for (let j = 0; j < 4; j++) addFlat(k, pickSpecies(hash(k*7 + j)), tx + .5 + (hash(k*3 + j) - .5)*.75, ty + .125 + j*.25, j);
+  if (type[k] === BUSH) { const n = MOBILE ? 3 : 4; for (let j = 0; j < n; j++) addFlat(k, pickSpecies(hash(k*7 + j)), tx + .5 + (hash(k*3 + j) - .5)*.75, ty + .5/n + j/n, j); }
   else if (type[k] === FLOOR) {
     // 모닥불과 기적의 자리는 비워 둠
     if (wdist(tx + .5, ty + .5, FIRE.x, FIRE.y) < 3.4 || SITES.some(s => wdist(tx + .5, ty + .5, s.cx, s.cy) < 2.3) || VISTA_CLEAR.some(v => wdist(tx + .5, ty + .5, v.x, v.y) < v.r)) continue;
-    if (hash(k*53) < .55) addFlat(k, GRASS, tx + .5 + (hash(k*61) - .5)*.6, ty + .3, 5);
+    if (hash(k*53) < (MOBILE ? .35 : .55)) addFlat(k, GRASS, tx + .5 + (hash(k*61) - .5)*.6, ty + .3, 5);
     if (hash(k*59) < .08) addFlat(k, AGAVE, tx + .5, ty + .6, 6);
     else if (hash(k*67) < .14) addFlat(k, FERN, tx + .5 + (hash(k*71) - .5)*.5, ty + .7, 7);
   }
@@ -1189,7 +1190,7 @@ for (const t of Object.values(CR_TYPES)) { t.geo = plane(t.w, t.h); t.mat = mat(
 const critters = [];
 let still = 0, obs = 0, pitch = 0, spawned = false, lookHold = 0, lookKey = null, newSeen = 0;
 let seen = {}; try { seen = JSON.parse(localStorage.getItem('denggul-seen')) || {}; } catch (e) {}
-cv.addEventListener('pointermove', e => { if (look && e.pointerId === look.id) pitch = Math.max(-.35, Math.min(.6, pitch - e.movementY*.005)); });
+cv.addEventListener('pointermove', e => { if (look && e.pointerId === look.id) { const dy = e.clientY - (look.py ?? e.clientY); look.py = e.clientY; pitch = Math.max(-.35, Math.min(.6, pitch - dy*.005)); } });
 function spawnCritters(){
   const keys = Object.keys(CR_TYPES), tot = keys.reduce((a, k) => a + CR_TYPES[k].wt, 0);
   for (let i = 0; i < 3; i++) for (let tries = 0; tries < 25; tries++) {
@@ -1370,14 +1371,14 @@ for (let i = 0; i < 8; i++) { const b = document.createElement('button'); b.type
 for (const [k, name] of Object.entries(INSTRUMENTS)) { const b = document.createElement('button'); b.type = 'button'; b.textContent = name; b.dataset.k = k;
   b.addEventListener('click', () => { instrument = instrument === k ? null : k; paintFire(); cv.focus(); }); $instRow.append(b); }
 function paintFire(){
-  $sitBtn.textContent = P.sit ? '일어서기 (F)' : '앉기 (F)';
+  $sitBtn.textContent = (P.sit ? '일어서기' : '앉기') + (MOBILE ? '' : ' (F)');
   $cookRow.replaceChildren();
   const note = t => { const sp = document.createElement('span'); sp.style.cssText = 'font:13px var(--body);color:var(--dim);padding:6px 4px'; sp.textContent = t; $cookRow.append(sp); };
   if (cooking) note(`${RECIPES[cooking.r].name} 굽는 중…`);
   else {
     const can = RECIPES.map((r, i) => [r, i]).filter(([r]) => canMake(r));
     if (!can.length) note(RECIPES.some(r => r.crowd && Object.entries(r.need).every(([k, n]) => (bag[k] || 0) >= n)) ? '모닥불 한상은 둘 이상 모여야 차릴 수 있어요' : '숲에서 재료를 주워 오면 구울 수 있어요');
-    can.slice(0, 4).forEach(([r, i], j) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = r.name + (j === 0 ? ' (G)' : ''); b.addEventListener('click', () => { startCook(i); cv.focus(); }); $cookRow.append(b); });
+    can.slice(0, 4).forEach(([r, i], j) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = r.name + (j === 0 && !MOBILE ? ' (G)' : ''); b.addEventListener('click', () => { startCook(i); cv.focus(); }); $cookRow.append(b); });
   }
   for (const b of $instRow.children) b.classList.toggle('on', b.dataset.k === instrument);
   $keys.hidden = !instrument;
@@ -1718,6 +1719,40 @@ function drawEnergyOverlay(){
   }
 }
 
+/* ---- 휴대폰: 채팅은 버튼으로 접고, 왼쪽은 걷기·오른쪽은 둘러보기 안내 ---- */
+if (MOBILE) {
+  const mst = document.createElement('style');
+  mst.textContent = `html,body{overscroll-behavior:none}
+  button{touch-action:manipulation}
+  .chat{width:auto;max-width:calc(100vw - 24px)}
+  .chat .row{display:none}
+  .chat.open .row{display:flex;width:min(360px,calc(100vw - 24px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)))}
+  .chat .talk{align-self:flex-start;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:10px 16px;font:600 14px var(--body)}
+  .chat.open .talk{display:none}
+  .row input,.namebox input{font-size:16px}
+  .hud{padding:8px 11px}.hud h1{font-size:17px}.hud .stat{font-size:11px}
+  .tools button{padding:7px 10px;font-size:11px}
+  .firebar{bottom:calc(env(safe-area-inset-bottom,0px) + 12px)!important}
+  .firebar button{padding:9px 12px}
+  .hint{top:calc(env(safe-area-inset-top,0px) + 124px);font-size:12px}`;
+  document.head.append(mst);
+  const chatForm = document.getElementById('chat'), talk = document.createElement('button');
+  talk.type = 'button'; talk.className = 'talk'; talk.textContent = '말하기'; chatForm.append(talk);
+  talk.addEventListener('click', () => { chatForm.classList.add('open'); $say.focus(); });
+  $say.addEventListener('blur', () => setTimeout(() => chatForm.classList.remove('open'), 150));
+}
+let touchHelp = MOBILE ? 25 : 0;
+function drawTouchHelp(dt){
+  if (touchHelp <= 0) return;
+  touchHelp -= dt; if (joy || look) touchHelp = Math.min(touchHelp, 3);
+  ctx.globalAlpha = Math.min(1, touchHelp/3)*.55; ctx.strokeStyle = '#f6ead2'; ctx.fillStyle = '#f6ead2'; ctx.lineWidth = 2;
+  ctx.font = '13px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const y = vh*.62;
+  ctx.beginPath(); ctx.arc(vw*.22, y, 38, 0, Math.PI*2); ctx.stroke(); ctx.fillText('끌어서 걷기', vw*.22, y + 46);
+  const y2 = vh*.4; ctx.beginPath(); ctx.moveTo(vw*.72, y2); ctx.lineTo(vw*.88, y2); ctx.stroke(); ctx.fillText('끌어서 둘러보기', vw*.8, y2 + 14);
+  ctx.globalAlpha = 1;
+}
+
 function draw(dt = .016){
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
   updateObs(dt); const e = 0;   // 시점은 늘 같음. 멈춰 있으면 동물만 나옴
@@ -1733,7 +1768,7 @@ function draw(dt = .016){
   U.uTime.value = clock; U.uWind.value = .03 + .22*st;
   tintCol.copy(DAY_TINT).lerp(NIGHT_TINT, nt).lerp(DUSK_TINT, dusk*.45).multiplyScalar(1 - .3*st); for (const m of tinted) m.color.copy(tintCol);
   scene.background.copy(DAY_SKY).lerp(NIGHT_SKY, nt).lerp(DUSK_SKY, dusk*.75).lerp(STORM_SKY, st*.65); scene.fog.color.copy(scene.background);
-  const view = (1 + elevP*.4)*(energy < 30 ? .55 + .45*energy/30 : 1);   // 바위 위에선 멀리, 지치면 가까이
+  const view = (1 + elevP*.4)*(energy < 30 ? .55 + .45*energy/30 : 1)*(MOBILE ? .85 : 1);   // 바위 위에선 멀리, 지치면 가까이
   scene.fog.near = 2 - 1*nt; scene.fog.far = (17 - 6*nt - 5*st)*view; U.uCull.value = scene.fog.far + 3;
   // 낮엔 옅은 해, 해질녘엔 크고 붉은 해(「해 질 녘의 처녀림」), 밤엔 큰 달(「뱀 부리는 여인」)
   sky.material.map = nt > .55 ? MOON_TEX : dusk > .35 ? RED_SUN_TEX : SUN_TEX;
@@ -1788,7 +1823,7 @@ function draw(dt = .016){
     ctx.stroke();
   }
   if (flash > .01) { ctx.fillStyle = `rgba(255,255,240,${flash*.55})`; ctx.fillRect(0, 0, vw, vh); }
-  drawTwinkles(); drawFireOverlay(); drawEnergyOverlay();
+  drawTwinkles(); drawFireOverlay(); drawEnergyOverlay(); drawTouchHelp(dt);
   drawObsOverlay(1, dt);
   ctx.font = '11px system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const L of LABELS) {
@@ -1845,7 +1880,7 @@ $reset.addEventListener('click', () => {
 });
 
 const touch = matchMedia('(pointer:coarse)').matches;
-$hint.textContent = (returning ? '다시 왔네요. ' : '') + (touch ? '왼쪽을 끌어 걷고 오른쪽을 끌어 돌아보기' : 'WASD로 걷기 · 마우스를 끌거나 Q·E로 돌아보기 · Enter로 말하기 · 길을 잃으면 고개를 들어 모닥불 연기를 찾아요') + ' · 앵무새 곁에서 한 말은 앵무새가 기억해요';
+$hint.textContent = (returning ? '다시 왔네요. ' : '') + (touch ? '왼쪽을 끌어 걷고 오른쪽을 끌어 돌아보기 · 길을 잃으면 연기를 찾아요' : 'WASD로 걷기 · 마우스를 끌거나 Q·E로 돌아보기 · Enter로 말하기 · 길을 잃으면 고개를 들어 모닥불 연기를 찾아요') + ' · 앵무새 곁에서 한 말은 앵무새가 기억해요';
 setTimeout(() => $hint.style.opacity = 0, 8000);
 
 let last = performance.now();
