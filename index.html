@@ -125,8 +125,8 @@ function resize(){ const d = Math.min(2, devicePixelRatio || 1); vw = innerWidth
 addEventListener('resize', resize); resize();
 
 function rng(s){ return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-function noise(seed){
-  const r = rng(seed), G = 64, v = new Float32Array(G*G); for (let i = 0; i < v.length; i++) v[i] = r();
+function noise(seed, G = 64){
+  const r = rng(seed), v = new Float32Array(G*G); for (let i = 0; i < v.length; i++) v[i] = r();
   const g = (a,b) => v[((a%G+G)%G) + ((b%G+G)%G)*G];
   return (x,y) => { const xi = Math.floor(x), yi = Math.floor(y), fx = x-xi, fy = y-yi, sx = fx*fx*(3-2*fx), sy = fy*fy*(3-2*fy);
     const a = g(xi,yi) + (g(xi+1,yi)-g(xi,yi))*sx, b = g(xi,yi+1) + (g(xi+1,yi+1)-g(xi,yi+1))*sx; return a + (b-a)*sy; };
@@ -148,13 +148,16 @@ const OLDMAN_LINES = ['그해 비는 아무도 셀 수 없을 만큼 오래 왔�
 const PARROT_SEED = ['올라!', '비가 온다, 비가 온다', '이름을 잊지 마!', '길은 둘이야, 둘!', '누구 왔어? 누구 왔어?', '노란 나비! 노란 나비!'];
 
 /* ---- 지도 (시드 고정이라 모두 같은 숲) ---- */
-const R = rng(20261105), n1 = noise(11), n2 = noise(29);
+const R = rng(20261105), n1 = noise(11, 8), n2 = noise(29, 24);   // 지도 크기에 맞춰 반복되는 지형이라 끝과 끝이 이음매 없이 이어짐
 const type = new Uint8Array(W*H), bent = new Float32Array(W*H), sway = new Float32Array(W*H);
-const id = (x,y) => x + y*W;
-const border = (x,y) => x < 1 || y < 1 || x >= W-1 || y >= H-1;
+const id = (x,y) => (((x % W) + W) % W) + (((y % H) + H) % H)*W;
+const wd = (d, N) => d - N*Math.round(d/N);   // 이어진 숲에서의 가장 가까운 차이
+const wdist = (ax, ay, bx, by) => Math.hypot(wd(ax - bx, W), wd(ay - by, H));
+const wrapX = x => ((x % W) + W) % W, wrapY = y => ((y % H) + H) % H;
+const border = () => false;   // 끝과 끝이 이어져 있어 가장자리가 없음
 for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
   const n = n1(x/12, y/12)*.65 + n2(x/4, y/4)*.35; let t;
-  if (border(x,y)) t = TREE; else if (n < .3) t = WATER;
+  if (n < .3) t = WATER;
   else { const r = R(); t = r < .07 ? TREE : (n > .66 && r < .6) ? FLOOR : BUSH; }
   type[id(x,y)] = t;
 }
@@ -164,7 +167,7 @@ const SX = W/2|0, SY = H/2|0;
 SITES.forEach((s,i) => {
   let x, y, n = 0;
   do { x = 6 + R()*(W-13) | 0; y = 6 + R()*(H-13) | 0; n++; }
-  while ((Math.hypot(x-SX, y-SY) < 14 || SITES.slice(0,i).some(o => Math.hypot(o.x-x, o.y-y) < 16)) && n < 800);
+  while ((wdist(x, y, SX, SY) < 14 || SITES.slice(0,i).some(o => wdist(o.x, o.y, x, y) < 16)) && n < 800);
   s.x = x; s.y = y; s.cx = x + 1; s.cy = y + 1;
   for (let cx = Math.min(SX,x); cx <= Math.max(SX,x); cx++) if (type[id(cx,SY)] !== FLOOR) setT(cx,SY,BUSH);
   for (let cy = Math.min(SY,y); cy <= Math.max(SY,y); cy++) if (type[id(x,cy)] !== FLOOR) setT(x,cy,BUSH);
@@ -194,7 +197,7 @@ const PARROTS = [];
   pick(SX+2, SY-2);
   for (let tries = 0; tries < 2000 && PARROTS.length < 11; tries++) {
     const [x,y] = spots[R()*spots.length | 0] || [0,0];
-    if (PARROTS.every(p => Math.hypot(p.x-x, p.y-y) > 12)) pick(x,y);
+    if (PARROTS.every(p => wdist(p.x, p.y, x, y) > 12)) pick(x,y);
   } }
 
 /* ---- 상태 ---- */
@@ -209,16 +212,15 @@ const solid = t => t === TREE || t === WATER || t === RUIN;
 function blocked(x,y){
   for (const [ox,oy] of [[-P.r,-P.r],[P.r,-P.r],[-P.r,P.r],[P.r,P.r]]) {
     const tx = Math.floor(x+ox), ty = Math.floor(y+oy);
-    if (tx < 0 || ty < 0 || tx >= W || ty >= H || solid(type[id(tx,ty)])) return true;
+    if (solid(type[id(tx,ty)])) return true;
   }
   return false;
 }
-const tileAt = (x,y) => type[id(Math.max(0,Math.min(W-1,x|0)), Math.max(0,Math.min(H-1,y|0)))];
+const tileAt = (x,y) => type[id(Math.floor(x), Math.floor(y))];
 
 function disturb(x,y,dt,moving){
   if (!moving) return;
   for (let ty = (y|0)-1; ty <= (y|0)+1; ty++) for (let tx = (x|0)-1; tx <= (x|0)+1; tx++) {
-    if (tx < 0 || ty < 0 || tx >= W || ty >= H) continue;
     const k = id(tx,ty); if (type[k] !== BUSH) continue;
     const d = Math.hypot(tx+.5-x, ty+.5-y);
     if (d < 1.3) sway[k] = 1;
@@ -288,7 +290,7 @@ $sound.addEventListener('click', () => {
 function rustle(){
   if (!audio || !soundOn) return;
   let v = P.moving && tileAt(P.x,P.y) === BUSH ? 1 : 0;
-  for (const o of others.values()) if (o.m && tileAt(o.rx,o.ry) === BUSH) v = Math.max(v, 1 - Math.hypot(o.rx-P.x, o.ry-P.y)/6);
+  for (const o of others.values()) if (o.m && tileAt(o.rx,o.ry) === BUSH) v = Math.max(v, 1 - wdist(o.rx, o.ry, P.x, P.y)/6);
   const wob = .6 + .4*Math.abs(Math.sin(clock*11)) * (.7 + .3*Math.sin(clock*3.7));
   audio.g.gain.setTargetAtTime(v*.16*wob, audio.ac.currentTime, .06);
   audio.bp.frequency.setTargetAtTime(2600 + 1400*Math.random(), audio.ac.currentTime, .08);
@@ -314,14 +316,14 @@ function remember(i, text){
 }
 function hear(x, y, text, mine){
   PARROTS.forEach((p, i) => {
-    if (Math.hypot(p.x-x, p.y-y) > 6) return;
+    if (wdist(p.x, p.y, x, y) > 6) return;
     if (!p.heard.includes(text)) { p.heard.push(text); if (p.heard.length > 6) p.heard.shift(); }
     if (mine && sb) sb.from('parrot_lines').insert({ parrot:i, text }).then(() => {}, () => {});
   });
 }
 function parrotTalk(p, i, dt){
   p.cool -= dt;
-  if (p.cool > 0 || Math.hypot(p.x-P.x, p.y-P.y) > 3.2) return;
+  if (p.cool > 0 || wdist(p.x, p.y, P.x, P.y) > 3.2) return;
   const pool = [...(shared[i] || []), ...p.heard];
   const t = pool.length && Math.random() < .8 ? pool[Math.random()*pool.length | 0] : PARROT_SEED[Math.random()*PARROT_SEED.length | 0];
   p.bubble = { text:t, until:clock + 5 }; p.cool = 16 + Math.random()*14; squawk();
@@ -518,10 +520,11 @@ function step(dt){
     const sp = (tileAt(P.x,P.y) === BUSH ? BUSH_SPEED : SPEED) * dt;
     const nx = P.x + wx*sp; if (!blocked(nx, P.y)) P.x = nx;
     const ny = P.y + wz*sp; if (!blocked(P.x, ny)) P.y = ny;
+    P.x = wrapX(P.x); P.y = wrapY(P.y);
   }
   disturb(P.x, P.y, dt, P.moving);
   for (const o of others.values()) {
-    const f = Math.min(1, dt*10); o.rx += (o.x-o.rx)*f; o.ry += (o.y-o.ry)*f;
+    const f = Math.min(1, dt*10); o.rx = wrapX(o.rx + wd(o.x-o.rx, W)*f); o.ry = wrapY(o.ry + wd(o.y-o.ry, H)*f);
     disturb(o.rx, o.ry, dt, o.m);
   }
   for (let k = 0; k < W*H; k++) {
@@ -537,8 +540,8 @@ function step(dt){
   for (let i = sheets.length-1; i >= 0; i--) { const s = sheets[i]; s.life -= dt; s.h += dt*.7; if (s.life <= 0) sheets.splice(i,1); }
   PARROTS.forEach((p,i) => parrotTalk(p, i, dt));
   const om = SITE.oldman;
-  if (Math.hypot(P.x-om.cx-1.6, P.y-om.cy) < 3) { if ((oldmanT -= dt) <= 0) { om.bubble = { text:OLDMAN_LINES[Math.random()*OLDMAN_LINES.length | 0], until:clock + 6 }; oldmanT = 8; } }
-  for (const s of SITES) if (!found[s.key] && Math.hypot(P.x-s.cx, P.y-s.cy) < 2.6) {
+  if (wdist(P.x, P.y, om.cx + 1.6, om.cy) < 3) { if ((oldmanT -= dt) <= 0) { om.bubble = { text:OLDMAN_LINES[Math.random()*OLDMAN_LINES.length | 0], until:clock + 6 }; oldmanT = 8; } }
+  for (const s of SITES) if (!found[s.key] && wdist(P.x, P.y, s.cx, s.cy) < 2.6) {
     found[s.key] = { date:today(), with:[...others.values()].map(o => o.name) };
     save(); paintAlbumBtn(); showFound(s); sendPresence(true);
   }
@@ -580,27 +583,42 @@ function fitRenderer(){ renderer.setSize(vw, vh, false); camera.aspect = vw / vh
 fitRenderer(); addEventListener('resize', fitRenderer);
 
 const tinted = [];
+function curved(m){
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uCurve = U.uCurve;
+    sh.vertexShader = 'uniform float uCurve;\n' + sh.vertexShader.replace('#include <project_vertex>', `
+      vec4 wpos = modelMatrix * vec4( transformed, 1.0 );
+      vec2 dc = wpos.xz - cameraPosition.xz; wpos.y -= dot( dc, dc ) * uCurve;
+      vec4 mvPosition = viewMatrix * wpos;
+      gl_Position = projectionMatrix * mvPosition;`);
+  };
+  return m;
+}
 function mat(tex, tint = true, extra = {}){
-  const m = new THREE.MeshBasicMaterial({ map:tex, alphaTest:.5, side:THREE.DoubleSide, ...extra });
+  const m = curved(new THREE.MeshBasicMaterial({ map:tex, alphaTest:.5, side:THREE.DoubleSide, ...extra }));
   if (tint) tinted.push(m); return m;
 }
 /* 판이 늘 카메라 쪽으로 몸을 돌림(360도 회전 가능) + 바람에 윗부분이 흔들림. 그래픽 카드에서 계산 */
-const U = { uTime:{ value:0 }, uWind:{ value:.03 } };
+const U = { uTime:{ value:0 }, uWind:{ value:.03 }, uCurve:{ value:.006 }, uSize:{ value:new THREE.Vector2(W, H) } };
 function billboard(m){
   m.onBeforeCompile = sh => {
-    sh.uniforms.uTime = U.uTime; sh.uniforms.uWind = U.uWind;
-    sh.vertexShader = 'uniform float uTime;\nuniform float uWind;\n' + sh.vertexShader.replace('#include <project_vertex>', `
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = 'uniform float uTime;\nuniform float uWind;\nuniform float uCurve;\nuniform vec2 uSize;\n' + sh.vertexShader.replace('#include <project_vertex>', `
       vec4 mvPosition = vec4( transformed, 1.0 );
       #ifdef USE_INSTANCING
         vec3 ipos = instanceMatrix[3].xyz;
+        vec2 rel = ipos.xz - cameraPosition.xz;
+        ipos.xz = cameraPosition.xz + rel - uSize * floor( rel / uSize + .5 );   // 끝과 끝이 이어진 숲: 가장 가까운 쪽에 그림
         vec3 local = ( instanceMatrix * mvPosition ).xyz - ipos;
         local.x += uWind * local.y * .6 * sin( uTime * 1.7 + ipos.x * .7 + ipos.z * .5 );
         vec2 dd = cameraPosition.xz - ipos.xz;
         float ang = atan( dd.x, dd.y ), ca = cos( ang ), sa = sin( ang );
         local = vec3( ca * local.x + sa * local.z, local.y, -sa * local.x + ca * local.z );
-        mvPosition = vec4( ipos + local, 1.0 );
+        vec3 wp = ipos + local; vec2 dc = wp.xz - cameraPosition.xz; wp.y -= dot( dc, dc ) * uCurve;   // 둥근 지평선
+        mvPosition = viewMatrix * vec4( wp, 1.0 );
+      #else
+        mvPosition = modelViewMatrix * mvPosition;
       #endif
-      mvPosition = modelViewMatrix * mvPosition;
       gl_Position = projectionMatrix * mvPosition;`);
   };
   return m;
@@ -896,7 +914,8 @@ const GPX = 8, gcv = document.createElement('canvas'); gcv.width = W*GPX; gcv.he
   const m = SITE.mirror; g.fillStyle = '#fff3c4'; g.beginPath(); g.ellipse(m.cx*GPX, m.cy*GPX, GPX*.6, GPX*.35, 0, 0, Math.PI*2); g.fill();
 }
 const groundTex = new THREE.CanvasTexture(gcv); groundTex.colorSpace = THREE.SRGBColorSpace; groundTex.magFilter = THREE.NearestFilter; groundTex.anisotropy = 8;
-const ground = cutout(new THREE.PlaneGeometry(W, H), mat(groundTex, true, { alphaTest:0, side:THREE.FrontSide }));
+groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping; groundTex.repeat.set(3, 3);
+const ground = cutout(new THREE.PlaneGeometry(W*3, H*3, 144, 144), mat(groundTex, true, { alphaTest:0, side:THREE.FrontSide }));
 ground.rotation.x = -Math.PI/2; ground.position.set(W/2, 0, H/2);
 
 /* 식물: 덤불 칸마다 판 세 장을 앞뒤로, 공터엔 가끔 풀. 같은 그림끼리 묶어서 그림 */
@@ -977,7 +996,7 @@ const EYES = []; for (const [k] of bushByTile) if (type[k] === BUSH && hash(k*17
   const me = cutout(plane(.3, .11, false), mat(EYES_TEX, false, { fog:false })), mk = cutout(plane(.42, .37, false), mat(MONKEY_TEX));
   me.visible = mk.visible = false; me.position.set(k % W + .5, .62, (k / W | 0) + .55); mk.position.set(k % W + .5, .82, (k / W | 0) + .5);
   EYES.push({ k, me, mk }); }
-const sky = cutout(plane(4, 4, false), mat(SUN_TEX, false, { fog:false, depthWrite:false })); sky.renderOrder = 10;
+const sky = cutout(plane(4, 4, false), mat(SUN_TEX, false, { fog:false, depthWrite:false })); sky.renderOrder = 10; sky.material.onBeforeCompile = () => {};
 const myMesh = cutout(personGeo, mat(personTex(myColor)));
 const peopleMeshes = new Map();
 
@@ -987,12 +1006,12 @@ const foldedB = new Set();
 function updateBushes(actors, dt, camX, camZ){
   const lean = new Map(), active = new Set(), folding = new Set();
   for (const a of actors) for (let ty = (a.y|0) - 2; ty <= (a.y|0) + 2; ty++) for (let tx = (a.x|0) - 2; tx <= (a.x|0) + 2; tx++) {
-    if (tx < 0 || ty < 0 || tx >= W || ty >= H) continue;
     const list = bushByTile.get(id(tx,ty)); if (!list) continue;
     for (const b of list) {
-      const ddx = b.x - a.x, ddz = b.z - a.y, d = Math.hypot(ddx, ddz), side = ddx*Math.cos(yaw) - ddz*Math.sin(yaw);
+      const ddx = wd(b.x - a.x, W), ddz = wd(b.z - a.y, H), d = Math.hypot(ddx, ddz), side = ddx*Math.cos(yaw) - ddz*Math.sin(yaw);
       if (d > 1.5) continue;
-      const f = (1.5 - d)/1.5, cur = lean.get(b) || [0, 1];
+      const f = (1.5 - d)/1.5*(a.w ?? 1); if (f < .002) continue;
+      const cur = lean.get(b) || [0, 1];
       cur[0] += (side >= 0 ? -1 : 1) * f * 1.25; cur[1] = Math.min(cur[1], 1 - .5*f);
       lean.set(b, cur); active.add(b);
     }
@@ -1000,13 +1019,16 @@ function updateBushes(actors, dt, camX, camZ){
   const ax = camX - P.x, az = camZ - P.y, L = Math.hypot(ax, az);
   for (let ty = Math.floor(Math.min(P.y, camZ)) - 1; ty <= Math.floor(Math.max(P.y, camZ)) + 1; ty++)
     for (let tx = Math.floor(Math.min(P.x, camX)) - 1; tx <= Math.floor(Math.max(P.x, camX)) + 1; tx++) {
-      if (tx < 0 || ty < 0 || tx >= W || ty >= H) continue;
-      const list = bushByTile.get(id(tx,ty)); if (!list) continue;
+        const list = bushByTile.get(id(tx,ty)); if (!list) continue;
       for (const b of list) {
-        const bx = b.x - P.x, bz = b.z - P.y, u = (bx*ax + bz*az)/(L*L), perp = Math.abs(bx*az - bz*ax)/L;
+        const bx = wd(b.x - P.x, W), bz = wd(b.z - P.y, H), u = (bx*ax + bz*az)/(L*L), perp = Math.abs(bx*az - bz*ax)/L;
         if (u > .12 && u < 1.3 && perp < .95) { folding.add(b); active.add(b); }
       }
     }
+  for (let ty = (camZ|0) - 1; ty <= (camZ|0) + 1; ty++) for (let tx = (camX|0) - 1; tx <= (camX|0) + 1; tx++) {   // 눈앞에 바짝 붙은 판은 접기
+    const list = bushByTile.get(id(tx,ty)); if (!list) continue;
+    for (const b of list) if (wdist(b.x, b.z, camX, camZ) < .7) { folding.add(b); active.add(b); }
+  }
   for (const b of foldedB) active.add(b);
   const dirtyMeshes = new Set();
   for (const b of active) {
@@ -1024,13 +1046,12 @@ const foldedT = new Set();
 function updateTrees(dt, camX, camZ){
   const near = new Set();
   for (let ty = (P.y|0) - 6; ty <= (P.y|0) + 6; ty++) for (let tx = (P.x|0) - 6; tx <= (P.x|0) + 6; tx++) {
-    if (tx < 0 || ty < 0 || tx >= W || ty >= H) continue;
     const b = treeByTile.get(id(tx,ty)); if (b) near.add(b);
   }
   for (const b of foldedT) near.add(b);
   const ax = camX - P.x, az = camZ - P.y, L2 = ax*ax + az*az, dirty = new Set();
   for (const b of near) {
-    const bx = b.x - P.x, bz = b.z - P.y, u = (bx*ax + bz*az)/L2, perp = Math.abs(bx*az - bz*ax)/Math.sqrt(L2);
+    const bx = wd(b.x - P.x, W), bz = wd(b.z - P.y, H), u = (bx*ax + bz*az)/L2, perp = Math.abs(bx*az - bz*ax)/Math.sqrt(L2);
     const target = u > .05 && u < 1.3 && perp < 1.5 ? .1 : 1;
     const nf = b.f + (target - b.f)*Math.min(1, dt*8);
     if (Math.abs(nf - b.f) > .001) { b.f = nf; placeTree(b); dirty.add(b.v); }
@@ -1042,6 +1063,8 @@ function updateTrees(dt, camX, camZ){
 /* 위에 겹쳐 그리는 것들: 이름표, 이름, 말풍선 */
 const _v = new THREE.Vector3();
 function toScreen(x, h, z){
+  const cx0 = camera.position.x, cz0 = camera.position.z;
+  x = cx0 + wd(x - cx0, W); z = cz0 + wd(z - cz0, H); h -= ((x - cx0)**2 + (z - cz0)**2)*U.uCurve.value;
   _v.set(x, h, z).project(camera);
   if (_v.z > 1 || _v.z < -1) return null;
   return [(_v.x + 1)/2*vw, (1 - _v.y)/2*vh];
@@ -1061,12 +1084,185 @@ function drawBubble(px, py, text, kind){
   lines.forEach((l,i) => ctx.fillText(l, bx + 8, by + 6 + i*17));
 }
 
+/* ---- 관찰: 멈춰 서면 눈높이로 내려가고, 조용히 있으면 숨어 있던 것들이 나옴 ---- */
+const JESTERS_TEX = ctex(256, 160, (g) => {
+  g.strokeStyle = RG.line; g.lineWidth = 2.5;
+  g.strokeStyle = '#c0392b'; g.lineWidth = 4; g.beginPath(); g.moveTo(70, 150); g.lineTo(190, 40); g.stroke();
+  for (const [x, s] of [[62, 1], [128, 1.12], [196, .95]]) {
+    g.strokeStyle = RG.line; g.lineWidth = 2.5; g.fillStyle = '#3a2a1e';
+    g.beginPath(); g.ellipse(x, 118, 34*s, 40*s, 0, 0, Math.PI*2); g.fill(); g.stroke();
+    g.beginPath(); g.arc(x, 66 - (s - 1)*40, 24*s, 0, Math.PI*2); g.fill(); g.stroke();
+    g.fillStyle = '#b98a62'; g.beginPath(); g.ellipse(x, 71 - (s - 1)*40, 14*s, 13*s, 0, 0, Math.PI*2); g.fill();
+    g.fillStyle = '#1a120a'; for (const dx of [-6, 6]) { g.beginPath(); g.arc(x + dx*s, 66 - (s - 1)*40, 2.6, 0, Math.PI*2); g.fill(); }
+  }
+  g.fillStyle = '#f4f1e6'; g.strokeStyle = RG.line; g.lineWidth = 2;
+  g.save(); g.translate(150, 118); g.rotate(-.5); g.fillRect(-9, -26, 18, 44); g.strokeRect(-9, -26, 18, 44); g.fillRect(-5, -34, 10, 9); g.strokeRect(-5, -34, 10, 9); g.restore();
+});
+const WHITEBIRD_TEX = ctex(64, 112, (g) => {
+  g.strokeStyle = '#5b4632'; g.lineWidth = 5; g.beginPath(); g.moveTo(0, 104); g.lineTo(64, 98); g.stroke();
+  g.fillStyle = '#f2efe4'; g.strokeStyle = RG.line; g.lineWidth = 2;
+  g.beginPath(); g.ellipse(32, 66, 17, 32, 0, 0, Math.PI*2); g.fill(); g.stroke();
+  g.beginPath(); g.arc(32, 30, 15, 0, Math.PI*2); g.fill(); g.stroke();
+  g.strokeStyle = '#b8b2a2'; g.lineWidth = 1.5; for (let y = 54; y < 92; y += 7) { g.beginPath(); g.moveTo(22, y); g.quadraticCurveTo(32, y + 5, 42, y); g.stroke(); }
+  g.fillStyle = '#e8c32a'; for (const x of [26, 38]) { g.beginPath(); g.arc(x, 29, 4, 0, Math.PI*2); g.fill(); }
+  g.fillStyle = '#1a120a'; for (const x of [26, 38]) { g.beginPath(); g.arc(x, 29, 1.8, 0, Math.PI*2); g.fill(); }
+  g.fillStyle = '#8a7a5a'; g.beginPath(); g.moveTo(29, 35); g.lineTo(35, 35); g.lineTo(32, 41); g.fill();
+});
+const TOUCAN_TEX = ctex(112, 80, (g) => {
+  g.strokeStyle = '#5b4632'; g.lineWidth = 5; g.beginPath(); g.moveTo(0, 74); g.lineTo(112, 70); g.stroke();
+  g.fillStyle = '#1e1a18'; g.strokeStyle = RG.line; g.lineWidth = 2;
+  g.beginPath(); g.ellipse(70, 46, 16, 24, .2, 0, Math.PI*2); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(80, 64); g.lineTo(96, 78); g.lineTo(86, 62); g.fill();
+  g.fillStyle = '#f6efd2'; g.beginPath(); g.ellipse(62, 34, 9, 10, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#1e1a18'; g.beginPath(); g.arc(66, 22, 11, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#f0a020'; g.strokeStyle = RG.line; g.beginPath(); g.moveTo(58, 16); g.quadraticCurveTo(20, 10, 8, 26); g.quadraticCurveTo(30, 30, 58, 28); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = '#d8452f'; g.beginPath(); g.moveTo(16, 20); g.quadraticCurveTo(10, 22, 8, 26); g.lineTo(18, 26); g.fill();
+  g.fillStyle = '#7fd0e0'; g.beginPath(); g.arc(67, 21, 4, 0, Math.PI*2); g.fill(); g.fillStyle = '#1a120a'; g.beginPath(); g.arc(67, 21, 1.8, 0, Math.PI*2); g.fill();
+});
+const SLOTH_TEX = ctex(112, 128, (g) => {
+  g.strokeStyle = '#5b4632'; g.lineWidth = 7; g.beginPath(); g.moveTo(0, 12); g.lineTo(112, 16); g.stroke();
+  g.strokeStyle = '#7a5f45'; g.lineWidth = 9; g.lineCap = 'round';
+  for (const [x1, x2] of [[40, 30], [72, 82]]) { g.beginPath(); g.moveTo(x1, 76); g.quadraticCurveTo(x2, 40, x2, 14); g.stroke(); }
+  g.fillStyle = '#7a5f45'; g.strokeStyle = RG.line; g.lineWidth = 2;
+  g.beginPath(); g.ellipse(56, 88, 28, 34, 0, 0, Math.PI*2); g.fill(); g.stroke();
+  g.fillStyle = '#d8c3a0'; g.beginPath(); g.ellipse(56, 64, 15, 12, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#2a1e14'; for (const x of [49, 63]) { g.beginPath(); g.ellipse(x, 62, 4, 2.5, x < 56 ? .4 : -.4, 0, Math.PI*2); g.fill(); }
+  g.beginPath(); g.arc(56, 68, 2, 0, Math.PI*2); g.fill();
+});
+const OBS_INFO = {
+  jesters:{ name:'장난꾸러기 원숭이들', text:'세 마리가 우유병 하나로 한참을 논다. 누가 두고 갔는지는 아무도 모른다.' },
+  whitebird:{ name:'흰 새', text:'한 번도 날지 않았다. 사람들은 그게 새가 아니라 꽃이라고 우긴다.' },
+  toucan:{ name:'큰부리새', text:'부리가 몸보다 무거워서 늘 고개를 갸웃한다.' },
+  sloth:{ name:'나무늘보', text:'어제 본 자리에서 손바닥 하나만큼 옮겨 갔다.' },
+  tiger:{ name:'풀숲의 호랑이', text:'폭풍이 올 때마다 깜짝 놀란 얼굴을 한다. 놀랄 일은 매번 같은데도.' },
+  orangemonkey:{ name:'오렌지 든 원숭이', text:'오렌지를 들고 있지만 먹지는 않는다. 누구에게 줄지 아직 정하지 못했다.' },
+  peek:{ name:'내다보는 원숭이', text:'당신이 가만히 있을 때만 얼굴을 내민다.' },
+  parrot:{ name:'앵무새', text:'누군가 이 숲에서 한 말을 아직 기억하고 있다.' },
+  oldman:{ name:'백 살 노인', text:'백 년 전 장마를 어제 일처럼 이야기한다.' }
+};
+const CR_TYPES = {
+  jesters:{ tex:JESTERS_TEX, w:1.5, h:.94, y:[0, 0], ground:true, wt:.3 },
+  whitebird:{ tex:WHITEBIRD_TEX, w:.4, h:.7, y:[1.5, 2.3], wt:.25 },
+  toucan:{ tex:TOUCAN_TEX, w:.7, h:.5, y:[1.3, 2.1], wt:.25 },
+  sloth:{ tex:SLOTH_TEX, w:.6, h:.68, y:[1.7, 2.4], wt:.2 }
+};
+for (const t of Object.values(CR_TYPES)) { t.geo = plane(t.w, t.h); t.mat = mat(t.tex); }
+const critters = [];
+let still = 0, obs = 0, pitch = 0, spawned = false, lookHold = 0, lookKey = null, newSeen = 0;
+let seen = {}; try { seen = JSON.parse(localStorage.getItem('denggul-seen')) || {}; } catch (e) {}
+cv.addEventListener('pointermove', e => { if (look && e.pointerId === look.id && obs > .3) pitch = Math.max(-.5, Math.min(.75, pitch - e.movementY*.006)); });
+function spawnCritters(){
+  const keys = Object.keys(CR_TYPES), tot = keys.reduce((a, k) => a + CR_TYPES[k].wt, 0);
+  for (let i = 0; i < 3; i++) for (let tries = 0; tries < 25; tries++) {
+    let u = Math.random()*tot, key = keys[0]; for (const k of keys) { if ((u -= CR_TYPES[k].wt) <= 0) { key = k; break; } }
+    const t = CR_TYPES[key], ang = yaw + (Math.random() - .5)*2.6, dist = 2.4 + Math.random()*3.4;
+    const x = P.x - Math.sin(ang)*dist, z = P.y - Math.cos(ang)*dist, tt = tileAt(x, z);
+    if (t.ground ? tt !== BUSH : (tt === WATER || tt === RUIN)) continue;
+    const me = cutout(t.geo, t.mat); me.scale.y = .01;
+    critters.push({ key, x, z, h:t.y[0] + Math.random()*(t.y[1] - t.y[0]), a:0, me });
+    break;
+  }
+}
+/* 멈춰 섰을 때 화면 가장자리를 채우는 앞쪽 잎 (카메라에 붙어 있음) */
+scene.add(camera);
+const spi = k => SPECIES.findIndex(p => p.key === k);
+const FRAME = [
+  { sp:'grass', x:-.62, w:.95, h:.55, top:false }, { sp:'agave', x:.58, w:.85, h:.62, top:false }, { sp:'grass', x:0, w:.8, h:.36, top:false },
+  { sp:'broadleaf', x:-1.02, w:.6, h:2.0, top:false }, { sp:'fern', x:1.0, w:.75, h:1.3, top:false },
+  { sp:'heartleaf', x:.72, w:.6, h:.55, top:true }, { sp:'banana', x:-.7, w:.7, h:.7, top:true }
+].map((f, i) => {
+  const m = new THREE.Mesh(plane(1, 1), mat(SP_TEX[spi(f.sp)], true, { fog:false, depthTest:false }));
+  m.renderOrder = 20; m.visible = false; if (f.top) m.rotation.z = Math.PI; camera.add(m); return { ...f, m, z:-.9 - i*.01 };
+});
+function updateObs(dt){
+  still = P.moving ? 0 : still + dt;
+  const want = still > 1 ? 1 : 0;
+  obs += (want - obs)*Math.min(1, dt*(want ? 2.2 : 5));
+  if (!want) pitch *= Math.max(0, 1 - dt*5);
+  if (obs > .55 && !spawned) { spawned = true; spawnCritters(); }
+  if (obs < .3) spawned = false;
+  for (let i = critters.length - 1; i >= 0; i--) {
+    const c = critters[i], up = obs > .55;
+    c.a += ((up ? 1 : 0) - c.a)*Math.min(1, dt*(up ? 1.1 : 4));
+    if (!up && c.a < .02) { scene.remove(c.me); critters.splice(i, 1); continue; }
+    c.me.position.set(c.x, c.h - (1 - c.a)*.35, c.z); c.me.scale.y = Math.max(.01, c.a);
+  }
+  return obs*obs*(3 - 2*obs);
+}
+function placeFrame(e){
+  const hh = Math.tan(camera.fov*Math.PI/360)*.9, hw = hh*camera.aspect;
+  for (const f of FRAME) {
+    f.m.visible = e > .02;
+    if (!f.m.visible) continue;
+    f.m.position.set(f.x*hw, f.top ? hh*1.02 : -hh*1.02, f.z);
+    f.m.scale.set(f.w*hw*(f.x < 0 ? -1 : 1), f.h*hh*e, 1);
+  }
+}
+function lookTargets(){
+  const L = [];
+  for (const c of critters) if (c.a > .6) L.push({ key:c.key, x:c.x, h:c.h + CR_TYPES[c.key].h*.5, z:c.z });
+  for (const me of TIGERS) L.push({ key:'tiger', x:me.position.x, h:.45, z:me.position.z });
+  for (const me of MONKEYS) L.push({ key:'orangemonkey', x:me.position.x, h:me.position.y + .3, z:me.position.z });
+  for (const p of PARROTS) L.push({ key:'parrot', x:p.x, h:.6, z:p.y });
+  for (const e of EYES) if (e.mk.visible) L.push({ key:'peek', x:e.mk.position.x, h:e.mk.position.y + .18, z:e.mk.position.z });
+  L.push({ key:'oldman', x:oldman.position.x, h:.7, z:oldman.position.z });
+  return L;
+}
+function wrapText(text, max){ const lines = []; let cur = ''; for (const ch of text) { if (ctx.measureText(cur + ch).width > max) { lines.push(cur); cur = ch; } else cur += ch; } lines.push(cur); return lines; }
+function drawObsOverlay(e, dt){
+  if (e < .5) { lookHold = 0; lookKey = null; return; }
+  const cx = vw/2, cy = vh/2;
+  let best = null, bd = 85*85;
+  for (const t of lookTargets()) {
+    if (wdist(t.x, t.z, P.x, P.y) > 11) continue;
+    const s = toScreen(t.x, t.h, t.z); if (!s) continue;
+    const d = (s[0] - cx)**2 + (s[1] - cy)**2; if (d < bd) { bd = d; best = { ...t, s }; }
+  }
+  ctx.globalAlpha = (e - .5)*2;
+  ctx.strokeStyle = 'rgba(246,234,210,.7)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI*2); ctx.stroke();
+  if (best) {
+    if (lookKey !== best.key) { lookKey = best.key; lookHold = 0; }
+    lookHold += dt;
+    ctx.strokeStyle = 'rgba(242,169,59,.9)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(best.s[0], best.s[1], 26 + Math.sin(clock*4)*2, 0, Math.PI*2); ctx.stroke();
+    if (lookHold > .45) {
+      const info = OBS_INFO[best.key];
+      if (!seen[best.key]) { seen[best.key] = today(); newSeen = 2.5; try { localStorage.setItem('denggul-seen', JSON.stringify(seen)); } catch (er) {} }
+      ctx.font = '19px "Nanum Pen Script", cursive';
+      const lines = wrapText(info.text, Math.min(320, vw - 64)), w = Math.min(352, vw - 32), h = 50 + lines.length*21;
+      const bx = cx - w/2, by = Math.min(vh*.68, vh - h - 90);
+      ctx.fillStyle = '#f3e6c8'; ctx.fillRect(bx, by, w, h); ctx.strokeStyle = '#3a2410'; ctx.lineWidth = 3; ctx.strokeRect(bx, by, w, h);
+      ctx.fillStyle = '#4a2a16'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.font = '26px "Nanum Pen Script", cursive'; ctx.fillText(info.name, bx + 14, by + 9);
+      if (newSeen > 0) { ctx.fillStyle = '#c96a12'; ctx.textAlign = 'right'; ctx.font = '17px "Nanum Pen Script", cursive'; ctx.fillText('관찰 기록에 남김', bx + w - 12, by + 14); ctx.textAlign = 'left'; ctx.fillStyle = '#4a2a16'; }
+      ctx.font = '19px "Nanum Pen Script", cursive'; lines.forEach((l, i) => ctx.fillText(l, bx + 14, by + 42 + i*21));
+    }
+  } else { lookKey = null; lookHold = 0; }
+  newSeen = Math.max(0, newSeen - dt);
+  ctx.globalAlpha = 1;
+}
+/* 그림첩 아래에 관찰 기록 */
+const seenBox = document.createElement('div');
+seenBox.style.cssText = 'display:flex;flex-direction:column;gap:6px;font-family:var(--hand);color:var(--ink);padding:4px';
+document.getElementById('grid').after(seenBox);
+$albumBtn.addEventListener('click', () => {
+  const keys = Object.keys(OBS_INFO), n = keys.filter(k => seen[k]).length;
+  seenBox.replaceChildren();
+  const h = document.createElement('h3'); h.style.cssText = 'margin:8px 0 0;font:700 18px var(--display)'; h.textContent = `관찰 기록 ${n} / ${keys.length}`;
+  const list = document.createElement('div'); list.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px 18px;font-size:21px';
+  for (const k of keys) { const s = document.createElement('span'); s.textContent = seen[k] ? OBS_INFO[k].name : '???'; s.style.opacity = seen[k] ? 1 : .45; list.append(s); }
+  const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font:13px var(--body);color:var(--dim)'; tip.textContent = '가만히 서 있으면 숨어 있던 것들이 나와요. 화면 가운데에 두고 잠시 바라보면 기록돼요.';
+  seenBox.append(h, list, tip);
+});
+
 function draw(dt = .016){
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-  const camX = P.x - fx*CAM_D, camZ = P.y - fz*CAM_D;
-  camera.position.set(camX, CAM_H, camZ);
-  camera.lookAt(P.x + fx*3, 1.0, P.y + fz*3);
-  const actors = [{ x:P.x, y:P.y }]; for (const o of others.values()) actors.push({ x:o.rx, y:o.ry });
+  const e = updateObs(dt), cp = Math.cos(pitch), lerp = (a, b) => a + (b - a)*e;
+  const camX = lerp(P.x - fx*CAM_D, P.x - fx*.1), camZ = lerp(P.y - fz*CAM_D, P.y - fz*.1), camY = lerp(CAM_H, 1.15);
+  camera.position.set(camX, camY, camZ);
+  camera.lookAt(lerp(P.x + fx*3, camX + fx*cp*3), lerp(1.0, 1.15 + Math.sin(pitch)*3), lerp(P.y + fz*3, camZ + fz*cp*3));
+  const fov = 62 - 10*e; if (Math.abs(camera.fov - fov) > .05) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  placeFrame(e);
+  const actors = [{ x:P.x, y:P.y, w:1 - e }]; for (const o of others.values()) actors.push({ x:o.rx, y:o.ry });
   updateBushes(actors, dt, camX, camZ);
   updateTrees(dt, camX, camZ);
   // 낮과 밤
@@ -1088,7 +1284,7 @@ function draw(dt = .016){
   const rx = Math.cos(yaw), rz = -Math.sin(yaw);
   myMesh.position.set(P.x, 0, P.y); myMesh.rotation.y = yaw;
   if (P.moving) { const s = P.fx*rx + P.fy*rz; if (Math.abs(s) > .2) P.flip = s < 0 ? -1 : 1; }
-  myMesh.scale.x = P.flip || 1;
+  myMesh.scale.x = P.flip || 1; myMesh.visible = e < .6;
   for (const [key, o] of others) {
     let me = peopleMeshes.get(key);
     if (!me || me.userData.color !== o.color) { if (me) scene.remove(me); me = cutout(personGeo, mat(personTex(o.color))); me.userData.color = o.color; peopleMeshes.set(key, me); }
@@ -1100,7 +1296,7 @@ function draw(dt = .016){
   PARROTS.forEach((p, i) => { p.mesh.rotation.y = yaw; p.mesh.position.y = Math.abs(Math.sin(clock*3 + i))*.03; });
   oldman.rotation.y = yaw;
   const face = me => { me.rotation.y = Math.atan2(camX - me.position.x, camZ - me.position.z); };
-  ALTARS.forEach(face); TIGERS.forEach(face); MONKEYS.forEach(face);
+  ALTARS.forEach(face); TIGERS.forEach(face); MONKEYS.forEach(face); critters.forEach(c => face(c.me));
   // 이불, 나비, 흩날리는 잎, 반딧불, 재규어 눈
   sheetMeshes.forEach((me, i) => { const s = sheets[i]; me.visible = !!s; if (s) { me.position.set(s.x + Math.sin(clock + i)*.3, s.h, s.z); me.rotation.set(0, yaw, Math.sin(clock*2 + i)*.25); } });
   const bf = [];
@@ -1112,10 +1308,11 @@ function draw(dt = .016){
   leafMeshes.forEach((me, i) => { const p = parts[i]; me.visible = !!p; if (p) { me.position.set(p.x, p.h, p.y); me.rotation.set(0, yaw, p.rot); } });
   fireflies.forEach(f => { f.me.visible = nt > .45; if (f.me.visible) f.me.position.set(P.x + f.ox + Math.sin(clock*.5 + f.ph)*.8, .5 + Math.abs(Math.sin(clock*.8 + f.ph))*1.4, P.y + f.oz + Math.cos(clock*.4 + f.ph)*.8); });
   for (const e of EYES) {
-    const d = Math.hypot(e.me.position.x - P.x, e.me.position.z - P.y); face(e.me); face(e.mk);
+    const d = wdist(e.me.position.x, e.me.position.z, P.x, P.y); face(e.me); face(e.mk);
     e.me.visible = nt > .55 && d > 3 && d < 16 && Math.sin(clock*.8 + e.k) < .9;
     e.mk.visible = nt < .45 && d > 4 && d < 14 && Math.sin(clock*.3 + e.k) > -.2;   // 낮엔 원숭이가 수풀 사이로 내다봄
   }
+  for (const o of scene.children) if (o.isMesh && !o.isInstancedMesh && o !== ground && o !== sky) { o.position.x = camX + wd(o.position.x - camX, W); o.position.z = camZ + wd(o.position.z - camZ, H); }
   renderer.render(scene, camera);
 
   // 겹쳐 그리기
@@ -1126,9 +1323,10 @@ function draw(dt = .016){
     ctx.stroke();
   }
   if (flash > .01) { ctx.fillStyle = `rgba(255,255,240,${flash*.55})`; ctx.fillRect(0, 0, vw, vh); }
+  drawObsOverlay(e, dt);
   ctx.font = '11px system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const L of LABELS) {
-    const near = Math.hypot(L.x - P.x, L.y - P.y) < 1.9;
+    const near = wdist(L.x, L.y, P.x, P.y) < 1.9;
     L.a += ((near ? 1 : 0) - L.a) * Math.min(1, dt*12);
     if (L.a < .02) continue;
     const s = toScreen(L.x, 1.15 + .2*L.a, L.y); if (!s) continue;
@@ -1142,16 +1340,16 @@ function draw(dt = .016){
   ctx.globalAlpha = 1;
   ctx.textBaseline = 'top';
   for (const o of others.values()) {
-    if (Math.hypot(o.rx - P.x, o.ry - P.y) > 18) continue;
+    if (wdist(o.rx, o.ry, P.x, P.y) > 18) continue;
     const s = toScreen(o.rx, 1.22, o.ry); if (!s) continue;
     ctx.fillStyle = 'rgba(30,24,64,.75)'; const w = ctx.measureText(o.name).width + 10; ctx.fillRect(s[0] - w/2, s[1] - 16, w, 15);
     ctx.fillStyle = '#f6ead2'; ctx.textAlign = 'center'; ctx.fillText(o.name, s[0], s[1] - 14);
   }
-  const say = (x, h, z, b, kind) => { if (!b || b.until <= clock || Math.hypot(x - P.x, z - P.y) > 14) return; const s = toScreen(x, h, z); if (s) drawBubble(s[0], s[1], b.text, kind); };
+  const say = (x, h, z, b, kind) => { if (!b || b.until <= clock || wdist(x, z, P.x, P.y) > 14) return; const s = toScreen(x, h, z); if (s) drawBubble(s[0], s[1], b.text, kind); };
   PARROTS.forEach(p => say(p.x, .9, p.y, p.bubble, 'parrot'));
   say(oldman.position.x, 1.2, oldman.position.z, SITE.oldman.bubble, 'old');
   for (const o of others.values()) say(o.rx, 1.25, o.ry, o.bubble);
-  say(P.x, 1.25, P.y, myBubble);
+  if (e < .6) say(P.x, 1.25, P.y, myBubble);
   if (joy) { ctx.strokeStyle = 'rgba(246,234,210,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(joy.sx, joy.sy, 40, 0, Math.PI*2); ctx.stroke(); }
   const n = others.size;
   $stat.innerHTML = `${label}${st > .2 ? ' · 폭풍' : ''} · ${n ? `함께 <b>${n + 1}</b>명` : '혼자'}`;
