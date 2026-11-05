@@ -108,7 +108,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
    모두 정면에서 본 모습, 투명 배경, 아래가 땅에 닿게. */
 const ASSET_NAMES = ['agave','grass','broadleaf','fern','lily','whitespike','heartleaf','banana','sansevieria','palm','tree','orangetree','lotus','flamingo','tiger','monkey','ruin','player','parrot','leaf','player_walk','butterfly','fire','log','cliff','waterfall_flow'];
 // 아직 기본 그림인 것들: 파일을 넣으면 바로 바뀜 (목록과 크기는 ART_LIST.md)
-ASSET_NAMES.push('galleon', 'galleon_front', 'piano', 'clock', 'gramophone', 'bicycle', 'mailbox', 'swing', 'chair', 'monkeys', 'whitebird', 'toucan', 'oldman', 'rock', 'fruit_banana', 'fruit_mango', 'fruit_cacao', 'bigtree', 'sloth_idle', 'sloth_eat', 'sloth_sleep', 'basket', 'vine', 'item_sail', 'sail_full', 'ladder', 'ladder_rolled', 'treehut', 'chest', 'chest_open', 'spyglass', 'deck', 'lens', 'treehut_peek');
+ASSET_NAMES.push('galleon', 'galleon_front', 'piano', 'clock', 'gramophone', 'bicycle', 'mailbox', 'swing', 'chair', 'monkeys', 'whitebird', 'toucan', 'oldman', 'rock', 'fruit_banana', 'fruit_mango', 'fruit_cacao', 'bigtree', 'sloth_idle', 'sloth_eat', 'sloth_sleep', 'basket', 'vine', 'item_sail', 'sail_full', 'ladder', 'ladder_rolled', 'treehut', 'chest', 'chest_open', 'spyglass', 'deck', 'lens', 'treehut_peek', 'frog', 'dam', 'otter', 'lilypad', 'mask_ocelot_front', 'mask_ocelot_side', 'mask_ocelot_back', 'mask_otter_front', 'mask_otter_side', 'mask_otter_back');
 const ASSETS = Object.fromEntries(ASSET_NAMES.map(n => [n, 'assets/' + n + '.png']));
 const ART = {};   // 그림 이름 → 그림이 오면 할 일 (그림판 바꾸고 비율 맞추기)
 const onArt = (k, fn) => (ART[k] || (ART[k] = [])).push(fn);
@@ -247,6 +247,12 @@ REGIONS.forEach((rg, i) => {
     }
   }
   rg.hub = { x:wrapX(hx), y:wrapY(hy) }; clear(rg.hub.x, rg.hub.y, 3.6);
+  if (rg.key === 'water') {   // 물가 퍼즐: 둥근 연못과 가운데 섬, 모닥불 쪽(북) 물속에 연잎 징검다리 자리 셋, 동쪽엔 둑에 막힌 물길
+    clear(rg.hub.x, rg.hub.y, 6.4); const cx = Math.floor(rg.hub.x), cy = Math.floor(rg.hub.y);
+    for (let dy = -5; dy <= 5; dy++) for (let dx = -5; dx <= 5; dx++) { const d = Math.hypot(dx, dy); if (d > 1.25 && d <= 4.45) setT(cx + dx, cy + dy, WATER); }
+    for (let k = 6; k <= 11; k++) for (const dy of [0, 1]) setT(cx + k, cy + dy, WATER);   // 둑 너머 물길
+    rg.stones = [2, 3, 4].map(k => ({ tx:cx, ty:cy - k }));
+  }
 });
 // 길가 덤불: 길 위로 잎이 넘어오지 않게 낮은 풀만
 const TRAIL_EDGE = new Uint8Array(W*H);
@@ -451,7 +457,7 @@ myColor = ME.color;
 
 /* ---- 함께 하기: Supabase Realtime으로 위치·말·나비를 주고받음 ---- */
 const safeColor = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c : '#9fc4e8';
-const stateObj = () => ({ id:ME.id, n:ME.name, c:ME.color, x:+P.x.toFixed(2), y:+P.y.toFixed(2), fx:+P.fx.toFixed(2), fy:+P.fy.toFixed(2), m:P.moving ? 1 : 0, s:P.sit ? 1 : 0, u:+(P.upH || 0).toFixed(2), in:instrument || '', ia:instAt, bf:found.butterflies ? 1 : 0 });
+const stateObj = () => ({ id:ME.id, n:ME.name, c:ME.color, x:+P.x.toFixed(2), y:+P.y.toFixed(2), fx:+P.fx.toFixed(2), fy:+P.fy.toFixed(2), m:P.moving ? 1 : 0, s:P.sit ? 1 : 0, u:+(P.upH || 0).toFixed(2), mk:pzSave.mask || '', in:instrument || '', ia:instAt, bf:found.butterflies ? 1 : 0 });
 let lastSent = 0, lastJson = '';
 function sendPresence(force){
   if (!chan) return;
@@ -467,7 +473,7 @@ function onState(s){
   let o = others.get(s.id);
   if (!o) { o = { rx:x, ry:y }; others.set(s.id, o);
     if (!knownIds.has(s.id)) { knownIds.add(s.id); try { localStorage.setItem('denggul-known', JSON.stringify([...knownIds].slice(-200))); } catch (e) {} } }   // 같이 있었던 사람
-  Object.assign(o, { x, y, fx:+s.fx || 0, fy:+s.fy || 0, m:!!s.m, sit:!!s.s, upH:Math.max(0, Math.min(8, +s.u || 0)), inst:typeof s.in === 'string' && Object.hasOwn(INSTRUMENTS, s.in) ? s.in : null, ia:+s.ia || 0, bf:!!s.bf, name:clean(s.n || '').slice(0, 12) || '탐험가', color:safeColor(s.c), seen:performance.now() });
+  Object.assign(o, { x, y, fx:+s.fx || 0, fy:+s.fy || 0, m:!!s.m, sit:!!s.s, mask:typeof s.mk === 'string' && Object.hasOwn(MASKS, s.mk) ? s.mk : null, upH:Math.max(0, Math.min(8, +s.u || 0)), inst:typeof s.in === 'string' && Object.hasOwn(INSTRUMENTS, s.in) ? s.in : null, ia:+s.ia || 0, bf:!!s.bf, name:clean(s.n || '').slice(0, 12) || '탐험가', color:safeColor(s.c), seen:performance.now() });
   return o;
 }
 function onSay(s){
@@ -985,6 +991,7 @@ function animatePerson(mesh, actor, moving, dt){
   const active = moving && !actor.sit;
   mesh.userData.walkTime = active ? (mesh.userData.walkTime || 0) + dt : 0;
   const pose = personPose(actor.fx ?? 0, actor.fy ?? -1, yaw, active, actor.sit, mesh.userData.walkTime);
+  wearMask(mesh, actor === P ? pzSave.mask : actor.mask, pose.row);
   if (personFrames) {
     mesh.material.map = personFrames[pose.row][pose.frame];
     mesh.scale.set(pose.flip, actor.sit ? .72 : 1, 1);
@@ -2389,7 +2396,8 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     b.addEventListener('click', () => { dialVal[n] = (dialVal[n] + 1) % SYMS.length; tick(900 + n*90, .06, .07, 'square'); paintDials();
       if (dialVal.every((d, i) => d === LOCK_ANS[i])) { [1046, 1318, 1568].forEach((f, i) => setTimeout(() => tick(f, .3, .06), 200 + i*110)); setTimeout(() => { lockBox.hidden = true; openChest(); }, 700); } });
     return b; })); }
-  function openChest(){ if (pzStep(SL) !== 5) return; pzSave.carry = (pzSave.carry || 0) + 1; savePz(); paintBag(); pickFx.push({ img:ROLL_T.userData.canvas, x:SPOT.chest.x, z:SPOT.chest.z, t:clock }); pzSfx.chime(.1); setPzStep(SL, 6); }
+  function openChest(){ if (pzStep(SL) !== 5) return; { const other = Object.keys(MASKS).find(k => !(pzSave.masks || []).includes(k)); if (other) { giveMask(other); pickFx.push({ img:MASK_TEX[other][1].userData.canvas, x:SPOT.chest.x, z:SPOT.chest.z, t:clock + .4 }); } }   // 상자엔 아직 없는 탈도
+    pzSave.carry = (pzSave.carry || 0) + 1; savePz(); paintBag(); pickFx.push({ img:ROLL_T.userData.canvas, x:SPOT.chest.x, z:SPOT.chest.z, t:clock }); pzSfx.chime(.1); setPzStep(SL, 6); }
   const onGround = () => !P.onPlat && !P.climb;
   const putIn = { x:SPOT.basket, z:0,
     give(k){ if (SL.trial || pzStep(SL) >= 2) return; bag[k]--; saveBag(); paintBag(); paintFire(); pzSfx.thump(.08); SL.bi = k; },
@@ -2536,6 +2544,213 @@ function updateClimb(){
     else { const u = e(Math.min(1, (k - .85)/.15)), ox = wd(c.bx - c.tx, W), oz = wd(c.bz - c.tz, H); P.upH = 0; P.x = wrapX(c.bx + ox*u); P.y = wrapY(c.bz + oz*u); }
     if (k >= 1) { P.climb = null; P.onPlat = null; P.upH = 0; }
   }
+}
+
+/* ================= 탈과 노래 =================
+   처음에 오셀롯 탈과 수달 탈 중 하나를 고름. 나머지 하나는 오두막 상자에서. 탈은 얼굴을 덮고 걸을 때 같이 돌아감(앞·옆·뒤).
+   노래: 다섯 음(1~5 키, 또는 오른쪽 아래 ♪). 탈마다 목소리가 다르고 같은 음계라 같이 부르면 어울림 */
+const MASKS = { ocelot:{ name:'오셀롯' }, otter:{ name:'수달' } };
+const SING_SCALE = [0, 2, 4, 7, 9];   // 다섯 음 (도 레 미 솔 라)
+function maskPaint(kind, view){   // view: 0 뒤, 1 앞, 2 옆(오른쪽을 봄) — 걷기 그림의 줄과 같음
+  return ctex(96, 96, (g) => {
+    const oc = kind === 'ocelot', fur = oc ? '#e0a347' : '#7a5634', dark = oc ? '#3a2410' : '#3a2616', light = oc ? '#f6e6c2' : '#e8d8b8';
+    g.lineJoin = 'round'; g.strokeStyle = RG.line; g.lineWidth = 2.5;
+    const ear = (x, y, s) => { g.fillStyle = fur; g.beginPath(); if (oc) { g.moveTo(x - 12*s, y + 8); g.lineTo(x, y - 16); g.lineTo(x + 12*s, y + 8); } else g.arc(x, y, 9, 0, Math.PI*2); g.closePath(); g.fill(); g.stroke(); g.fillStyle = oc ? '#c86a5a' : '#5a3a22'; g.beginPath(); g.arc(x, y + (oc ? 2 : 0), oc ? 4 : 4.5, 0, Math.PI*2); g.fill(); };
+    if (view === 2) {   // 옆모습: 주둥이가 오른쪽
+      ear(42, 22, 1);
+      g.fillStyle = fur; g.beginPath(); g.ellipse(46, 52, 28, 26, 0, 0, Math.PI*2); g.fill(); g.stroke();
+      g.fillStyle = light; g.beginPath(); g.ellipse(72, 60, 16, 12, .2, 0, Math.PI*2); g.fill(); g.stroke();
+      g.fillStyle = dark; g.beginPath(); g.ellipse(86, 56, 4, 3.5, 0, 0, Math.PI*2); g.fill();
+      g.fillStyle = oc ? '#3f6a3a' : '#111'; g.beginPath(); g.ellipse(60, 44, oc ? 5 : 3.5, oc ? 3.5 : 3.5, -.2, 0, Math.PI*2); g.fill();
+      if (oc) { g.fillStyle = dark; for (const [x, y] of [[30, 40], [36, 62], [24, 54], [46, 30]]) { g.beginPath(); g.arc(x, y, 3, 0, Math.PI*2); g.fill(); } }
+      g.strokeStyle = dark; g.lineWidth = 1; for (const dy of [-3, 2]) { g.beginPath(); g.moveTo(76, 62 + dy); g.lineTo(94, 60 + dy*2); g.stroke(); }
+    } else if (view === 0) {   // 뒷머리
+      ear(26, 26, 1); ear(70, 26, 1);
+      g.fillStyle = fur; g.beginPath(); g.ellipse(48, 54, 30, 28, 0, 0, Math.PI*2); g.fill(); g.stroke();
+      if (oc) { g.fillStyle = dark; for (const [x, y] of [[36, 44], [56, 40], [46, 60], [30, 62], [64, 58]]) { g.beginPath(); g.ellipse(x, y, 4, 3, 0, 0, Math.PI*2); g.fill(); } }
+    } else {   // 앞 얼굴
+      ear(24, 26, 1); ear(72, 26, 1);
+      g.fillStyle = fur; g.beginPath(); g.ellipse(48, 54, 31, 28, 0, 0, Math.PI*2); g.fill(); g.stroke();
+      if (oc) { g.fillStyle = dark; for (const [x, y] of [[30, 38], [66, 38], [48, 32], [24, 56], [72, 56]]) { g.beginPath(); g.ellipse(x, y, 3.5, 2.5, 0, 0, Math.PI*2); g.fill(); } }
+      g.fillStyle = light; g.beginPath(); g.ellipse(48, 66, 17, 12, 0, 0, Math.PI*2); g.fill();
+      g.fillStyle = oc ? '#3f6a3a' : '#111'; for (const x of [36, 60]) { g.beginPath(); g.ellipse(x, 48, oc ? 6 : 4, oc ? 4 : 4, 0, 0, Math.PI*2); g.fill(); }
+      if (oc) { g.fillStyle = '#111'; for (const x of [36, 60]) g.fillRect(x - 1, 45, 2, 7); }
+      g.fillStyle = oc ? '#c86a6a' : '#1a120a'; g.beginPath(); g.moveTo(43, 60); g.lineTo(53, 60); g.lineTo(48, 66); g.closePath(); g.fill();
+      g.strokeStyle = dark; g.lineWidth = 1; for (const s of [-1, 1]) for (const dy of [-2, 3]) { g.beginPath(); g.moveTo(48 + s*10, 67 + dy); g.lineTo(48 + s*30, 64 + dy*2); g.stroke(); }
+    }
+  });
+}
+const MASK_TEX = Object.fromEntries(Object.keys(MASKS).map(k => [k, [0, 1, 2].map(v => maskPaint(k, v))]));
+for (const k of Object.keys(MASKS)) ['back', 'front', 'side'].forEach((v, i) => onArt(`mask_${k}_${v}`, im => swapTex(MASK_TEX[k][i], im)));
+const maskGeo = plane(.34, .34, false);
+function wearMask(mesh, kind, row){   // 사람 그림에 탈을 얹음 (그림과 같이 돌고 뒤집힘)
+  let m = mesh.userData.maskMesh;
+  if (!m) { m = new THREE.Mesh(maskGeo, mat(MASK_TEX.ocelot[1])); m.position.set(0, .96, .02); mesh.add(m); mesh.userData.maskMesh = m; }
+  m.visible = !!(kind && MASK_TEX[kind]); if (!m.visible) return;
+  const t = MASK_TEX[kind][row ?? 1]; if (m.material.map !== t) { m.material.map = t; m.material.needsUpdate = true; }
+}
+// 처음 들어오면 탈을 고름
+const maskVeil = document.createElement('div'); maskVeil.hidden = true; maskVeil.setAttribute('role', 'dialog'); maskVeil.setAttribute('aria-label', '탈 고르기');
+maskVeil.style.cssText = 'position:fixed;inset:0;z-index:30;background:rgba(14,10,36,.8);display:flex;align-items:center;justify-content:center';
+maskVeil.innerHTML = '<div style="display:flex;gap:18px" id="maskPick"></div>';
+document.body.append(maskVeil);
+for (const k of Object.keys(MASKS)) {
+  const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', MASKS[k].name + ' 탈');
+  b.style.cssText = 'background:#f3e6c8;border:4px solid #3a2410;border-radius:14px;padding:12px 16px 8px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font:22px "Nanum Pen Script",cursive;color:#3a2410';
+  const c = document.createElement('canvas'); c.width = c.height = 96; c.getContext('2d').drawImage(MASK_TEX[k][1].userData.canvas, 0, 0); c.style.cssText = 'width:110px;height:110px';
+  b.append(c, MASKS[k].name);
+  b.addEventListener('click', () => { pzSave.masks = [k]; pzSave.mask = k; savePz(); maskVeil.hidden = true; paintMaskBtn(); sendPresence(true); singChime(k); cv.focus(); });
+  maskVeil.querySelector('#maskPick').append(b);
+}
+setInterval(() => { if (!pzSave.masks && ME.name && document.getElementById('nameVeil').hidden && $popVeil.hidden) maskVeil.hidden = false; }, 800);
+// 메뉴: 가진 탈을 돌려 가며 쓰기 (탈 벗기 포함)
+const $maskBtn = document.createElement('button'); $maskBtn.type = 'button'; $maskBtn.className = 'ic';
+function paintMaskBtn(){ const k = pzSave.mask; $maskBtn.replaceChildren(); const c = document.createElement('canvas'); c.width = c.height = 96; c.style.cssText = 'width:24px;height:24px';
+  if (k && MASK_TEX[k]) c.getContext('2d').drawImage(MASK_TEX[k][1].userData.canvas, 0, 0); else { const g = c.getContext('2d'); g.strokeStyle = '#f3e6c8'; g.lineWidth = 6; g.beginPath(); g.arc(48, 48, 32, 0, Math.PI*2); g.stroke(); }
+  const lb = document.createElement('span'); lb.className = 'lb'; lb.textContent = k ? MASKS[k].name + ' 탈' : '탈'; $maskBtn.append(c, lb); $maskBtn.setAttribute('aria-label', '탈 바꾸기'); }
+$maskBtn.addEventListener('click', () => { const own = [...(pzSave.masks || []), null], i = own.indexOf(pzSave.mask ?? null); pzSave.mask = own[(i + 1) % own.length]; savePz(); paintMaskBtn(); sendPresence(true); if (pzSave.mask) singChime(pzSave.mask); });
+document.querySelector('.tools').prepend($maskBtn); paintMaskBtn();
+function giveMask(k){ if (!MASKS[k]) return; pzSave.masks = [...new Set([...(pzSave.masks || []), k])]; pzSave.mask = k; savePz(); paintMaskBtn(); sendPresence(true); }
+// 노래
+const singFx = [];   // 머리 위로 떠오르는 음표 { x, z, h, t, n }
+function voice(kind, n, vol){
+  sfx((ac, t) => {
+    const semi = SING_SCALE[n], out = ac.createGain(); out.gain.value = vol; out.connect(ac.destination); out.connect(reverb(ac));
+    const o = ac.createOscillator(), g = ac.createGain();
+    if (kind === 'ocelot') {   // 낮게 그르렁
+      const f = 130.8*2**(semi/12), lp = ac.createBiquadFilter(), am = ac.createOscillator(), amg = ac.createGain(); o.type = 'sawtooth'; o.frequency.value = f; lp.type = 'lowpass'; lp.frequency.value = 700;
+      am.frequency.value = 28; amg.gain.value = .35; am.connect(amg).connect(g.gain); am.start(t); am.stop(t + .9);
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.6, t + .06); g.gain.exponentialRampToValueAtTime(.0001, t + .85); o.connect(lp).connect(g).connect(out);
+    } else if (kind === 'otter') {   // 휘파람처럼 높게
+      const f = 523.3*2**(semi/12); o.type = 'sine'; o.frequency.setValueAtTime(f*.94, t); o.frequency.exponentialRampToValueAtTime(f, t + .08);
+      const vib = ac.createOscillator(), vg = ac.createGain(); vib.frequency.value = 6; vg.gain.value = f*.012; vib.connect(vg).connect(o.frequency); vib.start(t); vib.stop(t + .8);
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.5, t + .05); g.gain.exponentialRampToValueAtTime(.0001, t + .75); o.connect(g).connect(out);
+    } else {   // 탈 없이: 흥얼거림
+      const f = 261.6*2**(semi/12); o.type = 'triangle'; o.frequency.value = f; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.4, t + .08); g.gain.exponentialRampToValueAtTime(.0001, t + .7); o.connect(g).connect(out);
+    }
+    o.start(t); o.stop(t + .95);
+  });
+}
+const singChime = k => voice(k, 2, .12);
+const SING_HOOKS = [];   // 퍼즐이 노래를 들음 (내 노래와 곁의 친구 노래)
+let lastSing = -9;
+function sing(n){
+  if (!(n >= 0 && n < 5) || modalOpen()) return;
+  startAudio(); const k = pzSave.mask || null; voice(k, n, .16); lastSing = clock;
+  singFx.push({ x:P.x, z:P.y, h:1.5 + (P.upH || 0), t:clock, n });
+  if (chan) chan.send({ type:'broadcast', event:'sing', payload:{ id:ME.id, mk:k || '', n, x:+P.x.toFixed(2), y:+P.y.toFixed(2) } });
+  SING_HOOKS.forEach(h => h({ mask:k, n, x:P.x, y:P.y, mine:true }));
+}
+NET_HOOKS.push(ch => ch.on('broadcast', { event:'sing' }, ({ payload:p }) => {
+  if (!p || p.id === ME.id || !(p.n >= 0 && p.n < 5) || typeof p.x !== 'number') return;
+  const mk = MASKS[p.mk] ? p.mk : null, o = others.get(p.id), d = wdist(p.x, p.y, P.x, P.y);
+  if (d < 16) voice(mk, p.n | 0, .16*(1 - d/16));
+  singFx.push({ x:p.x, z:p.y, h:1.5 + ((o && o.upH) || 0), t:clock, n:p.n | 0 });
+  SING_HOOKS.forEach(h => h({ mask:mk, n:p.n | 0, x:p.x, y:p.y, mine:false }));
+}));
+function drawSingFx(){
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let i = singFx.length - 1; i >= 0; i--) { const f = singFx[i], k = (clock - f.t)/1.4; if (k >= 1) { singFx.splice(i, 1); continue; }
+    const s = toScreen(f.x, f.h + k*.8 + f.n*.08, f.z); if (!s) continue;
+    ctx.globalAlpha = 1 - k; ctx.fillStyle = ['#f2d84a', '#f2a93b', '#e8706a', '#a0d0a0', '#9fb8e8'][f.n]; ctx.font = `${16 + f.n*2}px system-ui,sans-serif`; ctx.fillText('♪', s[0] + Math.sin(k*8)*6, s[1]); }
+  ctx.globalAlpha = 1;
+}
+// 노래 버튼: ♪를 누르면 다섯 음이 펼쳐짐 (PC는 1~5 키)
+const singBar = document.createElement('div');
+singBar.className = 'singbar'; { const st = document.createElement('style'); st.textContent = '.singbar{position:fixed;right:calc(env(safe-area-inset-right,0px) + 12px);bottom:calc(env(safe-area-inset-bottom,0px) + 150px);display:flex;gap:6px;align-items:center;z-index:4}@media (max-width:640px){.singbar{bottom:calc(env(safe-area-inset-bottom,0px) + 250px)}}'; document.head.append(st); }
+document.body.append(singBar);
+const singNotes = document.createElement('div'); singNotes.style.cssText = 'display:flex;gap:6px;align-items:flex-end'; singNotes.hidden = true;
+for (let n = 0; n < 5; n++) { const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', `노래 ${n + 1}`);
+  b.style.cssText = `width:40px;height:${40 + n*7}px;border-radius:20px;background:rgba(20,18,40,.7);border:1px solid rgba(243,230,200,.3);color:${['#f2d84a', '#f2a93b', '#e8706a', '#a0d0a0', '#9fb8e8'][n]};font:18px system-ui;cursor:pointer`;
+  b.textContent = '♪'; b.addEventListener('pointerdown', e => { e.preventDefault(); sing(n); }); singNotes.append(b); }
+const singToggle = document.createElement('button'); singToggle.type = 'button'; singToggle.className = 'ic'; singToggle.setAttribute('aria-label', '노래하기');
+singToggle.style.cssText = 'width:44px;height:44px;border-radius:50%;background:rgba(20,18,40,.7);border:1px solid rgba(243,230,200,.3);color:#f3e6c8;font:20px system-ui;cursor:pointer';
+singToggle.textContent = '♪'; singToggle.addEventListener('click', () => { singNotes.hidden = !singNotes.hidden; cv.focus(); });
+singBar.append(singNotes, singToggle);
+addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return; if (/^Digit[1-5]$/.test(e.code)) sing(+e.code.slice(5) - 1); });
+
+/* ---- 퍼즐 2. 물가: 둑과 개구리의 노래 ----
+   둑에 물길이 막혀 연못이 얕고, 섬으로 갈 연잎은 진흙 바닥에 붙어 있음. 둑 위엔 수달 가족.
+   물가 바위의 개구리 다섯은 밤마다 짧은 선율을 부름(바위의 조약돌 수가 부르는 순서). 낮엔 하나씩 누르면 제 음을 냄.
+   수달 탈을 쓰고 둑 가까이서 그 선율을 따라 부르면, 수달들이 같은 음으로 답하며 둑의 나뭇가지를 하나씩 물어 감.
+   다 치우면 물이 쏟아져 연못이 차고 연잎이 떠올라 섬까지 징검다리가 됨. 섬엔 돛 두루마리 */
+{
+  const rg = REGIONS[2], hub = rg.hub, cx = Math.floor(hub.x), cy = Math.floor(hub.y), C = { x:cx + .5, z:cy + .5 };
+  const NOTE_OF = [3, 0, 4, 1, 2], PEBBLES = [2, 4, 1, 5, 3];   // 왼쪽부터 개구리의 음, 바위의 조약돌 수(부르는 순서)
+  const ORDER = [0, 1, 2, 3, 4].sort((a, b) => PEBBLES[a] - PEBBLES[b]), MEL = ORDER.map(i => NOTE_OF[i]);
+  const FROGS = [0, 1, 2, 3, 4].map(i => { const a = (-150 + i*30)*Math.PI/180; return { i, x:wrapX(C.x + Math.cos(a)*5.3), z:wrapY(C.z + Math.sin(a)*5.3), pop:-9 }; });
+  const DAM = { x:wrapX(C.x + 5.2), z:wrapY(C.z + .5) };
+  const ROCK_T = n => ctex(96, 64, (g) => { g.fillStyle = '#6e6a5a'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.beginPath(); g.ellipse(48, 44, 42, 18, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = '#e8e0c8'; for (let k = 0; k < n; k++) { g.beginPath(); g.arc(28 + k*10, 48, 3.5, 0, Math.PI*2); g.fill(); } });
+  const FROG_T = ctex(64, 48, (g) => { g.fillStyle = '#5a9a4a'; g.strokeStyle = RG.line; g.lineWidth = 2; g.beginPath(); g.ellipse(32, 30, 22, 14, 0, 0, Math.PI*2); g.fill(); g.stroke();
+    for (const x of [22, 42]) { g.fillStyle = '#5a9a4a'; g.beginPath(); g.arc(x, 16, 7, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = '#f2d84a'; g.beginPath(); g.arc(x, 16, 4, 0, Math.PI*2); g.fill(); g.fillStyle = '#111'; g.fillRect(x - 1, 13, 2, 6); }
+    g.strokeStyle = '#2a4a22'; g.beginPath(); g.arc(32, 32, 9, .3, Math.PI - .3); g.stroke(); });
+  const DAM_T = ctex(220, 140, (g, w, h) => { g.fillStyle = '#5a4630'; g.strokeStyle = RG.line; g.lineWidth = 2; g.beginPath(); g.ellipse(110, 120, 104, 26, 0, 0, Math.PI*2); g.fill(); g.stroke();
+    g.lineCap = 'round'; for (let i = 0; i < 26; i++) { g.strokeStyle = ['#8a6438', '#6b4a2a', '#a07a48'][i % 3]; g.lineWidth = 6 + (i % 3)*2; const x = 14 + (i*37) % 190, y = 40 + (i*23) % 80, a = (i % 5 - 2)*.5; g.beginPath(); g.moveTo(x - Math.cos(a)*30, y - Math.sin(a)*12); g.lineTo(x + Math.cos(a)*30, y + Math.sin(a)*12); g.stroke(); } });
+  const OTTER_T = ctex(64, 64, (g) => { g.fillStyle = '#7a5634'; g.strokeStyle = RG.line; g.lineWidth = 2; g.beginPath(); g.ellipse(32, 44, 16, 18, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.beginPath(); g.arc(32, 22, 13, 0, Math.PI*2); g.fill(); g.stroke();
+    g.fillStyle = '#e8d8b8'; g.beginPath(); g.ellipse(32, 27, 8, 6, 0, 0, Math.PI*2); g.fill(); g.fillStyle = '#111'; for (const x of [26, 38]) { g.beginPath(); g.arc(x, 19, 2.2, 0, Math.PI*2); g.fill(); } g.beginPath(); g.ellipse(32, 24, 3, 2, 0, 0, Math.PI*2); g.fill();
+    for (const x of [20, 44]) { g.fillStyle = '#7a5634'; g.beginPath(); g.arc(x, 12, 4, 0, Math.PI*2); g.fill(); } });
+  const PAD_T = ctex(64, 64, (g) => { g.fillStyle = '#4f8a3e'; g.strokeStyle = '#2a4a22'; g.lineWidth = 2; g.beginPath(); g.moveTo(32, 32); g.arc(32, 32, 28, .4, Math.PI*2 - .1); g.closePath(); g.fill(); g.stroke(); g.strokeStyle = '#6aa85a'; for (let a = 0; a < 6; a++) { g.beginPath(); g.moveTo(32, 32); g.lineTo(32 + Math.cos(a + .9)*24, 32 + Math.sin(a + .9)*24); g.stroke(); } });
+  const MUD_T = ctex(128, 128, (g) => { const r = g.createRadialGradient(64, 64, 10, 64, 64, 64); r.addColorStop(0, 'rgba(70,52,30,.75)'); r.addColorStop(.85, 'rgba(70,52,30,.6)'); r.addColorStop(1, 'rgba(70,52,30,0)'); g.fillStyle = r; g.fillRect(0, 0, 128, 128); });
+  onArt('frog', im => swapTex(FROG_T, im)); onArt('dam', im => swapTex(DAM_T, im)); onArt('otter', im => swapTex(OTTER_T, im)); onArt('lilypad', im => swapTex(PAD_T, im));
+  const rocks = FROGS.map(f => { const m = cutout(plane(.9, .6), mat(ROCK_T(PEBBLES[f.i]))); return m; });
+  const frogs = FROGS.map(() => cutout(plane(.5, .38), mat(FROG_T)));
+  const dam = cutout(plane(2.6, 1.65), mat(DAM_T));
+  const otters = [-.7, 0, .7].map(() => cutout(plane(.42, .42), mat(OTTER_T)));
+  const mud = cutout(new THREE.PlaneGeometry(9.4, 9.4), new THREE.MeshBasicMaterial({ map:MUD_T, transparent:true, depthWrite:false })); mud.rotation.x = -Math.PI/2; mud.renderOrder = 1;
+  const pads = [...rg.stones.map(s => ({ x:s.tx + .5, z:s.ty + .5, step:true })), { x:C.x - 2.6, z:C.z + 1.2 }, { x:C.x + 2.2, z:C.z + 2.4 }, { x:C.x + 2.9, z:C.z - 1.2 }]
+    .map(p => { const m = cutout(new THREE.PlaneGeometry(.95, .95), mat(PAD_T, true, { alphaTest:.4 })); m.rotation.x = -Math.PI/2; return { ...p, m }; });
+  const pour = cutout(plane(1.1, .9), mat(FLOW_TEX, true, { alphaTest:.3 })); pour.visible = false;
+  const roll = cutout(plane(.6, .3), mat(window.SAIL_ROLL_T || ITEMS.banana.tex));
+  const WP = { id:'pond', x:hub.x, y:hub.y, done:3, t:0, last:-1, prog:0, snd:false, wrongT:-9, melT:4, melI:-1, flee:0, thumb:() => FROG_T.image };
+  const setPath = on => { for (const s of rg.stones) setT(s.tx, s.ty, on ? FLOOR : WATER); };
+  if (pzStep(WP) >= 2) setPath(true);
+  const frogVoice = (n, v) => sfx((ac, t) => { const f = 392*2**(SING_SCALE[n]/12), o = ac.createOscillator(), g = ac.createGain(); o.frequency.setValueAtTime(f*1.3, t); o.frequency.exponentialRampToValueAtTime(f, t + .06);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + .02); g.gain.exponentialRampToValueAtTime(.0001, t + .32); o.connect(g); g.connect(ac.destination); g.connect(reverb(ac)); o.start(t); o.stop(t + .35); });
+  const near = (r = 14) => Math.max(0, 1 - wdist(P.x, P.y, C.x, C.z)/r);
+  // 노래를 들음: 수달 탈을 쓰고 둑 가까이서 선율을 따라 부르면
+  SING_HOOKS.push(s => {
+    if (pzStep(WP) !== 0 || wdist(s.x, s.y, DAM.x, DAM.z) > 9) return;
+    if (s.mask === 'ocelot') { WP.flee = clock; return; }   // 오셀롯 목소리엔 수달이 숨음
+    if (s.mask !== 'otter') return;   // 사람 흥얼거림엔 귀만 쫑긋
+    if (s.n === MEL[WP.prog]) { WP.prog++; setTimeout(() => voice('otter', s.n, .12*near()), 380); pzSfx.rope(.04*near());
+      if (WP.prog >= MEL.length) setPzStep(WP, 1); }
+    else { WP.prog = 0; WP.wrongT = clock; pzSfx.hm(.07*near()); WP.melT = 1.5; }
+  });
+  WP.targets = () => {
+    const st = pzStep(WP), L = [];
+    FROGS.forEach((f, i) => L.push({ key:'pz-frog', noSeen:true, x:f.x, h:.5, z:f.z, reach:5, me:frogs[i], act:() => { f.pop = clock; frogVoice(NOTE_OF[i], .1); } }));
+    otters.forEach((m, i) => L.push({ key:'pz-otter', noSeen:true, x:DAM.x, h:1.6, z:DAM.z, me:m, reach:7, act:() => { WP.dive = clock; tick(1500, .1, .05); } }));
+    L.push({ key:'pz-dam', noSeen:true, x:DAM.x, h:.8, h0:.1, h1:1.5, z:DAM.z, me:dam });
+    if (st === 2) L.push({ key:'pz-roll', noSeen:true, x:C.x, h:.3, z:C.z, reach:2.6, act:() => { pzSave.carry = (pzSave.carry || 0) + 1; savePz(); paintBag(); pickFx.push({ img:window.SAIL_ROLL_T.userData.canvas, x:C.x, z:C.z, t:clock }); pzSfx.chime(.1); setPzStep(WP, 3); } });
+    return L;
+  };
+  WP.update = (dt, camX, camZ) => {
+    const st = pzStep(WP); if (st !== WP.last) { WP.t = clock; WP.last = st; WP.snd = false; }
+    const el = clock - WP.t, nt = Math.max(0, Math.min(1, (dayState().dark - .12)/.66));
+    const at = p => wrapNear(p.x, p.z, camX, camZ), face = (me, x, z) => { me.rotation.y = Math.atan2(camX - x, camZ - z); };
+    // 개구리: 밤엔 선율을 부름
+    if (st === 0 && nt > .5 && wdist(P.x, P.y, C.x, C.z) < 14 && (WP.melT -= dt) <= 0) { WP.melI = 0; WP.melT = 10; WP.melStart = clock; }
+    if (WP.melI >= 0 && clock >= WP.melStart + WP.melI*.75) { const fi = ORDER[WP.melI]; FROGS[fi].pop = clock; frogVoice(NOTE_OF[fi], .1*near()); WP.melI++; if (WP.melI >= ORDER.length) WP.melI = -1; }
+    FROGS.forEach((f, i) => { const [x, z] = at(f); rocks[i].position.set(x, 0, z); face(rocks[i], x, z); const pk = clock - f.pop, puff = pk < .5 ? Math.sin(pk/.5*Math.PI)*.25 : 0;
+      frogs[i].position.set(x, .32 + puff*.3, z); face(frogs[i], x, z); frogs[i].scale.set(1 + puff, 1 + puff*.6, 1); });
+    // 둑: 맞는 음마다 나뭇가지가 하나씩 빠짐 → 다 빠지면 무너짐
+    { const [x, z] = at(DAM); const gone = st >= 1 ? Math.min(1, el/1.2) : 0, left = st >= 1 ? 0 : 1 - WP.prog*.12;
+      dam.visible = gone < 1; dam.position.set(x, -gone*1.2, z); face(dam, x, z); dam.scale.set(1, Math.max(.1, left), 1); dam.rotation.z = st >= 1 ? gone*.3 : 0;
+      pour.visible = st >= 1; if (pour.visible) { pour.position.set(x - 1.2, 0, z); face(pour, x - 1.2, z); pour.scale.set(1, st === 1 ? Math.min(1, el) : .6, 1); }
+      const hide = clock - WP.flee < 5 || pzSave.mask === 'ocelot' && wdist(P.x, P.y, DAM.x, DAM.z) < 5, dv = clock - (WP.dive || -9);
+      otters.forEach((m, i) => { const ang = Math.atan2(camX - x, camZ - z), rx = Math.cos(ang), rz = -Math.sin(ang), dip = hide || st >= 1 ? 1 : dv < 1.2 ? Math.sin(dv/1.2*Math.PI) : 0;
+        const tilt = clock - WP.wrongT < 1.5 ? Math.sin((clock - WP.wrongT)*8)*.25 : 0;
+        m.position.set(x + rx*(i - 1)*.65, 1.15 - dip*1.1 + Math.abs(Math.sin(clock*2 + i))*.03, z + rz*(i - 1)*.65); face(m, x, z); m.rotation.z = tilt; m.visible = dip < .95; }); }
+    // 물이 차오름: 진흙 그늘이 걷히고 연잎이 떠오름
+    { const [x, z] = at(C); mud.position.set(x, .025, z); const rise = st >= 2 ? 1 : st === 1 ? Math.min(1, el/5) : 0; mud.material.opacity = 1 - rise*.95;
+      pads.forEach(p => { const [px, pz] = at(p); p.m.position.set(px, -.2 + rise*.24, pz); p.m.visible = rise > .05 || !p.step; });
+      roll.visible = st < 3; roll.position.set(x, .15, z); face(roll, x, z); if (window.SAIL_ROLL_T && roll.material.map !== window.SAIL_ROLL_T) { roll.material.map = window.SAIL_ROLL_T; roll.material.needsUpdate = true; } }
+    if (st === 1 && el > 5.2) { setPath(true); setPzStep(WP, 2, { auto:true }); }
+    if (st >= 2 && type[id(rg.stones[0].tx, rg.stones[0].ty)] !== FLOOR) setPath(true);
+    if (!WP.snd) { WP.snd = true; if (st === 1 && el < .3) { const v = near(); pzSfx.thump(.25*v); [0, .4, .8].forEach(d => setTimeout(() => tick(260, .8, .08*v), d*1000)); setTimeout(() => pzSfx.chime(.08*near()), 4800); } }
+  };
+  WP.overlay = () => { const st = pzStep(WP); if (st !== 2) return; const s = toScreen(C.x, .5, C.z); if (!s || Math.sin(clock*3) < .3) return; ctx.fillStyle = '#fff6c8'; ctx.font = '16px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText('✦', s[0] + 10, s[1]); };
+  PUZZLES.push(WP);
 }
 
 /* ---- 범선에 돛 걸기: 두루마리를 들고 범선을 누르면 돛이 펼쳐져 올라감 ---- */
@@ -3167,7 +3382,7 @@ function draw(dt = .016){
     ctx.stroke();
   }
   if (flash > .01) { ctx.fillStyle = `rgba(255,255,240,${flash*.55})`; ctx.fillRect(0, 0, vw, vh); }
-  drawTwinkles(); drawPickFx(); drawFireOverlay(); drawPuzzleOverlay(); drawEnergyOverlay(); drawTouchHelp(dt); drawHintOverlay();
+  drawTwinkles(); drawPickFx(); drawFireOverlay(); drawPuzzleOverlay(); drawSingFx(); drawEnergyOverlay(); drawTouchHelp(dt); drawHintOverlay();
   drawObsOverlay(1, dt);
   ctx.font = '11px system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const L of []) {   // 이름표 마을의 이름표는 뺌
