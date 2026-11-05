@@ -4139,7 +4139,8 @@ $hint.hidden = true;   // 조작 설명은 띄우지 않음
 
 let last = performance.now();
 const DBG_RUN = location.search.includes('dbg');   // 시험할 땐 창이 가려져도 계속 돌게
-function frame(now){ const dt = Math.min(.05, (now - last)/1000); last = now; step(dt); draw(dt); if (DBG_RUN) setTimeout(() => frame(performance.now()), 33); else requestAnimationFrame(frame); }
+function frame(now){ let el = (now - last)/1000; last = now; if (DBG_RUN && el > .05) { el = Math.min(el, 1.5); while (el > .05) { step(.05); el -= .05; } }   // 시험 모드: 가려진 창에서 띄엄띄엄 불려도 시간은 제대로 흐르게
+  const dt = Math.min(.05, el); step(dt); draw(dt); if (DBG_RUN) setTimeout(() => frame(performance.now()), 33); else requestAnimationFrame(frame); }
 requestAnimationFrame(frame);
 cv.focus();
 if (!ME.name) openName();
