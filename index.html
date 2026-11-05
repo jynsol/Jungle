@@ -766,12 +766,13 @@ function billboard(m){
   return m;
 }
 function ctex(w, h, paint){
-  const c = document.createElement('canvas'); c.width = w; c.height = h; paint(c.getContext('2d'), w, h);
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); if (g) try { paint(g, w, h); } catch (e) {}   // 폰에서 그림판 메모리가 모자라도 멈추지 않게
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.userData.canvas = c; return t;
 }
 function plane(w, h, base = true){ const g = new THREE.PlaneGeometry(w, h); if (base) g.translate(0, h/2, 0); return g; }
 function cutout(geo, m){ const me = new THREE.Mesh(geo, m); scene.add(me); return me; }
-function swapTex(t, im){ t.dispose(); t.image = im; t.magFilter = THREE.LinearFilter; t.needsUpdate = true; }   // 한 번 올라간 그림판은 버리고 새 크기로 다시 올림
+function swapTex(t, im){ t.dispose(); const c = t.userData.canvas; t.image = im; t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
+  if (c && !t.userData.keep) { c.width = c.height = 1; t.userData.canvas = null; } }   // 새 그림이 오면 기본 그림판은 비워서 메모리를 돌려줌   // 한 번 올라간 그림판은 버리고 새 크기로 다시 올림
 function fitGeo(me, h, im, base = true){ const w = h*im.width/im.height; me.geometry = plane(w, h, base); return w; }   // 높이는 그대로, 너비는 그림 비율대로
 
 /* 그림판 그림들 (assets/ 그림이 있으면 그걸로 바뀜) */
@@ -1244,7 +1245,7 @@ const EYES = []; for (const [k] of bushByTile) if (type[k] === BUSH && hash(k*17
 const sky = cutout(plane(4, 4, false), mat(SUN_TEX, false, { fog:false, depthWrite:false })); sky.renderOrder = 10; sky.material.onBeforeCompile = () => {};
 /* ---- 먼 숲: 카메라를 빙 둘러싼 그림판 두 겹. 나무 꼭대기 사이로만 하늘이 조금 보임 ---- */
 function treeline(col, light, seed){
-  return ctex(2048, 512, (g, w, h) => {
+  return ctex(1024, 256, (g, w, h) => {
     const r = rng(seed), items = [];
     for (let x = 0; x < w; x += 26 + r()*38) items.push({ x, top:h*(light ? .04 : .18) + r()*h*.28, palm:r() < .32, rx:46 + r()*44, ry:56 + r()*34, rs:Array.from({ length:10 }, r) });
     const blob = (x, y, len, rot) => { g.save(); g.translate(x, y); g.rotate(rot); g.beginPath(); g.ellipse(len/2, 0, len/2, len*.16, 0, 0, Math.PI*2); g.fill(); g.restore(); };
@@ -2350,7 +2351,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
   const HUT_T = hutPaint(false), HUT_PEEK_T = hutPaint(true);
   const LENS_T = ctex(48, 48, (g) => { g.fillStyle = 'rgba(190,230,240,.85)'; g.strokeStyle = '#b08a3a'; g.lineWidth = 5; g.beginPath(); g.arc(24, 24, 18, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = 'rgba(255,255,255,.9)'; g.beginPath(); g.ellipse(17, 17, 5, 3, -.6, 0, Math.PI*2); g.fill(); });
   const BIRDHEAD_T = ctex(48, 48, (g) => { g.fillStyle = '#3e6fb0'; g.strokeStyle = RG.line; g.lineWidth = 2; g.beginPath(); g.arc(24, 28, 14, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = '#f2c230'; g.beginPath(); g.moveTo(36, 26); g.lineTo(47, 30); g.lineTo(36, 33); g.closePath(); g.fill(); g.fillStyle = '#fff'; g.beginPath(); g.arc(29, 24, 4, 0, Math.PI*2); g.fill(); g.fillStyle = '#111'; g.beginPath(); g.arc(30, 24, 2, 0, Math.PI*2); g.fill(); });
-  window.LENS_T = LENS_T;
+  window.LENS_T = LENS_T; LENS_T.userData.keep = true;
   const chestPaint = open => ctex(96, 72, (g) => {
     g.fillStyle = '#6b4a2a'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.fillRect(8, 30, 80, 40); g.strokeRect(8, 30, 80, 40);
     g.fillStyle = '#c9a046'; g.fillRect(44, 38, 8, 10);
@@ -2389,7 +2390,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
   onArt('ladder', im => swapTex(LADDER_T, im)); onArt('ladder_rolled', im => swapTex(ROLLED_T, im)); onArt('treehut', im => { swapTex(HUT_T, im); fitGeo(hut, 2.1, im); });
   onArt('lens', im => swapTex(LENS_T, im)); onArt('treehut_peek', im => swapTex(HUT_PEEK_T, im));
   onArt('chest', im => swapTex(CH.shut, im)); onArt('chest_open', im => swapTex(CH.open, im)); onArt('spyglass', im => swapTex(SPY_T, im)); onArt('deck', im => swapTex(DECK_T, im));
-  window.SAIL_ROLL_T = ROLL_T;
+  window.SAIL_ROLL_T = ROLL_T; ROLL_T.userData.keep = true;
   // 단계: 0 잠듦, 1 깨어남, 2 바나나 바구니 올라감(먹음), 3 기어가서 매듭 풂, 4 사다리 풀려 내려옴, 5 사다리 내려와 있음, 6 상자에서 두루마리 꺼냄
   const SL = { id:'sloth', x:hub.x, y:hub.y, done:6, t:0, last:-1, react:null, trial:null, bi:null, orange:null, throwT:3, snd:false, thumb:() => ST.idle.image };
   const LOW = .02, HIGH = DECK - 2.3, near = (r = 14) => Math.max(0, 1 - wdist(P.x, P.y, hub.x, hub.y)/r);
@@ -2609,6 +2610,7 @@ function maskPaint(kind, view){   // view: 0 뒤, 1 앞, 2 옆(오른쪽을 봄)
   });
 }
 const MASK_TEX = Object.fromEntries(Object.keys(MASKS).map(k => [k, [0, 1, 2].map(v => maskPaint(k, v))]));
+for (const k in MASK_TEX) for (const t of MASK_TEX[k]) t.userData.keep = true;
 for (const k of Object.keys(MASKS)) ['back', 'front', 'side'].forEach((v, i) => onArt(`mask_${k}_${v}`, im => swapTex(MASK_TEX[k][i], im)));
 const maskGeo = plane(.34, .34, false);
 function wearMask(mesh, kind, row){   // 사람 그림에 탈을 얹음 (그림과 같이 돌고 뒤집힘)
@@ -2633,9 +2635,12 @@ for (const k of Object.keys(MASKS)) {
 // 탈은 고르지 않음: 퍼즐을 풀면 얻음 (오두막 → 수달, 물가 → 오셀롯)
 // 메뉴: 가진 탈을 돌려 가며 쓰기 (탈 벗기 포함)
 const $maskBtn = document.createElement('button'); $maskBtn.type = 'button'; $maskBtn.className = 'ic';
-function paintMaskBtn(){ const k = pzSave.mask; $maskBtn.style.display = (pzSave.masks || []).length > 1 ? '' : 'none';   // 탈이 둘 이상일 때만 $maskBtn.replaceChildren(); const c = document.createElement('canvas'); c.width = c.height = 96; c.style.cssText = 'width:24px;height:24px';
-  if (k && MASK_TEX[k]) c.getContext('2d').drawImage(MASK_TEX[k][1].userData.canvas, 0, 0); else { const g = c.getContext('2d'); g.strokeStyle = '#f3e6c8'; g.lineWidth = 6; g.beginPath(); g.arc(48, 48, 32, 0, Math.PI*2); g.stroke(); }
-  const lb = document.createElement('span'); lb.className = 'lb'; lb.textContent = k ? MASKS[k].name + ' 탈' : '탈'; $maskBtn.append(c, lb); $maskBtn.setAttribute('aria-label', '탈 바꾸기'); }
+function paintMaskBtn(){   // 탈이 둘 이상일 때만 보임
+  const k = pzSave.mask; $maskBtn.style.display = (pzSave.masks || []).length > 1 ? '' : 'none';
+  $maskBtn.replaceChildren(); const mc = document.createElement('canvas'); mc.width = mc.height = 96; mc.style.cssText = 'width:24px;height:24px';
+  const g = mc.getContext('2d'); if (g && k && MASK_TEX[k] && MASK_TEX[k][1].userData.canvas) g.drawImage(MASK_TEX[k][1].userData.canvas, 0, 0);
+  const lb = document.createElement('span'); lb.className = 'lb'; lb.textContent = k ? MASKS[k].name + ' 탈' : '탈'; $maskBtn.append(mc, lb); $maskBtn.setAttribute('aria-label', '탈 바꾸기');
+}
 $maskBtn.addEventListener('click', () => { const own = pzSave.masks || ['wood'], i = own.indexOf(pzSave.mask); pzSave.mask = own[(i + 1) % own.length]; savePz(); paintMaskBtn(); sendPresence(true); if (pzSave.mask) singChime(pzSave.mask); });
 document.querySelector('.tools').prepend($maskBtn); paintMaskBtn();
 if (!pzSave.masks) { pzSave.masks = ['wood']; pzSave.mask = 'wood'; savePz(); }   // 처음엔 나무 탈
