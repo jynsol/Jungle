@@ -3400,15 +3400,31 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
         (나중에 배 안을 걸어 다니는 큰 퍼즐로 키울 자리) */
   { const gs = spot('galleon'), GL = { id:'galleon', x:gs.x, y:gs.z, done:1, thumb:() => STORIES.find(q => q.key === 'galleon').me.material.map.image };
     const HATCH = { x:gs.x - .6, z:wrapY(gs.z + 1.6) };
-    const paintHold = g => { const b = g.createLinearGradient(0, 0, 0, 300); b.addColorStop(0, '#2a5a6a'); b.addColorStop(1, '#0c2230'); g.fillStyle = b; g.fillRect(0, 0, 300, 300);
-      g.strokeStyle = 'rgba(40,24,12,.8)'; g.lineWidth = 10; for (let i = 0; i < 6; i++) { g.beginPath(); g.moveTo(-20, 60 + i*44); g.quadraticCurveTo(150, 30 + i*44, 320, 60 + i*44); g.stroke(); }
-      g.fillStyle = 'rgba(200,230,240,.5)'; for (let i = 0; i < 14; i++) { g.beginPath(); g.arc((i*47 + clock*20) % 300, 290 - ((clock*40 + i*37) % 290), 3 + (i % 3), 0, Math.PI*2); g.fill(); }
-      if (!GL.pulled) { g.fillStyle = '#7a5530'; g.strokeStyle = '#2a1808'; g.lineWidth = 3; g.fillRect(132, 236, 36, 30); g.strokeRect(132, 236, 36, 30); g.fillStyle = '#c8a24a'; g.beginPath(); g.arc(150, 230, 9, 0, Math.PI*2); g.fill(); g.stroke(); } };   // 밑창의 나무 마개
-    const tapHold = (x, y) => { if (GL.pulled || Math.abs(x - 150) > 34 || y < 210) return; GL.pulled = true; CARD.paint(); for (let i = 0; i < 8; i++) setTimeout(() => tick(120 + Math.random()*60, .25, .07, 'sine'), i*160); setTimeout(() => { CARD.close(); setPzStep(GL, 1); pzSfx.chime(.1); }, 1600); };
-    GL.targets = () => pzStep(GL) >= 1 ? [] : [{ key:'pz-hatch', noSeen:true, x:HATCH.x, h:.5, z:HATCH.z, reach:3, act:() => {
+    // 배 밑창 문: 물이 가득 차서 가장자리로 물이 졸졸 샘. 수달 탈을 쓰고 누르면 첨벙 들어가 마개를 뽑아 들고 나옴 → 물이 콸콸 쏟아져 빠짐 (카드 없이 그 자리에서)
+    const HATCH_T = ctex(128, 104, (g) => { g.fillStyle = '#5a3c22'; g.strokeStyle = RG.line; g.lineWidth = 4; g.beginPath(); g.ellipse(64, 54, 56, 44, 0, 0, Math.PI*2); g.fill(); g.stroke();
+      g.fillStyle = '#2a6a78'; g.beginPath(); g.ellipse(64, 56, 42, 32, 0, 0, Math.PI*2); g.fill(); g.strokeStyle = 'rgba(210,240,245,.7)'; g.lineWidth = 2; for (const [y, w] of [[44, 22], [58, 30], [70, 18]]) { g.beginPath(); g.moveTo(64 - w, y); g.quadraticCurveTo(64, y - 5, 64 + w, y); g.stroke(); }
+      g.fillStyle = '#c9a046'; for (const a of [0, 1.57, 3.14, 4.71]) { g.beginPath(); g.arc(64 + Math.cos(a)*50, 54 + Math.sin(a)*39, 4, 0, Math.PI*2); g.fill(); } });
+    const DRAIN_T = ctex(128, 104, (g) => { g.fillStyle = '#5a3c22'; g.strokeStyle = RG.line; g.lineWidth = 4; g.beginPath(); g.ellipse(64, 54, 56, 44, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = '#140c06'; g.beginPath(); g.ellipse(64, 56, 42, 32, 0, 0, Math.PI*2); g.fill();
+      g.fillStyle = '#c9a046'; for (const a of [0, 1.57, 3.14, 4.71]) { g.beginPath(); g.arc(64 + Math.cos(a)*50, 54 + Math.sin(a)*39, 4, 0, Math.PI*2); g.fill(); } });
+    const PLUG_T = ctex(64, 64, (g) => { g.fillStyle = '#7a5530'; g.strokeStyle = '#2a1808'; g.lineWidth = 3; g.fillRect(16, 24, 32, 30); g.strokeRect(16, 24, 32, 30); g.fillStyle = '#c8a24a'; g.beginPath(); g.arc(32, 18, 9, 0, Math.PI*2); g.fill(); g.stroke(); });
+    const hatchM = cutout(plane(1.0, .8), mat(HATCH_T));
+    const splash = () => sfx((ac, t) => { const src = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = noiseBuf(ac, 1); bp.type = 'bandpass'; bp.frequency.value = 900; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.12, t + .03); g.gain.exponentialRampToValueAtTime(.0001, t + .8); src.connect(bp).connect(g).connect(ac.destination); src.start(t); src.stop(t + 1); });
+    GL.targets = () => pzStep(GL) >= 1 || GL.diveT ? [] : [{ key:'pz-hatch', noSeen:true, x:HATCH.x, h:.4, z:HATCH.z, reach:3, me:hatchM, act:() => {
       if (pzSave.mask !== 'otter') { want(MASK_TEX.otter[1], HATCH.x, 1.4, HATCH.z); tick(200, .3, .05, 'sine'); return; }   // 물이 차서 못 들어감 → 수달 탈을 떠올림
-      tick(300, .4, .06, 'sine'); CARD.open(paintHold, tapHold); const t0 = clock, rp = () => { if (!cardV.hidden && clock - t0 < 30) { CARD.paint(); requestAnimationFrame(rp); } }; rp(); } }];
-    GL.update = () => {};
+      GL.diveT = clock; GL.dx = P.x; GL.dz = P.y; keys.clear(); splash(); } }];
+    GL.update = (dt, camX, camZ) => { const st = pzStep(GL);
+      { const [x, z] = wrapNear(HATCH.x, HATCH.z, camX, camZ); hatchM.position.set(x, .02, z); face(hatchM, x, z, camX, camZ); hatchM.material.map = st >= 1 || (GL.outT && clock - GL.outT > 3) ? DRAIN_T : HATCH_T; }
+      if (GL.diveT && !GL.outT) { const e = clock - GL.diveT; P.x = GL.dx; P.y = GL.dz; P.diveUntil = clock + .1;   // 물속에서 마개를 찾는 중: 거품이 보글보글
+        if (e > 2.6) { GL.outT = clock; P.diveUntil = 0; splash(); pickFx.push({ img:PLUG_T.userData.canvas, x:HATCH.x, z:HATCH.z, t:clock }); popAt(HATCH.x, HATCH.z, .5);
+          for (let i = 0; i < 14; i++) setTimeout(() => tick(110 + Math.random()*70, .3, .06*Math.max(.2, 1 - wdist(P.x, P.y, HATCH.x, HATCH.z)/12), 'sine'), i*220);   // 콸콸
+          setTimeout(() => { setPzStep(GL, 1); pzSfx.chime(.1); }, 3400); } } };
+    GL.overlay = () => { const st = pzStep(GL), s = toScreen(HATCH.x, .1, HATCH.z); if (!s || wdist(P.x, P.y, HATCH.x, HATCH.z) > 14) return;
+      ctx.strokeStyle = 'rgba(170,220,235,.85)'; ctx.lineWidth = 2;
+      if (st < 1 && !GL.outT) for (let i = 0; i < 3; i++) { const k = (clock*.9 + i/3) % 1; ctx.globalAlpha = 1 - k; ctx.beginPath(); ctx.moveTo(s[0] - 14 + i*14, s[1] + 2 + k*14); ctx.lineTo(s[0] - 14 + i*14, s[1] + 8 + k*14); ctx.stroke(); }   // 가장자리로 졸졸
+      if (GL.diveT && !GL.outT) { ctx.fillStyle = 'rgba(220,245,250,.85)'; for (let i = 0; i < 8; i++) { const k = ((clock - GL.diveT)*1.3 + i/8) % 1; ctx.globalAlpha = 1 - k; ctx.beginPath(); ctx.arc(s[0] + Math.sin(i*2.3 + clock*3)*12, s[1] - 18 - k*50, 2 + (i % 3), 0, Math.PI*2); ctx.fill(); } }   // 거품
+      if (GL.outT && clock - GL.outT < 3.6) { const e = clock - GL.outT, f = Math.min(1, e/.3)*(e > 3 ? 1 - (e - 3)/.6 : 1); ctx.strokeStyle = 'rgba(150,210,228,.9)';   // 물줄기가 콸콸 쏟아져 물길로
+        for (let i = 0; i < 9; i++) { const o = (i - 4)*3; ctx.globalAlpha = f*(.5 + (i % 2)*.4); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(s[0] + o, s[1] - 10); ctx.quadraticCurveTo(s[0] + 40 + o, s[1] - 40 + Math.sin(clock*12 + i)*3, s[0] + 80 + o*2, s[1] + 20); ctx.stroke(); } }
+      ctx.globalAlpha = 1; };
     PUZZLES.push(GL); }
 
   /* 지름길: 장을 풀면 덩굴 휘장이 걷히고 다음 장으로 바로 가는 둘레길이 열림 */
@@ -4058,7 +4074,7 @@ function draw(dt = .016){
   if (audio && audio.rg) audio.rg.gain.setTargetAtTime(soundOn ? st*.1 : 0, audio.ac.currentTime, .3);
   // 사람들: 카메라 기준 앞/뒤/옆 모습과 각자의 걷기 프레임.
   myMesh.position.set(P.x, elevP, P.y); myMesh.rotation.y = yaw;
-  animatePerson(myMesh, P, P.moving, dt); myMesh.visible = e < .6;
+  animatePerson(myMesh, P, P.moving, dt); myMesh.visible = e < .6 && !(P.diveUntil > clock);   // 물속에 들어가 있는 동안은 안 보임
   for (const [key, o] of others) {
     let me = peopleMeshes.get(key);
     if (!me || me.userData.color !== o.color) { if (me) scene.remove(me); me = cutout(personGeo, mat(personTex(o.color))); me.userData.color = o.color; peopleMeshes.set(key, me); }
