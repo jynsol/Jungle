@@ -3120,19 +3120,8 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
       g.fillStyle = '#5a3c22'; g.fillRect(134, 266, 32, 6); g.fillStyle = '#f2a93b'; g.beginPath(); g.moveTo(150, 266); g.quadraticCurveTo(162, 252, 150, 238); g.quadraticCurveTo(138, 252, 150, 266); g.fill();   // 모닥불
       g.fillStyle = '#f2d84a'; for (const [x, y] of [[112, 214], [122, 206]]) { g.beginPath(); g.ellipse(x - 4, y, 5, 4, -.4, 0, Math.PI*2); g.ellipse(x + 4, y, 5, 4, .4, 0, Math.PI*2); g.fill(); }   // 나비
       g.save(); g.translate(250, 250); g.fillStyle = '#b8402a'; g.beginPath(); g.moveTo(0, -24); g.lineTo(6, 0); g.lineTo(-6, 0); g.closePath(); g.fill(); g.fillStyle = '#6a5a3a'; g.beginPath(); g.moveTo(0, 24); g.lineTo(6, 0); g.lineTo(-6, 0); g.closePath(); g.fill(); g.restore(); };   // 붉은 쪽이 북 (나침반과 같은 색)
-    LT.targets = () => [{ key:'pz-letter', noSeen:true, x:at.x, h:.95, z:at.z, reach:3, act:() => { pzSfx.rope(.03); CARD.open(paintPost); if (pzStep(LT) < 1) setTimeout(() => { G.sayT = clock; squawk(); }, 400); setPzStep(LT, 1); } }];
-    // 엽서를 읽으면 앵무새 한 마리가 '이쪽!' 하고 북쪽 길로 날아가 앞장섬. 다가가면 다음 자리로 폴짝 날아가고, 큰 나무에 닿으면 가지에 앉아 기다림
-    const pts = REGIONS[0].pts, WP = [5, 10, 15, 20, 25].map(d => { const p = pts.find(([x, y]) => wdist(x, y, FIRE.x, FIRE.y) > d) || pts[pts.length - 1]; return { x:wrapX(p[0] + 1), z:p[1] }; });
-    const guide = cutout(plane(.32, .64), mat(PARROT_TEX[0])); guide.visible = false;
-    const G = { i:0, flyT:-9, from:null, sayT:-9 };
-    LT.update = (dt, camX, camZ) => {
-      const on = pzStep(LT) >= 1 && pzStep(PUZZLES.find(q => q.id === 'sloth')) < 1; guide.visible = on; if (!on) return;
-      const cur = WP[G.i], k = Math.min(1, (clock - G.flyT)/1.6);
-      if (k >= 1 && G.i < WP.length - 1 && wdist(P.x, P.y, cur.x, cur.z) < 4.5) { G.from = { ...cur }; G.i++; G.flyT = clock; G.sayT = clock; squawk(); }
-      const a = G.from && k < 1 ? G.from : cur, b = cur, u = G.from && k < 1 ? k : 1, x = a.x + wd(b.x - a.x, W)*u, z = a.z + wd(b.z - a.z, H)*u;
-      const [gx, gz] = wrapNear(x, z, camX, camZ); guide.position.set(gx, 1.5 + Math.sin(u*Math.PI)*1.4 + Math.abs(Math.sin(clock*(u < 1 ? 14 : 2)))*.05, gz); face(guide, gx, gz, camX, camZ); guide.rotation.z = u < 1 ? Math.sin(clock*12)*.2 : 0; };
-    LT.overlay = () => { if (!guide.visible || clock - G.sayT > 2.2) return; const s2 = toScreen(guide.position.x, 2.3, guide.position.z); if (!s2) return;
-      ctx.font = '600 14px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const w = ctx.measureText('이쪽! 이쪽!').width + 18; ctx.fillStyle = 'rgba(255,250,236,.95)'; ctx.strokeStyle = '#3a2410'; ctx.lineWidth = 2; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(s2[0] - w/2, s2[1] - 13, w, 26, 12); else ctx.rect(s2[0] - w/2, s2[1] - 13, w, 26); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#3a2410'; ctx.fillText('이쪽! 이쪽!', s2[0], s2[1]); };   // 앵무새는 말을 함
+    LT.targets = () => [{ key:'pz-letter', noSeen:true, x:at.x, h:.95, z:at.z, reach:3, act:() => { pzSfx.rope(.03); CARD.open(paintPost); setPzStep(LT, 1); } }];
+    LT.update = () => {};
     PUZZLES.push(LT); }
 
   /* 2. 노란 나비 공터 (1장): 풀숲에 파란 구슬이 반짝이는데 노란 나비 한 마리가 그 위에 앉아 있음. 손을 뻗으면 날아올랐다가 금세 다시 앉음.
