@@ -2782,9 +2782,12 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
   const near = (r = 14) => Math.max(0, 1 - wdist(P.x, P.y, C.x, C.z)/r);
   // 노래를 들음: 수달 탈을 쓰고 둑 가까이서 선율을 따라 부르면
   SING_HOOKS.push(s => {
-    if (pzStep(WP) !== 0 || wdist(s.x, s.y, DAM.x, DAM.z) > 9) return;
+    if (pzStep(WP) !== 0 || wdist(s.x, s.y, DAM.x, DAM.z) > 12) return;   // 연못 둘레 어디서 불러도 들림
     if (s.mask === 'ocelot') { WP.flee = clock; return; }   // 오셀롯 목소리엔 수달이 숨음
     if (s.mask !== 'otter') { if (!wants.some(w => w.pond)) wants.push({ pond:true, x:DAM.x, h:1.9, z:DAM.z, img:MASK_TEX.otter[1].image || MASK_TEX.otter[1].userData.canvas, until:clock + 3 }); return; }   // 다른 탈로 부르면 수달이 수달 탈을 떠올림
+    if (clock - (WP.lastN || -9) > 4) WP.prog = 0;   // 한참 쉬었다 부르면 처음부터
+    WP.lastN = clock;
+    if (s.n !== MEL[WP.prog] && s.n === MEL[0]) WP.prog = 0;   // 틀린 뒤 첫 음부터 다시 부르면 그 음부터 셈
     if (s.n === MEL[WP.prog]) { WP.prog++; setTimeout(() => voice('otter', s.n, .12*near()), 380); pzSfx.rope(.04*near());
       if (WP.prog >= MEL.length) setPzStep(WP, 1); }
     else { WP.prog = 0; WP.wrongT = clock; pzSfx.hm(.07*near()); WP.melT = 1.5; }
