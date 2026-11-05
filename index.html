@@ -1158,8 +1158,9 @@ for (const key of [...Object.keys(NEAR_RING), ...STORY_KEYS.filter(k => !NEAR_RI
   STORY_SPOTS.push({ key, ...s });
 }
 { const wh = REGIONS[2].hub, T = REGIONS[3].temple, put = (k, x, y, r) => { const s = STORY_SPOTS.find(q => q.key === k); s.x = wrapX(Math.floor(x) + .5); s.y = wrapY(Math.floor(y) + .5); clear(s.x, s.y, r); };   // 장마다 그 동네에서 쓰는 물건은 그 동네에
-  put('gramophone', wh.x + 4, wh.y - 6.5, 1.6);   // 물가: 둑 가까운 북동쪽 물가
-  if (T) { put('piano', T.cx + 3, T.cy + 7.2, 2.2); put('clock', T.cx + 6.5, T.cy - 6, 1.6); } }   // 폐허: 신전 앞마당
+  const onTrail = (rg, d, side) => { const pts = rg.pts, p = pts.find(([x, y]) => wdist(x, y, rg.hub.x, rg.hub.y) < d) || pts[pts.length - 1], q = pts[Math.max(0, pts.indexOf(p) - 4)], dx = wd(p[0] - q[0], W), dy = wd(p[1] - q[1], H), l = Math.hypot(dx, dy) || 1; return [p[0] - dy/l*side, p[1] + dx/l*side]; };   // 길가 (길 옆으로 side칸)
+  put('gramophone', ...onTrail(REGIONS[2], 8.5, 2.2), 1.8);   // 물가: 연못으로 들어가는 길 바로 옆
+  if (T) { put('clock', ...onTrail(REGIONS[3], 12, 2.2), 1.8); put('piano', ...onTrail(REGIONS[3], 9.5, -2.4), 2.4); } }   // 폐허: 신전 문으로 가는 길 양옆
 if (REGIONS[3].temple) VISTA_CLEAR.push({ x:REGIONS[3].temple.cx + .5, y:REGIONS[3].temple.cy + .5, r:5.8 }, { x:REGIONS[3].temple.cx + 7.2, y:REGIONS[3].temple.cy - 2, r:1.6 });
 VISTA_CLEAR.push(...STORY_SPOTS.map(s => ({ x:s.x, y:s.y, r:s.key === 'galleon' ? 4.1 : s.key === 'piano' ? 3 : 1.5 })));
 // 거울 연못: 물을 넓혀 둘레를 걸을 수 있게
@@ -3172,7 +3173,8 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
         else if (st === 0) want(CRANK_T, at.x, 1.6, at.z); else play(); } }];
       if (st === 1) L.push({ key:'pz-net', noSeen:true, x:NETP.x, h:.3, z:NETP.z, reach:2.5, act:() => { take('net', NET_T, NETP.x, NETP.z); setPzStep(GR, 2); } });
       return L; };
-    GR.update = (dt, camX, camZ) => { const st = pzStep(GR); netM.visible = st === 1; if (netM.visible) place(netM, NETP, 0, camX, camZ);
+    GR.update = (dt, camX, camZ) => { const st = pzStep(GR), gd = wdist(P.x, P.y, at.x, at.z);
+      if (st === 0 && gd < 11 && (GR.hissT = (GR.hissT ?? 0) - dt) <= 0) { GR.hissT = 1.6; const v = .035*(1 - gd/11); for (let i = 0; i < 5; i++) setTimeout(() => tick(2600 + Math.random()*1800, .02, v, 'square'), i*260 + Math.random()*120); }   // 바늘이 판을 긁는 소리: 다가가면 들림 netM.visible = st === 1; if (netM.visible) place(netM, NETP, 0, camX, camZ);
       handle.visible = st >= 1 || pzSave.crank === 2; if (handle.visible) { const [x, z] = wrapNear(at.x + .35, at.z, camX, camZ); handle.position.set(x, .55, z); face(handle, x, z, camX, camZ); handle.rotation.z = clock - GR.playT < 6 ? clock*4 : 0; } };
     PUZZLES.push(GR); }
 
@@ -3298,7 +3300,8 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     const midnight = () => { pzSave.nightUntil = Date.now() + 6*60*1000; pzSave.moon = 1; savePz(); for (let i = 0; i < 12; i++) setTimeout(() => pianoNote(196, .14), 500 + i*700); setTimeout(() => { CARD.close(); setPzStep(CK, 1); }, 1800); };   // 한밤: 신전 지붕 틈으로 달빛
     const tapClock = x => { CK.moved = true; CK.h = (CK.h + (x > 150 ? 1 : 11)) % 12; tick(1200, .06, .06, 'square'); CARD.paint(); if (CK.h === 0) midnight(); };
     CK.targets = () => [{ key:'pz-clock', noSeen:true, x:at.x, h:1.2, z:at.z, reach:3, act:() => { if (pzStep(CK) >= 1) { CK.h = 0; CK.moved = true; } CARD.open(paintClock, tapClock); } }];
-    CK.update = () => {}; PUZZLES.push(CK); }
+    CK.update = dt => { const cd = wdist(P.x, P.y, at.x, at.z); if (pzStep(CK) < 1 && cd < 10 && (CK.tt = (CK.tt ?? 0) - dt) <= 0) { CK.tt = .9; CK.tk = !CK.tk; tick(CK.tk ? 1900 : 1500, .03, .05*(1 - cd/10), 'triangle'); } };   // 째깍 소리: 멈춘 줄 알았는데 안에서 뭔가 째깍댐
+    PUZZLES.push(CK); }
 
   /* 8. 꽃숲 (4장): 공터 가운데 커다란 꽃봉오리와 카피바라들. 사람이 다가가면 카피바라가 물러나 숨지만,
         카피바라 탈을 쓰고 곁에 가만히 서 있으면 하나씩 다가와 기대고, 새가 등에 내려앉고, 봉오리가 천천히 열려 빛나는 씨앗 */
