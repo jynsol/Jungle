@@ -114,7 +114,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
    모두 정면에서 본 모습, 투명 배경, 아래가 땅에 닿게. */
 const ASSET_NAMES = ['agave','grass','broadleaf','fern','lily','whitespike','heartleaf','banana','sansevieria','palm','tree','orangetree','lotus','flamingo','tiger','monkey','ruin','player','parrot','leaf','player_walk','butterfly','fire','log','cliff','waterfall_flow'];
 // 아직 기본 그림인 것들: 파일을 넣으면 바로 바뀜 (목록과 크기는 ART_LIST.md)
-ASSET_NAMES.push('galleon', 'galleon_front', 'piano', 'clock', 'gramophone', 'bicycle', 'mailbox', 'swing', 'chair', 'monkeys', 'whitebird', 'toucan', 'oldman', 'rock', 'fruit_banana', 'fruit_mango', 'fruit_cacao', 'bigtree', 'sloth_idle', 'sloth_eat', 'sloth_sleep', 'basket', 'vine', 'item_sail', 'sail_full', 'ladder', 'ladder_rolled', 'treehut', 'chest', 'chest_open', 'spyglass', 'deck', 'lens', 'treehut_peek', 'frog', 'dam', 'otter', 'lilypad', 'mask_ocelot_front', 'mask_ocelot_side', 'mask_ocelot_back', 'mask_otter_front', 'mask_otter_side', 'mask_otter_back', 'mask_wood_front', 'mask_wood_side', 'mask_wood_back', 'mask_capybara_front', 'mask_capybara_side', 'mask_capybara_back', 'temple_wall', 'temple_door', 'pillar', 'bat', 'idol', 'idol_open', 'mirrors', 'statue_headless', 'statue_head', 'postcard', 'bead', 'nest', 'crank', 'net', 'cave_wall', 'cave_mural', 'capy_statue', 'ending');
+ASSET_NAMES.push('galleon', 'galleon_front', 'piano', 'clock', 'gramophone', 'bicycle', 'mailbox', 'swing', 'chair', 'monkeys', 'whitebird', 'toucan', 'oldman', 'rock', 'fruit_banana', 'fruit_mango', 'fruit_cacao', 'bigtree', 'sloth_idle', 'sloth_eat', 'sloth_sleep', 'basket', 'vine', 'item_sail', 'sail_full', 'ladder', 'ladder_rolled', 'treehut', 'chest', 'chest_open', 'spyglass', 'deck', 'lens', 'treehut_peek', 'frog', 'dam', 'otter', 'lilypad', 'mask_ocelot_front', 'mask_ocelot_side', 'mask_ocelot_back', 'mask_otter_front', 'mask_otter_side', 'mask_otter_back', 'mask_wood_front', 'mask_wood_side', 'mask_wood_back', 'mask_capybara_front', 'mask_capybara_side', 'mask_capybara_back', 'temple_wall', 'temple_door', 'pillar', 'bat', 'idol', 'idol_open', 'mirrors', 'statue_headless', 'statue_head', 'postcard', 'bead', 'nest', 'crank', 'net', 'cave_wall', 'cave_mural', 'ending', 'stump', 'bud', 'bloom', 'capybara', 'seed');
 const ASSETS = Object.fromEntries(ASSET_NAMES.map(n => [n, 'assets/' + n + '.png']));
 const ART = {};   // 그림 이름 → 그림이 오면 할 일 (그림판 바꾸고 비율 맞추기)
 const onArt = (k, fn) => (ART[k] || (ART[k] = [])).push(fn);
@@ -282,6 +282,9 @@ REGIONS.forEach((rg, i) => {
     rg.temple = { cx, cy, pillars, steps, head:{ x:wrapX(cx + 9.5), z:wrapY(cy + 5.5) } };
   }
 });
+// 노란 나비 공터는 오두막 가는 길가로 (1장)
+{ const bs = SITES.find(q => q.key === 'butterflies'), pts = REGIONS[0].pts, p = pts.find(([x, y]) => wdist(x, y, FIRE.x, FIRE.y) > 15) || pts[0];
+  const x = Math.floor(p[0] + 3.2), y = Math.floor(p[1]); bs.x = x; bs.y = y; bs.cx = x + 1; bs.cy = y + 1; clear(x + 1, y + 1, 2.8); for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) setT(x + dx, y + dy, RUIN); }
 // 길가 덤불: 길 위로 잎이 넘어오지 않게 낮은 풀만
 const TRAIL_EDGE = new Uint8Array(W*H);
 for (let k = 0; k < W*H; k++) if (!TRAIL[k] && type[k] === BUSH) { const x = k % W, y = k / W | 0; if (TRAIL[id(x + 1, y)] || TRAIL[id(x - 1, y)] || TRAIL[id(x, y + 1)] || TRAIL[id(x, y - 1)]) TRAIL_EDGE[k] = 1; }
@@ -1131,7 +1134,7 @@ function farSpot(minF, maxF, avoid, dir){   // dir: 처음 바라보는 쪽(북)
   }
   return { x:FIRE.x + minF, y:FIRE.y };
 }
-const WATERFALL = farSpot(20, 30, []), LOOKOUT = farSpot(18, 32, [{ ...WATERFALL, r:16 }]);
+const WATERFALL = { x:wrapX(Math.floor(REGIONS[2].hub.x) - 10 + .5), y:wrapY(Math.floor(REGIONS[2].hub.y) + 13 + .5) }, LOOKOUT = farSpot(18, 32, [{ ...WATERFALL, r:16 }]);   // 폭포는 물가 연못의 남서쪽 (2장)
 clear(WATERFALL.x, WATERFALL.y + .8, 4.2);
 for (let y = Math.floor(WATERFALL.y - 3); y <= WATERFALL.y + 1; y++) for (let x = Math.floor(WATERFALL.x - 3); x <= WATERFALL.x + 3; x++)
   if ((x + .5 - WATERFALL.x)**2/5 + (y + .5 - (WATERFALL.y - 1))**2/2.2 <= 1) setT(x, y, WATER);   // 폭포 웅덩이
@@ -1154,6 +1157,9 @@ for (const key of [...Object.keys(NEAR_RING), ...STORY_KEYS.filter(k => !NEAR_RI
   clear(s.x, s.y, key === 'galleon' ? 3.9 : key === 'piano' ? 2.8 : 1.4);
   STORY_SPOTS.push({ key, ...s });
 }
+{ const wh = REGIONS[2].hub, T = REGIONS[3].temple, put = (k, x, y, r) => { const s = STORY_SPOTS.find(q => q.key === k); s.x = wrapX(Math.floor(x) + .5); s.y = wrapY(Math.floor(y) + .5); clear(s.x, s.y, r); };   // 장마다 그 동네에서 쓰는 물건은 그 동네에
+  put('gramophone', wh.x + 4, wh.y - 6.5, 1.6);   // 물가: 둑 가까운 북동쪽 물가
+  if (T) { put('piano', T.cx + 3, T.cy + 7.2, 2.2); put('clock', T.cx + 6.5, T.cy - 6, 1.6); } }   // 폐허: 신전 앞마당
 if (REGIONS[3].temple) VISTA_CLEAR.push({ x:REGIONS[3].temple.cx + .5, y:REGIONS[3].temple.cy + .5, r:5.8 }, { x:REGIONS[3].temple.cx + 7.2, y:REGIONS[3].temple.cy - 2, r:1.6 });
 VISTA_CLEAR.push(...STORY_SPOTS.map(s => ({ x:s.x, y:s.y, r:s.key === 'galleon' ? 4.1 : s.key === 'piano' ? 3 : 1.5 })));
 // 거울 연못: 물을 넓혀 둘레를 걸을 수 있게
@@ -2831,7 +2837,11 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
   const pads = [...rg.stones.map(s => ({ x:s.tx + .5, z:s.ty + .5, step:true })), { x:C.x - 2.6, z:C.z + 1.2 }, { x:C.x + 2.2, z:C.z + 2.4 }, { x:C.x + 2.9, z:C.z - 1.2 }]
     .map(p => { const m = cutout(new THREE.PlaneGeometry(.95, .95), mat(PAD_T, true, { alphaTest:.4 })); m.rotation.x = -Math.PI/2; return { ...p, m }; });
   const pour = cutout(plane(1.1, .9), mat(FLOW_TEX, true, { alphaTest:.3 })); pour.visible = false;
-  const roll = cutout(plane(.5, .5), mat(MASK_TEX.ocelot[1]));   // 섬의 돌 위에 놓인 오셀롯 탈
+  const ember = cutout(plane(.5, .62), mat(FIRE_TEX, false)), emberGlow = cutout(plane(2.2, 2.2, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.5, fog:false }));   // 섬 가운데 꺼지지 않는 불씨 그릇
+  const BOWL_T = ctex(96, 40, (g) => { g.fillStyle = '#6e6a58'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.beginPath(); g.ellipse(48, 14, 40, 10, 0, 0, Math.PI); g.lineTo(70, 38); g.lineTo(26, 38); g.closePath(); g.fill(); g.stroke(); }), bowl = cutout(plane(.6, .25), mat(BOWL_T));
+  const BRANCH_T = ctex(96, 40, (g) => { g.strokeStyle = '#6b4a2a'; g.lineCap = 'round'; for (let i = 0; i < 6; i++) { g.lineWidth = 5; g.beginPath(); g.moveTo(6 + i*5, 34 - i*4); g.lineTo(90 - i*7, 24 + i*2); g.stroke(); } }), branches = cutout(plane(.8, .32), mat(BRANCH_T));
+  const BRANCH_AT = { x:wrapX(C.x + 4.6), z:wrapY(C.z - 1.6) };   // 둑이 터지면 물가로 밀려온 나뭇가지
+  (window.TORCH_FIRES = window.TORCH_FIRES || []).push({ x:C.x, z:C.z, on:() => pzStep(WP) >= 2 });
   window.POND_MEL = MEL; window.FROG_T = FROG_T; window.OTTER_T = OTTER_T;
   const WP = { id:'pond', x:hub.x, y:hub.y, done:3, t:0, last:-1, prog:0, snd:false, wrongT:-9, melT:4, melI:-1, flee:0, thumb:() => FROG_T.image };
   const setPath = on => { for (const s of rg.stones) setT(s.tx, s.ty, on ? FLOOR : WATER); };
@@ -2856,7 +2866,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     FROGS.forEach((f, i) => L.push({ key:'pz-frog', noSeen:true, x:f.x, h:.5, z:f.z, reach:5, me:frogs[i], act:() => { f.pop = clock; frogVoice(NOTE_OF[i], .1); } }));
     otters.forEach((m, i) => L.push({ key:'pz-otter', noSeen:true, x:DAM.x, h:1.6, z:DAM.z, me:m, reach:7, act:() => { WP.dive = clock; tick(1500, .1, .05); } }));
     L.push({ key:'pz-dam', noSeen:true, x:DAM.x, h:.8, h0:.1, h1:1.5, z:DAM.z, me:dam });
-    if (st === 2) L.push({ key:'pz-roll', noSeen:true, x:C.x, h:.3, z:C.z, reach:2.6, act:() => { giveMask('ocelot'); pickFx.push({ img:MASK_TEX.ocelot[1].userData.canvas, x:C.x, z:C.z, t:clock }); pzSfx.chime(.1); setPzStep(WP, 3); } });   // 섬엔 오셀롯 탈
+    if (st >= 1 && pzSave.stick !== 1) L.push({ key:'pz-branches', noSeen:true, x:BRANCH_AT.x, h:.15, z:BRANCH_AT.z, reach:2.5, me:branches, act:() => { pzSave.stick = 1; savePz(); paintBag(); pickChime(); } });   // 마른 가지 (횃불감)
     return L;
   };
   WP.update = (dt, camX, camZ) => {
@@ -2880,7 +2890,9 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     // 물이 차오름: 진흙 그늘이 걷히고 연잎이 떠오름
     { const [x, z] = at(C); mud.position.set(x, .025, z); const rise = st >= 2 ? 1 : st === 1 ? Math.min(1, el/5) : 0; mud.material.opacity = 1 - rise*.95;
       pads.forEach(p => { const [px, pz] = at(p); p.m.position.set(px, -.2 + rise*.24, pz); p.m.visible = rise > .05; });   // 물이 차오르기 전엔 연잎이 하나도 안 보임
-      roll.visible = st < 3; roll.position.set(x, .2, z); face(roll, x, z); }
+      bowl.position.set(x, 0, z); face(bowl, x, z); ember.visible = emberGlow.visible = st >= 2; ember.position.set(x, .18, z); face(ember, x, z); ember.scale.set(1 + Math.sin(clock*9)*.06, 1 + Math.sin(clock*13)*.08, 1); emberGlow.position.set(x, .5, z); emberGlow.lookAt(camera.position); }
+    branches.visible = st >= 1 && pzSave.stick !== 1; if (branches.visible) { const [bx, bz] = at(BRANCH_AT); branches.position.set(bx, 0, bz); face(branches, bx, bz); }
+    if (st === 2 && wdist(P.x, P.y, C.x, C.z) < 1.3) { setPzStep(WP, 3); pzSfx.chime(.08); }   // 섬에 닿으면 2장의 첫 고비를 넘음
     if (st === 1 && el > 5.2) { setPath(true); setPzStep(WP, 2, { auto:true }); }
     if (st >= 2 && type[id(rg.stones[0].tx, rg.stones[0].ty)] !== FLOOR) setPath(true);
     if (!WP.snd) { WP.snd = true; if (st === 1 && el < .3) { const v = near(); pzSfx.thump(.25*v); [0, .4, .8].forEach(d => setTimeout(() => tick(260, .8, .08*v), d*1000)); setTimeout(() => pzSfx.chime(.08*near()), 4800); } }
@@ -2891,7 +2903,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
 
 /* ---- 퍼즐 3. 폐허: 박쥐 신전 ----
    ① 돌문에 수달·오셀롯·원숭이 얼굴. 탈을 쓰고 문 앞에서 노래하면 그 탈의 얼굴 눈에 불이 들어옴. 오셀롯이 그르렁대면 문이 가라앉음
-   ② 안은 깜깜함. 모닥불에서 붙인 횃불을 들고 와야 쓰러진 기둥 사이 길이 보임
+   ② 안은 깜깜함. 신전 앞 돌 화로에서 가지에 불을 붙여 들고 와야 쓰러진 기둥 사이 길과 벽의 돌 시계판이 보임 (문 쪽은 늘 희미하게 밝음)
    ③ 안쪽 방 천장의 박쥐 떼가 빛을 막음 → 오셀롯 소리에 놀라 날아감(밖에선 신전 위 박쥐 소용돌이) → 천장 틈으로 빛줄기
    ④ 거울 세 개를 가까이 들여다보고 돌려서 빛을 우상에 닿게 → 우상의 입이 열리고 카피바라 탈
    앞마당: 머리 없는 원숭이상. 덤불 속 돌 머리를 찾아 올려 주면 열매 더미가 나타남 (탈 없이 할 수 있는 작은 퍼즐) */
@@ -2937,8 +2949,13 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
   const door = cutout(plane(3, WALL_H), mat(DOOR_T)); door.rotation.y = Math.PI/2;
   const roof = cutout(new THREE.PlaneGeometry(9, 9), new THREE.MeshBasicMaterial({ color:'#1a1e16', side:THREE.DoubleSide })); roof.rotation.x = Math.PI/2;
   const pillars = T.pillars.map(p => ({ ...p, m:cutout(plane(.8, 2.4), mat(PILLAR_T)) }));
-  const ROOM = { x:cx - 2.5 + .5, z:cy + .5 }, CORNER = { x:cx + 3.3, z:cy + 3.4 };
-  const cornerM = cutout(plane(.3, .36), mat(MIRROR_T));
+  const ROOM = { x:cx - 2.5 + .5, z:cy + .5 }, DIALW = { x:cx - 3.35, z:cy - 2.2 }, BRAZ = { x:cx + 6.2, z:cy + 1.9 }, STK = { x:cx + 6.9, z:cy + 2.8 };
+  const BRAZ_T = ctex(80, 96, (g) => { g.fillStyle = '#7a7664'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.fillRect(30, 40, 20, 56); g.strokeRect(30, 40, 20, 56); g.beginPath(); g.ellipse(40, 36, 34, 12, 0, 0, Math.PI); g.lineTo(62, 46); g.lineTo(18, 46); g.closePath(); g.fill(); g.stroke(); });
+  const braz = cutout(plane(.7, .84), mat(BRAZ_T)), brazF = cutout(plane(.5, .62), mat(FIRE_TEX, false)), brazG = cutout(plane(2.4, 2.4, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.5, fog:false }));   // 신전 앞 돌 화로 (늘 타고 있음)
+  const stk = cutout(plane(.7, .3), mat(ctex(96, 40, (g) => { g.strokeStyle = '#6b4a2a'; g.lineCap = 'round'; for (let i = 0; i < 5; i++) { g.lineWidth = 5; g.beginPath(); g.moveTo(8 + i*4, 34 - i*3); g.lineTo(88 - i*6, 22 + i*2); g.stroke(); } })));
+  const DIAL_T = ctex(96, 96, (g) => { g.fillStyle = '#8a8670'; g.strokeStyle = '#4e4c40'; g.lineWidth = 4; g.beginPath(); g.arc(48, 48, 42, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = '#f2e6a0'; g.beginPath(); g.arc(48, 18, 7, 0, Math.PI*2); g.fill(); g.strokeStyle = '#3e3c30'; g.lineWidth = 5; g.beginPath(); g.moveTo(48, 48); g.lineTo(48, 24); g.stroke(); });
+  const dialM = cutout(plane(.7, .7, false), mat(DIAL_T)); dialM.rotation.y = Math.PI/2;   // 안쪽 서쪽 벽에 새겨진 돌 시계판
+  (window.TORCH_FIRES = window.TORCH_FIRES || []).push({ x:BRAZ.x, z:BRAZ.z, on:() => true });
   const bats = Array.from({ length:12 }, (_, i) => ({ m:cutout(plane(.36, .24, false), mat(BAT_T)), a:i*.52, r:.3 + (i % 4)*.18, h:2.35 + (i % 3)*.1 }));
   const outBats = Array.from({ length:16 }, (_, i) => ({ m:cutout(plane(.5, .33, false), mat(BAT_T)), a:i*.39, r:1.6 + (i % 4)*.6 }));
   const shaft = cutout(plane(1.4, WALL_H), new THREE.MeshBasicMaterial({ map:SHAFT_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0, side:THREE.DoubleSide })); shaft.renderOrder = 4;
@@ -2994,15 +3011,15 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     g.strokeStyle = '#3e3c30'; g.lineCap = 'round'; g.lineWidth = 10; g.beginPath(); g.moveTo(150, 150); g.lineTo(150, 82); g.stroke(); g.fillStyle = '#3e3c30'; g.beginPath(); g.arc(150, 150, 10, 0, Math.PI*2); g.fill(); };
   TP.targets = () => {
     const st = pzStep(TP), L = [];
-    if (st >= 4) L.push({ key:'pz-dial', noSeen:true, x:ROOM.x - .9, h:.9, z:ROOM.z, reach:3, act:() => window.PZ_CARD.open(paintDial) });
     L.push({ key:'pz-door', noSeen:true, x:cx + 5.1, h:1.3, h0:.2, h1:2.5, z:C.z, me:door });
-    if (st >= 2) L.push({ key:'pz-mirrors', noSeen:true, x:ROOM.x + .9, h:.5, z:ROOM.z + .9, reach:3, act:() => { let put = 0; for (const k of ['mirC', 'mirD']) if (pzSave[k] === 1) { pzSave[k] = 2; pzSave.mirSet = (pzSave.mirSet || 0) + 1; put++; } if (put) { savePz(); paintBag(); pzSfx.chime(.07); } paintMir(); mirBox.hidden = false; keys.clear(); joy = null; P.goto = null; } });
+    if (st >= 2 && pzSave.moon) L.push({ key:'pz-mirrors', noSeen:true, x:ROOM.x + .9, h:.5, z:ROOM.z + .9, reach:3, act:() => { let put = 0; for (const k of ['mirC', 'mirD']) if (pzSave[k] === 1) { pzSave[k] = 2; pzSave.mirSet = (pzSave.mirSet || 0) + 1; put++; } if (put) { savePz(); paintBag(); pzSfx.chime(.07); } paintMir(); mirBox.hidden = false; keys.clear(); joy = null; P.goto = null; } });
     L.push({ key:'pz-idol', noSeen:true, x:ROOM.x - .9, h:.8, h0:.1, h1:1.4, z:ROOM.z, me:idol, reach:3,
-      act:() => { if (st === 3) { giveMask('capybara'); pickFx.push({ img:MASK_TEX.capybara[1].userData.canvas, x:ROOM.x - .9, z:ROOM.z, t:clock }); pzSfx.chime(.1); setPzStep(TP, 4); setTimeout(() => window.PZ_CARD && window.PZ_CARD.open(paintDial), 1600); } else tick(240, .2, .08, 'triangle'); } });
+      act:() => { if (st === 3) { giveMask('capybara'); pickFx.push({ img:MASK_TEX.capybara[1].userData.canvas, x:ROOM.x - .9, z:ROOM.z, t:clock }); pzSfx.chime(.1); setPzStep(TP, 4); } else tick(240, .2, .08, 'triangle'); } });
     if (st === 1) L.push({ key:'pz-bats', noSeen:true, x:ROOM.x, h:2.4, z:ROOM.z, reach:5, act:() => { POKE_SND.peek(1); for (const b of bats) b.a += .4; } });
     L.push({ key:'pz-statue', noSeen:true, x:STATUE.x, h:.6, h0:0, h1:1.2, z:STATUE.z, me:statue, reach:3,
       act:() => { if (pzSave.head === 1) { pzSave.head = 2; savePz(); paintBag(); pzSfx.chime(.08); setTimeout(() => { for (const k of ITEM_KEYS) bag[k] = Math.min(BAG_MAX, (bag[k] || 0) + 2); saveBag(); pzSave.mirC = 1; savePz(); paintBag(); pickChime(); }, 1400); } else tick(300, .15, .06, 'triangle'); } });   // 머리를 올리면 열매 더미 속에 거울 하나
-    if (!pzSave.mirD && inside()) L.push({ key:'pz-mirD', noSeen:true, x:CORNER.x, h:.15, z:CORNER.z, reach:2.2, act:() => { if (!(window.TORCH && window.TORCH.lit())) { tick(260, .1, .05, 'triangle'); return; } pzSave.mirD = 1; savePz(); paintBag(); pickChime(); } });   // 깜깜한 구석의 거울은 횃불을 들어야 집힘
+    if (pzSave.stick !== 1) L.push({ key:'pz-tsticks', noSeen:true, x:STK.x, h:.15, z:STK.z, reach:2.5, me:stk, act:() => { pzSave.stick = 1; savePz(); paintBag(); pickChime(); } });   // 화로 곁 마른 가지
+    if (inside()) L.push({ key:'pz-dialwall', noSeen:true, x:DIALW.x, h:1.3, z:DIALW.z, reach:2.6, me:dialM, act:() => { if (window.TORCH && window.TORCH.lit()) window.PZ_CARD.open(paintDial); else tick(260, .1, .05, 'triangle'); } });   // 벽의 시계판은 횃불로 비춰야 보임
     if (!pzSave.head) L.push({ key:'pz-head', noSeen:true, x:HEAD.x, h:.25, z:HEAD.z, reach:2.5, act:() => { pzSave.head = 1; savePz(); paintBag(); pickFx.push({ img:HEAD_T.userData.canvas, x:HEAD.x, z:HEAD.z, t:clock }); pickChime(); } });
     return L;
   };
@@ -3015,12 +3032,14 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
       eyeGlows.forEach((m, i) => { const kind = Object.keys(FACE_OF).find(k => FACE_OF[k] === i - 1), a = Math.max(0, 1 - (clock - faceT[kind])/3); m.material.opacity = a*.9; m.visible = a > .01 && st === 0; m.position.set(x + .06, 1.75, z + (i - 1)*.9); m.rotation.y = Math.PI/2; }); }
     { const [x, z] = at(C); roof.position.set(x, WALL_H, z); }
     for (const p of pillars) { const [x, z] = at(p); p.m.position.set(x, 0, z); face(p.m, x, z); }
-    cornerM.visible = !pzSave.mirD; if (cornerM.visible) { const [x, z] = at(CORNER); cornerM.position.set(x, 0, z); face(cornerM, x, z); }
+    { const [x, z] = at(BRAZ); braz.position.set(x, 0, z); face(braz, x, z); brazF.position.set(x, .78, z); face(brazF, x, z); brazF.scale.set(1 + Math.sin(clock*9)*.06, 1 + Math.sin(clock*13)*.08, 1); brazG.position.set(x, 1, z); brazG.lookAt(camera.position); }
+    stk.visible = pzSave.stick !== 1; if (stk.visible) { const [x, z] = at(STK); stk.position.set(x, 0, z); face(stk, x, z); }
+    { const [x, z] = at(DIALW); dialM.position.set(x, 1.3, z); }
     // 박쥐: 안에선 천장에 매달려 꿈틀, 날아간 뒤엔 밤마다 신전 위를 맴돎(풀기 전 밤에만)
     { const [x, z] = at(ROOM), fly = st >= 2 ? Math.min(1, el/3) : 0;
       bats.forEach((b, i) => { b.m.visible = fly < 1; b.a += dt*(st >= 2 ? 3 : .2); b.m.position.set(x + Math.cos(b.a)*b.r*(1 + fly*6), b.h + fly*fly*12, z + Math.sin(b.a)*b.r*(1 + fly*6)); b.m.lookAt(camera.position); b.m.scale.set(1, st >= 2 ? .6 + Math.abs(Math.sin(clock*14 + i))*.6 : 1, 1); });
       const [ox, oz] = at(C); outBats.forEach((b, i) => { b.m.visible = nt > .5 && st < 2; if (!b.m.visible) return; const a = clock*.6 + b.a; b.m.position.set(ox + Math.cos(a)*b.r, 5 + Math.sin(a*1.7 + i)*.8 + (i % 3)*.5, oz + Math.sin(a)*b.r); b.m.lookAt(camera.position); b.m.scale.set(1, .6 + Math.abs(Math.sin(clock*12 + i))*.5, 1); });
-      shaft.visible = st >= 2; shaft.material.opacity = st >= 2 ? Math.min(.55, el*.2) : 0; shaft.position.set(x, 0, z); face(shaft, x, z);
+      const moonIn = st >= 2 && pzSave.moon; shaft.visible = moonIn; shaft.material.opacity = moonIn ? .5 : 0;   // 박쥐가 비킨 지붕 틈으로, 괘종시계가 열두 시면 달빛이 들어옴 shaft.position.set(x, 0, z); face(shaft, x, z);
       { const [ix, iz] = at({ x:ROOM.x - .9, z:ROOM.z }); idol.position.set(ix, 0, iz); face(idol, ix, iz); idol.material.map = st >= 3 ? IDOL.open : IDOL.shut;
         capy.visible = st === 3; capy.position.set(ix, .95 + Math.sin(clock*2)*.05, iz); face(capy, ix, iz); }
       { const [mx, mz] = at({ x:ROOM.x + .9, z:ROOM.z + .9 }); mirrors.position.set(mx, 0, mz); face(mirrors, mx, mz); } }
@@ -3036,8 +3055,9 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
   TP.overlay = () => {
     if (!inside()) return;
     const tl = window.TORCH && window.TORCH.lit(), lit = pzStep(TP) >= 2, s = toScreen(P.x, 1 + (P.upH || 0), P.y) || [vw/2, vh*.6];   // 안은 깜깜. 횃불을 들고 들어와야 쓰러진 기둥 사이 길이 보임
-    const R = (tl ? 280 : 70)*(lit ? 2 : 1), g = ctx.createRadialGradient(s[0], s[1], R*.25, s[0], s[1], R);
-    g.addColorStop(0, tl ? 'rgba(60,30,6,.08)' : 'rgba(4,4,8,0)'); g.addColorStop(1, tl ? 'rgba(14,8,2,.85)' : 'rgba(2,2,4,.97)'); ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
+    const R = (tl ? 280 : 120)*(lit && pzSave.moon ? 1.8 : 1), g = ctx.createRadialGradient(s[0], s[1], R*.25, s[0], s[1], R);
+    g.addColorStop(0, tl ? 'rgba(60,30,6,.08)' : 'rgba(4,4,8,0)'); g.addColorStop(1, tl ? 'rgba(14,8,2,.85)' : 'rgba(2,2,4,.95)'); ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
+    const ex = toScreen(cx + 4.6, 1.1, C.z); if (ex) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; const eg = ctx.createRadialGradient(ex[0], ex[1], 4, ex[0], ex[1], 120); eg.addColorStop(0, 'rgba(220,200,150,.45)'); eg.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = eg; ctx.fillRect(ex[0] - 120, ex[1] - 120, 240, 240); ctx.restore(); }   // 문 쪽은 바깥빛이 새어 들어와 나갈 길이 보임
   };
   PUZZLES.push(TP);
 }
@@ -3070,7 +3090,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
   window.PZ_ITEMS = [
     { tex:BEAD_T, name:'구슬', has:() => pzSave.bead === 1 }, { tex:CRANK_T, name:'태엽 손잡이', has:() => pzSave.crank === 1 },
     { tex:NET_T, name:'새우 그물', has:() => pzSave.net === 1 }, { tex:SHRIMP_T, name:'새우', has:() => pzSave.shrimp === 1 },
-    { tex:SHARD_T, name:'빛 조각', has:() => pzSave.mirA === 1 }, { tex:SHARD_T, name:'빛 조각', has:() => pzSave.mirB === 1 }, { tex:SHARD_T, name:'거울', has:() => pzSave.mirC === 1 }, { tex:SHARD_T, name:'거울', has:() => pzSave.mirD === 1 }];
+    { tex:SHARD_T, name:'거울', has:() => pzSave.mirC === 1 }, { tex:SHARD_T, name:'거울', has:() => pzSave.mirD === 1 }];
   paintBag();
   const take = (k, tex, x, z) => { pzSave[k] = 1; savePz(); paintBag(); pickFx.push({ img:tex.userData.canvas, x, z, t:clock }); pickChime(); };
   const want = (tex, x, h, z) => { if (!wants.some(w => w.img === tex.userData.canvas)) wants.push({ img:tex.userData.canvas, x, h, z, until:clock + 3 }); pzSfx.hm(.06); };
@@ -3095,23 +3115,36 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     LT.targets = () => [{ key:'pz-letter', noSeen:true, x:at.x, h:.95, z:at.z, reach:3, act:() => { pzSfx.rope(.03); CARD.open(paintPost); setPzStep(LT, 1); } }];
     LT.update = () => {}; PUZZLES.push(LT); }
 
-  /* 2. 노란 나비 공터: 가만히 서 있으면 나비가 내려앉고, 그 자리에서 파란 구슬 */
-  { const bs = SITE.butterflies, B = { x:wrapX(bs.cx + 1.2), z:wrapY(bs.cy + .6) }, BD = { id:'butterfly', optional:true, x:bs.cx, y:bs.cy, done:2, still:0, thumb:() => BEAD_T.image };
+  /* 2. 노란 나비 공터 (1장): 풀숲에 파란 구슬이 반짝이는데 노란 나비 한 마리가 그 위에 앉아 있음. 손을 뻗으면 날아올랐다가 금세 다시 앉음.
+        나비들은 가끔 공터의 납작한 그루터기에 내려앉아 무언가를 찾다 감. 그루터기에 열매를 놓으면 나비들이 다 그리로 몰려가고, 그 틈에 구슬을 주움 */
+  { const bs = SITE.butterflies, B = { x:wrapX(bs.cx + 1.2), z:wrapY(bs.cy + .6) }, STUMP = { x:wrapX(bs.cx - 1.1), z:wrapY(bs.cy - .4) }, BD = { id:'butterfly', x:bs.cx, y:bs.cy, done:2, fedT:-99, shooT:-99, fruit:null, thumb:() => BEAD_T.image };
     const FLY_T = ctex(48, 32, (g) => { g.fillStyle = '#f2d84a'; g.strokeStyle = RG.line; g.lineWidth = 1.5; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(24 + s*10, 12, 10, 9, s*.4, 0, Math.PI*2); g.fill(); g.stroke(); g.beginPath(); g.ellipse(24 + s*8, 24, 6, 6, s*.3, 0, Math.PI*2); g.fill(); g.stroke(); } g.fillStyle = '#3a2410'; g.fillRect(23, 6, 2, 22); });
-    const flies = Array.from({ length:5 }, (_, i) => ({ m:cutout(plane(.22, .15, false), mat(FLY_T)), a:i*1.26 }));
-    const bead = cutout(plane(.18, .18), mat(BEAD_T)); onArt('bead', im => swapTex(BEAD_T, im));
-    BD.targets = () => pzStep(BD) === 1 ? [{ key:'pz-bead', noSeen:true, x:B.x, h:.1, z:B.z, reach:2.5, act:() => { take('bead', BEAD_T, B.x, B.z); setPzStep(BD, 2); } }] : [];
-    BD.update = (dt, camX, camZ) => { const st = pzStep(BD), d = wdist(P.x, P.y, bs.cx, bs.cy);
-      if (st === 0) { BD.still = d < 3.2 && !P.moving ? BD.still + dt : Math.max(0, BD.still - dt*2); if (BD.still > 4.5) setPzStep(BD, 1); }
-      const land = st === 0 ? Math.min(1, BD.still/4.5) : st === 1 ? 1 : 0;
-      flies.forEach((f, i) => { f.a += dt*(1.2 + i*.2); const r = (1 - land)*(1.4 + i*.2) + land*.18, y = (1 - land)*(1.3 + Math.sin(f.a*2)*.3) + land*.16;
-        const [x, z] = wrapNear(B.x + Math.cos(f.a)*r, B.z + Math.sin(f.a)*r, camX, camZ); f.m.position.set(x, y, z); f.m.lookAt(camera.position); f.m.scale.set(1, .6 + Math.abs(Math.sin(clock*(land > .9 ? 3 : 14) + i))*.4, 1); f.m.visible = st < 2 && d < 16; });
-      bead.visible = st === 1; if (bead.visible) place(bead, B, .02, camX, camZ); };
+    const STUMP_T = ctex(96, 48, (g) => { g.fillStyle = '#8a6438'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.fillRect(14, 16, 68, 30); g.strokeRect(14, 16, 68, 30); g.fillStyle = '#c9a060'; g.beginPath(); g.ellipse(48, 16, 34, 9, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.strokeStyle = '#8a6438'; g.lineWidth = 1.5; for (const r of [8, 16, 24]) { g.beginPath(); g.ellipse(48, 16, r, r*.26, 0, 0, Math.PI*2); g.stroke(); } });
+    const flies = Array.from({ length:6 }, (_, i) => ({ m:cutout(plane(.22, .15, false), mat(FLY_T)), a:i*1.05 }));
+    const bead = cutout(plane(.16, .16), mat(BEAD_T)), stump = cutout(plane(.75, .38), mat(STUMP_T)), fruitM = cutout(plane(.24, .24), mat(ITEMS.banana.tex)); onArt('bead', im => swapTex(BEAD_T, im)); onArt('stump', im => swapTex(STUMP_T, im));
+    const fed = () => clock - BD.fedT < 25;   // 열매가 놓인 동안(25초쯤) 나비들은 그루터기에
+    BD.targets = () => { if (pzStep(BD) >= 2) return []; const L = [];
+      L.push({ key:'pz-stump', noSeen:true, x:STUMP.x, h:.3, z:STUMP.z, reach:2.6, me:stump, act:() => {
+        if (fed()) return; const k = ITEM_KEYS.find(q => (bag[q] || 0) > 0); if (!k) { tick(300, .1, .05, 'triangle'); return; }
+        bag[k]--; saveBag(); paintBag(); BD.fruit = k; fruitM.material.map = ITEMS[k].tex; BD.fedT = clock; tick(700, .1, .05); } });
+      L.push({ key:'pz-bead', noSeen:true, x:B.x, h:.12, z:B.z, reach:2.5, act:() => {
+        if (fed()) { take('bead', BEAD_T, B.x, B.z); setPzStep(BD, 2); return; }
+        BD.shooT = clock; tick(1500, .05, .04); } });   // 나비가 앉아 있으면 손을 뻗어도 날아올랐다 다시 앉음
+      return L; };
+    BD.update = (dt, camX, camZ) => { const st = pzStep(BD), d = wdist(P.x, P.y, bs.cx, bs.cy), F = fed();
+      place(stump, STUMP, 0, camX, camZ);
+      fruitM.visible = F && st < 2; if (fruitM.visible) place(fruitM, STUMP, .38, camX, camZ);
+      const visit = !F && Math.sin(clock*.35) > .75;   // 가끔 그루터기에 들렀다 감 (힌트)
+      flies.forEach((f, i) => { f.a += dt*(1.2 + i*.2); let cx = B.x, cz = B.z, r = 1.3 + i*.2, y = 1.1 + Math.sin(f.a*2)*.3, flap = 14;
+        if (F || (visit && i > 1)) { cx = STUMP.x; cz = STUMP.z; r = .14 + (i % 3)*.06; y = .45 + (i % 2)*.05; flap = 3; }
+        else if (i === 0 && st < 2) { const up = clock - BD.shooT < 1.6 ? Math.sin((clock - BD.shooT)/1.6*Math.PI) : 0; r = .02 + up*.9; y = .2 + up*1.2; flap = up > .05 ? 14 : 2.5; }   // 구슬 위에 앉은 한 마리
+        const [x, z] = wrapNear(cx + Math.cos(f.a)*r, cz + Math.sin(f.a)*r, camX, camZ); f.m.position.set(x, y, z); f.m.lookAt(camera.position); f.m.scale.set(1, .6 + Math.abs(Math.sin(clock*flap + i))*.4, 1); f.m.visible = d < 18; });
+      bead.visible = st < 2; if (bead.visible) { place(bead, B, .03, camX, camZ); bead.scale.setScalar(1 + Math.max(0, Math.sin(clock*3))*.15); } };
     PUZZLES.push(BD); }
 
   /* 3. 큰부리새 둥지: 오두막 발판 곁 가지. 구슬을 주면 부리로 받고, 둥지에서 태엽 손잡이가 땅으로 떨어짐 */
   { const hub = REGIONS[0].hub, DECK = 7, NEST = { x:wrapX(hub.x - 1.9), z:wrapY(hub.y + .6) }, DROP = { x:wrapX(hub.x - 2.7), z:wrapY(hub.y + 1.4) };
-    const TC = { id:'toucan', optional:true, x:NEST.x, y:NEST.z, done:2, gotT:-9, thumb:() => TOUCAN_TEX.image };
+    const TC = { id:'toucan', x:NEST.x, y:NEST.z, done:2, gotT:-9, thumb:() => TOUCAN_TEX.image };
     const NEST_T = ctex(128, 64, (g) => { g.fillStyle = '#6b4a2a'; g.strokeStyle = RG.line; g.lineWidth = 2; g.beginPath(); g.ellipse(64, 40, 56, 20, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.strokeStyle = '#a07a48'; g.lineWidth = 2.5; for (let i = 0; i < 14; i++) { g.beginPath(); g.moveTo(12 + i*7, 30 + (i % 3)*6); g.lineTo(28 + i*7, 50 - (i % 2)*8); g.stroke(); }
       g.fillStyle = '#e8d24a'; g.beginPath(); g.arc(40, 30, 4, 0, Math.PI*2); g.fill(); g.fillStyle = '#c8d8dc'; g.beginPath(); g.arc(86, 28, 4, 0, Math.PI*2); g.fill(); });
     const nest = cutout(plane(.9, .45), mat(NEST_T)), bird = cutout(plane(.7, .5), mat(TOUCAN_TEX)), crank = cutout(plane(.34, .34), mat(CRANK_T));
@@ -3131,7 +3164,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     PUZZLES.push(TC); }
 
   /* 4. 축음기: 태엽 손잡이를 끼우고 돌리면 개구리 노래를 천천히 틀어 줌. 나팔 아래 서랍에서 새우 그물 */
-  { const at = spot('gramophone'), GR = { id:'gramo', optional:true, x:at.x, y:at.z, done:2, playT:-99, thumb:() => CRANK_T.image }, NETP = { x:wrapX(at.x + .7), z:wrapY(at.z + .4) };
+  { const at = spot('gramophone'), GR = { id:'gramo', x:at.x, y:at.z, done:2, playT:-99, thumb:() => CRANK_T.image }, NETP = { x:wrapX(at.x + .7), z:wrapY(at.z + .4) };
     const netM = cutout(plane(.5, .5), mat(NET_T)), handle = cutout(plane(.3, .3, false), mat(CRANK_T)); onArt('net', im => swapTex(NET_T, im));
     const play = () => { GR.playT = clock; MEL.forEach((n, i) => setTimeout(() => pianoNote(noteF(n)/2, .12*Math.max(.2, 1 - wdist(P.x, P.y, at.x, at.z)/14)), 600 + i*1100)); };
     GR.targets = () => { const st = pzStep(GR), L = [{ key:'pz-gramo', noSeen:true, x:at.x, h:.8, z:at.z, reach:3, act:() => {
@@ -3149,6 +3182,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
   const TORCH = window.TORCH = { until:-9, lit:() => clock < TORCH.until };
   const STICKS = { x:wrapX(FIRE.x + 1.7), z:wrapY(FIRE.y - .6) }, sticks = cutout(plane(.7, .3), mat(ctex(96, 40, (g) => { g.strokeStyle = '#6b4a2a'; g.lineCap = 'round'; for (let i = 0; i < 5; i++) { g.lineWidth = 5; g.beginPath(); g.moveTo(8 + i*4, 34 - i*3); g.lineTo(88 - i*6, 22 + i*2); g.stroke(); } })));
   const flameT = ctex(48, 64, (g) => { const r = g.createRadialGradient(24, 44, 2, 24, 40, 22); r.addColorStop(0, 'rgba(255,240,170,1)'); r.addColorStop(.5, 'rgba(255,150,50,.9)'); r.addColorStop(1, 'rgba(255,90,30,0)'); g.fillStyle = r; g.beginPath(); g.moveTo(24, 4); g.quadraticCurveTo(44, 36, 36, 52); g.quadraticCurveTo(24, 64, 12, 52); g.quadraticCurveTo(4, 36, 24, 4); g.fill(); });
+  flameT.userData.keep = true;
   const flame = cutout(plane(.22, .3, false), new THREE.MeshBasicMaterial({ map:flameT, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, fog:false })), handStick = cutout(plane(.06, .42, false), mat(LOG_TEX));
   const halo = cutout(plane(1.6, 1.6, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.45, fog:false }));
   const crackle = () => { for (let i = 0; i < 6; i++) setTimeout(() => tick(1800 + Math.random()*1200, .03, .04, 'square'), i*70 + Math.random()*60); };
@@ -3156,7 +3190,9 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
   TT.targets = () => pzSave.stick === 1 ? [] : [{ key:'pz-sticks', noSeen:true, x:STICKS.x, h:.15, z:STICKS.z, reach:2.5, me:sticks, act:() => take('stick', STICK_T, STICKS.x, STICKS.z) }];
   TT.update = (dt, camX, camZ) => {
     place(sticks, STICKS, 0, camX, camZ); sticks.visible = true;
-    if (pzSave.stick === 1 && !TORCH.lit() && wdist(P.x, P.y, FIRE.x, FIRE.y) < 1.9) { TORCH.until = clock + 75; crackle(); paintBag(); }   // 불가에 가면 가지에 불이 붙음
+    if (pzSave.stick === 1 && !TORCH.lit() && (wdist(P.x, P.y, FIRE.x, FIRE.y) < 1.9 || (window.TORCH_FIRES || []).some(f => f.on() && wdist(P.x, P.y, f.x, f.z) < 1.6))) { TORCH.until = clock + 75; crackle(); paintBag(); }   // 불가(모닥불, 섬의 불씨 그릇, 신전 앞 돌 화로)에 가면 가지에 불이 붙음
+    const dark = (window.CAVE && window.CAVE.inside(P.x, P.y)) || (window.TEMPLE_IN && window.TEMPLE_IN());
+    if (dark && !TORCH.lit() && clock - (TT.hintT || -99) > 7) { TT.hintT = clock; wants.push({ img:(pzSave.stick === 1 ? flameT : STICK_T).userData.canvas, x:P.x, h:(P.upH || 0) + 1.9, z:P.y, until:clock + 3 }); }   // 깜깜한 데선 '불이 있었으면' 하고 떠올림 (가지가 없으면 가지를)
     if (TORCH.lit() && stormLevel() > .3 && !(window.CAVE && window.CAVE.inside(P.x, P.y)) && !(window.TEMPLE_IN && window.TEMPLE_IN())) { TORCH.until = -9; tick(300, .6, .05, 'sine'); paintBag(); }   // 비를 맞으면 치익
     if (TORCH.wasLit && !TORCH.lit()) { TORCH.wasLit = false; if (pzSave.stick === 1) { pzSave.stick = 0; savePz(); paintBag(); } }   // 다 타면 재가 됨 (가지를 다시 주워야 함)
     if (TORCH.lit()) TORCH.wasLit = true;
@@ -3170,7 +3206,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
         웅덩이 오른쪽 바위턱으로 폭포 뒤에 들어감. 플라밍고 셋이 바위턱 입구를 막고 섬 → 그물로 건진 새우를 주면 비킴.
         안은 깜깜하고 물방울 소리만. 횃불을 벽의 쇠고리에 꽂으면 동굴이 밝아지고, 돌 조각 셋의 그림자가 벽화에 비침.
         조각을 돌려 그림자를 벽화의 금(초승달·부리·귀)에 맞추면 벽화가 갈라지고 거울 */
-  { const CV = window.CAVE, X = CV.X, Y = CV.Y, WF = { id:'cave', optional:true, x:WATERFALL.x, y:WATERFALL.y, done:3, movedT:-9, thumb:() => FLAMINGO_TEX.image };
+  { const CV = window.CAVE, X = CV.X, Y = CV.Y, WF = { id:'cave', x:WATERFALL.x, y:WATERFALL.y, done:3, movedT:-9, thumb:() => FLAMINGO_TEX.image };
     const POOL = { x:WATERFALL.x, z:WATERFALL.y - 1 }, LEDGE = { x:X + 4, z:Y + 1.7 };
     const setBlock = on => { setT(X + 3, Y + 1, on ? RUIN : FLOOR); setT(X + 4, Y + 1, on ? RUIN : FLOOR); }; if (pzStep(WF) === 0) setBlock(true);
     const flam = [-.55, 0, .55].map(() => cutout(plane(.5, 1.0), mat(FLAMINGO_TEX)));
@@ -3197,19 +3233,19 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     const figs = cutout(plane(1.4, .55), mat(FIG_T)), sconce = cutout(plane(.22, .3, false), mat(ctex(32, 48, (g) => { g.strokeStyle = '#2a2420'; g.lineWidth = 4; g.beginPath(); g.moveTo(16, 46); g.lineTo(16, 14); g.moveTo(6, 10); g.lineTo(26, 10); g.lineTo(22, 20); g.lineTo(10, 20); g.closePath(); g.stroke(); })));
     const sFlame = cutout(plane(.3, .4, false), new THREE.MeshBasicMaterial({ map:flameT, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, fog:false })), sHalo = cutout(plane(3, 3, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.5, fog:false }));
     const MURAL = { x:X + 1, z:Y - 10.9 }, FIGS = { x:X + 1, z:Y - 9.6 }, SCONCE = { x:X + 3.1, z:Y - 10.85 };
-    const lit = () => pzSave.sconce === 1;
+    const lit = () => pzSave.sconce === 1, hasOcelot = () => (pzSave.masks || []).includes('ocelot');
     const paintShadow = g => { const L = lit(); g.fillStyle = '#050605'; g.fillRect(0, 0, 300, 300); if (!L) { g.fillStyle = 'rgba(120,150,150,.35)'; g.beginPath(); g.ellipse(80 + (clock*40 % 140), 40, 1.5, 3, 0, 0, Math.PI*2); g.fill(); return; }
       if (muralArt) g.drawImage(muralArt, 0, 0, 300, 190); else { g.fillStyle = '#5a5e52'; g.fillRect(0, 0, 300, 190); g.strokeStyle = 'rgba(160,90,58,.7)'; g.lineWidth = 3; for (let i = 0; i < 5; i++) { g.beginPath(); g.ellipse(30 + i*60, 172, 14, 7, 0, 0, Math.PI*2); g.stroke(); } }
       const fl = g.createRadialGradient(260, 40, 4, 260, 40, 260); fl.addColorStop(0, 'rgba(255,190,110,.35)'); fl.addColorStop(1, 'rgba(0,0,0,.35)'); g.fillStyle = fl; g.fillRect(0, 0, 300, 190);
       SHAPES.forEach((sh, i) => { const x = 60 + i*90, y = 95;
         g.save(); g.translate(x, y); g.rotate(sh.ok*Math.PI/2); g.strokeStyle = 'rgba(232,210,160,.75)'; g.lineWidth = 2; g.setLineDash([5, 4]); g.fillStyle = 'rgba(0,0,0,0)'; const f = g.fill; g.fill = () => g.stroke(); sh.draw(g, 34); g.fill = f; g.setLineDash([]); g.restore();   // 벽화에 새겨진 금
-        if (!solved() || pzSave.mirA !== 1 && pzSave.mirA !== 2) { g.save(); g.translate(x + 6, y + 4); g.rotate(pzSave.caveRot[i]*Math.PI/2); g.fillStyle = 'rgba(10,8,6,.78)'; sh.draw(g, 34); g.restore(); } });   // 돌 조각의 그림자
-      if (solved() && !pzSave.mirA) { g.fillStyle = '#0c0a08'; g.beginPath(); g.moveTo(150, 30); g.lineTo(162, 95); g.lineTo(146, 160); g.lineTo(138, 95); g.closePath(); g.fill(); g.drawImage(SHARD_T.userData.canvas, 128, 70, 44, 50); }
+        { g.save(); g.translate(x + 6, y + 4); g.rotate(pzSave.caveRot[i]*Math.PI/2); g.fillStyle = 'rgba(10,8,6,.78)'; sh.draw(g, 34); g.restore(); } });   // 돌 조각의 그림자
+      if (solved() && !hasOcelot()) { g.fillStyle = '#0c0a08'; g.beginPath(); g.moveTo(150, 30); g.lineTo(166, 95); g.lineTo(146, 160); g.lineTo(134, 95); g.closePath(); g.fill(); try { g.drawImage(MASK_TEX.ocelot[1].image || MASK_TEX.ocelot[1].userData.canvas, 126, 70, 48, 48); } catch (e) {} }   // 벽화 틈에 오셀롯 탈
       g.fillStyle = '#2a2620'; g.fillRect(0, 190, 300, 110); SHAPES.forEach((sh, i) => { const x = 60 + i*90; g.fillStyle = '#7e7a68'; g.fillRect(x - 26, 268, 52, 18); g.save(); g.translate(x, 236); g.rotate(pzSave.caveRot[i]*Math.PI/2); g.fillStyle = '#8a8670'; sh.draw(g, 24); g.strokeStyle = RG.line; g.lineWidth = 2; g.stroke(); g.restore(); }); };
     const tapShadow = (x, y) => { if (!lit()) return;
       if (y > 195) { const i = Math.max(0, Math.min(2, Math.floor((x - 15)/90))); if (solved()) return; pzSave.caveRot[i] = (pzSave.caveRot[i] + 1) % 4; savePz(); tick(500 + i*90, .12, .06, 'triangle'); CARD.paint();
         if (solved()) { pzSfx.thump(.15); [0, 1, 2].forEach(k => setTimeout(() => tick(150 + k*30, .5, .06, 'sawtooth'), 300 + k*200)); setTimeout(() => { setPzStep(WF, 2); CARD.paint(); }, 900); } return; }
-      if (solved() && !pzSave.mirA && Math.abs(x - 150) < 30 && y > 60 && y < 130) { pzSave.mirA = 1; savePz(); paintBag(); pickChime(); setPzStep(WF, 3); CARD.paint(); } };
+      if (solved() && !hasOcelot() && Math.abs(x - 150) < 30 && y > 60 && y < 130) { giveMask('ocelot'); pzSfx.chime(.1); setPzStep(WF, 3); CARD.paint(); } };
     WF.targets = () => { const st = pzStep(WF), L = [];
       if (pzSave.net === 1 && !pzSave.shrimp) L.push({ key:'pz-pool', noSeen:true, x:POOL.x - 1.2, h:.05, z:POOL.z + .4, reach:3, act:() => { tick(600, .2, .05); take('shrimp', SHRIMP_T, POOL.x - 1.2, POOL.z + .4); } });
       if (st === 0) L.push({ key:'pz-flamingo', noSeen:true, x:LEDGE.x, h:.8, h0:.2, h1:1.0, z:LEDGE.z, reach:3.5, me:flam[1], act:() => {
@@ -3233,32 +3269,33 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     WF.overlay = () => { if (!CV.inside(P.x, P.y)) return;   // 동굴 안: 푸른 어둠. 횃불이나 쇠고리 불빛만큼 보임
       const s = toScreen(P.x, 1 + (P.upH || 0), P.y) || [vw/2, vh*.6], R = TORCH.lit() ? 300 : lit() ? 420 : 70, g = ctx.createRadialGradient(s[0], s[1], R*.2, s[0], s[1], R);
       g.addColorStop(0, lit() || TORCH.lit() ? 'rgba(40,24,8,.05)' : 'rgba(2,6,6,0)'); g.addColorStop(1, lit() ? 'rgba(4,14,16,.7)' : 'rgba(1,4,5,.96)'); ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
-      ctx.fillStyle = 'rgba(30,70,80,.12)'; ctx.fillRect(0, 0, vw, vh); };
+      ctx.fillStyle = 'rgba(30,70,80,.12)'; ctx.fillRect(0, 0, vw, vh);
+      const ex = toScreen(X + 4, 1, Y - 3.8); if (ex) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; const eg = ctx.createRadialGradient(ex[0], ex[1], 4, ex[0], ex[1], 110); eg.addColorStop(0, 'rgba(150,190,180,.45)'); eg.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = eg; ctx.fillRect(ex[0] - 110, ex[1] - 110, 220, 220); ctx.restore(); } };   // 들어온 입구 쪽은 바깥빛이 희미하게
     PUZZLES.push(WF); }
 
   /* 6. 이끼 덮인 피아노: 다섯 건반(노래 단추와 같은 색). 개구리 노래를 치면 뚜껑이 열리고 거울 */
-  { const at = spot('piano'), PN = { id:'piano', optional:true, x:at.x, y:at.z, done:1, seq:[], thumb:() => STORIES.find(q => q.key === 'piano').me.material.map.image };
+  { const at = spot('piano'), PN = { id:'piano', x:at.x, y:at.z, done:1, seq:[], thumb:() => STORIES.find(q => q.key === 'piano').me.material.map.image };
     const KX = k => 40 + k*48, open = () => PN.seq.join() === MEL.join();
     const paintKeys = g => { g.fillStyle = '#3a2618'; g.fillRect(0, 0, 300, 300);
-      g.fillStyle = open() || pzSave.mirB ? '#1a120a' : '#5a3c22'; g.fillRect(20, 30, 260, 110); g.strokeStyle = '#1a120a'; g.lineWidth = 3; g.strokeRect(20, 30, 260, 110);
-      if (open() && !pzSave.mirB) g.drawImage(SHARD_T.userData.canvas, 128, 52, 44, 66);
-      if (!open() && !pzSave.mirB) { g.fillStyle = 'rgba(90,120,70,.8)'; for (let i = 0; i < 9; i++) { g.beginPath(); g.ellipse(40 + i*28, 140, 18, 8, 0, 0, Math.PI*2); g.fill(); } }
+      g.fillStyle = open() || pzSave.mirD ? '#1a120a' : '#5a3c22'; g.fillRect(20, 30, 260, 110); g.strokeStyle = '#1a120a'; g.lineWidth = 3; g.strokeRect(20, 30, 260, 110);
+      if (open() && !pzSave.mirD) g.drawImage(SHARD_T.userData.canvas, 128, 52, 44, 66);
+      if (!open() && !pzSave.mirD) { g.fillStyle = 'rgba(90,120,70,.8)'; for (let i = 0; i < 9; i++) { g.beginPath(); g.ellipse(40 + i*28, 140, 18, 8, 0, 0, Math.PI*2); g.fill(); } }
       for (let k = 0; k < 5; k++) { const lit = PN.litK === k && clock - PN.litT < .3; g.fillStyle = lit ? '#fff6c8' : '#efe6d2'; g.fillRect(KX(k) - 20, 170, 40, 110); g.strokeStyle = '#3a2618'; g.strokeRect(KX(k) - 20, 170, 40, 110); g.fillStyle = KEY_COL[k]; g.beginPath(); g.arc(KX(k), 256, 8, 0, Math.PI*2); g.fill(); } };
     const tapKeys = (x, y) => {
       if (y > 170) { const k = Math.floor((x - 20)/48); if (k < 0 || k > 4) return; pianoNote(noteF(k), .16); PN.litK = k; PN.litT = clock; if (!open()) { PN.seq.push(k); PN.seq = PN.seq.slice(-5); if (open()) { [0, 1, 2].forEach(i => setTimeout(() => tick(200 + i*40, .3, .05, 'square'), 400 + i*150)); } } CARD.paint(); setTimeout(() => CARD.paint(), 320); return; }
-      if (open() && !pzSave.mirB && y > 40 && y < 140 && Math.abs(x - 150) < 40) { pzSave.mirB = 1; savePz(); paintBag(); pickChime(); setPzStep(PN, 1); CARD.paint(); } };
-    PN.targets = () => [{ key:'pz-piano', noSeen:true, x:at.x, h:.6, z:at.z, reach:3, act:() => { if (pzSave.mirB) PN.seq = MEL.slice(); CARD.open(paintKeys, tapKeys); } }];
+      if (open() && !pzSave.mirD && y > 40 && y < 140 && Math.abs(x - 150) < 40) { pzSave.mirD = 1; savePz(); paintBag(); pickChime(); setPzStep(PN, 1); CARD.paint(); } };
+    PN.targets = () => [{ key:'pz-piano', noSeen:true, x:at.x, h:.6, z:at.z, reach:3, act:() => { if (pzSave.mirD) PN.seq = MEL.slice(); CARD.open(paintKeys, tapKeys); } }];
     PN.update = () => {}; PUZZLES.push(PN); }
 
   /* 7. 멈춘 괘종시계: 시곗바늘을 신전 돌 시계판의 시각(달이 뜬 열두 시)에 맞추면 숲에 한밤이 옴 */
-  { const at = spot('clock'), CK = { id:'clock', optional:true, x:at.x, y:at.z, done:1, h:3, thumb:() => STORIES.find(q => q.key === 'clock').me.material.map.image };
+  { const at = spot('clock'), CK = { id:'clock', x:at.x, y:at.z, done:1, h:3, thumb:() => STORIES.find(q => q.key === 'clock').me.material.map.image };
     const paintClock = g => { g.fillStyle = '#3a2618'; g.fillRect(0, 0, 300, 300); g.fillStyle = '#efe4c8'; g.beginPath(); g.arc(150, 150, 120, 0, Math.PI*2); g.fill(); g.strokeStyle = '#5a3c22'; g.lineWidth = 8; g.stroke();
       g.fillStyle = '#3a2618'; for (let i = 0; i < 12; i++) { const a = i/12*Math.PI*2; g.beginPath(); g.arc(150 + Math.sin(a)*100, 150 - Math.cos(a)*100, i % 3 ? 4 : 7, 0, Math.PI*2); g.fill(); }
       g.fillStyle = '#f2e6a0'; g.beginPath(); g.arc(150, 70, 14, 0, Math.PI*2); g.fill(); g.fillStyle = '#efe4c8'; g.beginPath(); g.arc(156, 66, 12, 0, Math.PI*2); g.fill();   // 열두 시 자리의 초승달
       const ha = CK.h/12*Math.PI*2, ma = CK.moved ? 0 : 10/60*Math.PI*2; g.strokeStyle = '#1a120a'; g.lineCap = 'round';
       g.lineWidth = 9; g.beginPath(); g.moveTo(150, 150); g.lineTo(150 + Math.sin(ha)*62, 150 - Math.cos(ha)*62); g.stroke();
       g.lineWidth = 5; g.beginPath(); g.moveTo(150, 150); g.lineTo(150 + Math.sin(ma)*92, 150 - Math.cos(ma)*92); g.stroke(); g.fillStyle = '#1a120a'; g.beginPath(); g.arc(150, 150, 8, 0, Math.PI*2); g.fill(); };
-    const midnight = () => { pzSave.nightUntil = Date.now() + 6*60*1000; savePz(); for (let i = 0; i < 12; i++) setTimeout(() => pianoNote(196, .14), 500 + i*700); setTimeout(() => { CARD.close(); setPzStep(CK, 1); }, 1800); };
+    const midnight = () => { pzSave.nightUntil = Date.now() + 6*60*1000; pzSave.moon = 1; savePz(); for (let i = 0; i < 12; i++) setTimeout(() => pianoNote(196, .14), 500 + i*700); setTimeout(() => { CARD.close(); setPzStep(CK, 1); }, 1800); };   // 한밤: 신전 지붕 틈으로 달빛
     const tapClock = x => { CK.moved = true; CK.h = (CK.h + (x > 150 ? 1 : 11)) % 12; tick(1200, .06, .06, 'square'); CARD.paint(); if (CK.h === 0) midnight(); };
     CK.targets = () => [{ key:'pz-clock', noSeen:true, x:at.x, h:1.2, z:at.z, reach:3, act:() => { if (pzStep(CK) >= 1) { CK.h = 0; CK.moved = true; } CARD.open(paintClock, tapClock); } }];
     CK.update = () => {}; PUZZLES.push(CK); }
@@ -3280,6 +3317,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     const bud = cutout(plane(1.3, 1.95), mat(BUD_T)), seedM = cutout(plane(.3, .3), mat(SEED_T));
     const capys = [[-1.8, .9], [1.9, .6], [.3, 2.1]].map(([dx, dz], i) => ({ m:cutout(plane(.9, .56), mat(CAPY_T)), home:{ x:C.x + dx*1.8, z:C.z + dz*1.8 }, near:{ x:C.x + dx*.75, z:C.z + dz*.75 }, i }));
     const bird = cutout(plane(.4, .3), mat(TOUCAN_TEX));
+    const beacon = cutout(plane(7, 9, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.35, fog:false, color:'#ff9ac0' })); beacon.renderOrder = 6;   // 멀리서도 나무 사이로 분홍빛이 새어 나옴
     FL.targets = () => { const st = pzStep(FL), L = [{ key:'pz-bud', noSeen:true, x:C.x, h:1.2, h0:.3, h1:1.9, z:C.z, reach:3, me:bud, act:() => { if (st === 0) voice('capybara', 1, .08); } }];
       if (st === 1) L.push({ key:'pz-seed', noSeen:true, x:C.x, h:1.05, z:C.z, reach:3, act:() => { take('seed', SEED_T, C.x, C.z); setPzStep(FL, 2); } });
       return L; };
@@ -3290,7 +3328,8 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
         const p = { x:c.home.x + (c.near.x - c.home.x)*f + (c.home.x - C.x)*c.run*1.5, z:c.home.z + (c.near.z - c.home.z)*f + (c.home.z - C.z)*c.run*1.5 }; place(c.m, p, 0, camX, camZ); c.m.visible = c.run < .9; });
       bud.material.map = st >= 1 ? BLOOM_T : BUD_T; place(bud, C, 0, camX, camZ); bud.scale.set(st >= 1 ? 1.3 : 1 + k*.1, st >= 1 ? 1 : 1 + Math.sin(clock*2)*.02*k, 1);
       bird.visible = k > .6 || st >= 1; if (bird.visible) { const c0 = capys[0], [x, z] = wrapNear(c0.m.position.x, c0.m.position.z, camX, camZ); bird.position.set(x, .62, z); face(bird, x, z, camX, camZ); }
-      seedM.visible = st === 1; if (seedM.visible) place(seedM, C, 1.05 + Math.sin(clock*2)*.04, camX, camZ); };
+      seedM.visible = st === 1; if (seedM.visible) place(seedM, C, 1.05 + Math.sin(clock*2)*.04, camX, camZ);
+      beacon.visible = st < 2 && d > 6 && d < 40; if (beacon.visible) { const [x, z] = wrapNear(C.x, C.z, camX, camZ); beacon.position.set(x, 4, z); beacon.lookAt(camera.position); beacon.material.opacity = .22 + Math.sin(clock*.8)*.06; } };
     PUZZLES.push(FL); }
 
   /* 9. 끝맺음: 모닥불 곁에 빛나는 씨앗을 심으면 숲에 밤이 내리고, 도와준 동물들이 하나씩 모닥불 둘레에 모여 앉음.
@@ -3993,7 +4032,7 @@ function draw(dt = .016){
 }
 
 /* ---- 저장 (내 위치와 그림첩, 이 브라우저에) ---- */
-if (location.search.includes('dbg')) window.__g = { P, keys, PUZZLES, pzSave, lookTargets, sing, get clock(){ return clock; }, get yaw(){ return yaw; }, set yaw(v){ yaw = v; }, get pitch(){ return pitch; }, set pitch(v){ pitch = v; } };   // 시험용 (주소에 ?dbg)
+if (location.search.includes('dbg')) window.__g = { P, keys, REGIONS, SITES, STORY_SPOTS, FIRE, WATERFALL, giveMask, get bag(){ return bag; }, PUZZLES, pzSave, lookTargets, sing, get clock(){ return clock; }, get yaw(){ return yaw; }, set yaw(v){ yaw = v; }, get pitch(){ return pitch; }, set pitch(v){ pitch = v; } };   // 시험용 (주소에 ?dbg)
 const KEY = 'denggul-v3';
 function save(){ if (window.__resetting) return; try { localStorage.setItem(KEY, JSON.stringify({ p:[P.x,P.y], found, c:clock })); } catch (e) {} }
 function load(){
