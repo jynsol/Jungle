@@ -1811,8 +1811,11 @@ for (const [k] of bushByTile) {
   me.position.set(x + (hash(k*139) - .5)*.4, .08, z + (hash(k*149) - .5)*.4);
   PICKS.push({ k, key, me, x:me.position.x, z:me.position.z });
 }
-{ const h = REGIONS[0].hub, far = PICKS.filter(p => { const d = wdist(p.x, p.z, h.x, h.y); return d > 12 && d < 30; }).sort((a, b) => hash(a.k*151) - hash(b.k*151));   // 바나나는 오두막에서 조금 떨어진 덤불 몇 곳에 꼭 있음
-  for (const p of far.slice(0, 3)) if (p.key !== 'banana') { p.key = 'banana'; p.me.material.map = ITEMS.banana.tex; } }
+{ const h = REGIONS[0].hub, cand = [];   // 바나나는 오두막으로 가는 길가 낮은 풀숲에 셋 — 덤불 속에 숨지 않게 길 바로 옆
+  for (let k = 0; k < W*H; k++) { if (!TRAIL_EDGE[k]) continue; const x = k % W + .5, z = (k / W | 0) + .5, d = wdist(x, z, h.x, h.y), f = wdist(x, z, FIRE.x, FIRE.y); if (d > 9 && d < 20 && f > 8 && wdist(x, z, FIRE.x, FIRE.y) < wdist(h.x, h.y, FIRE.x, FIRE.y)) cand.push({ k, x, z, d }); }
+  cand.sort((a, b) => hash(a.k*151) - hash(b.k*151)); const got = [];
+  for (const c of cand) { if (got.length >= 3) break; if (got.some(o => wdist(o.x, o.z, c.x, c.z) < 3)) continue; got.push(c);
+    const me = cutout(plane(.42, .42), mat(ITEMS.banana.tex)); me.position.set(c.x, .08, c.z); PICKS.push({ k:c.k + W*H, key:'banana', me, x:c.x, z:c.z }); } }
 const REGROW = 5*60*1000;   // 주운 자리는 5분 뒤 다시 열림
 const $bag = document.createElement('div'); $bag.className = 'bagi'; $bag.setAttribute('aria-label', '바구니'); document.querySelector('.hud').append($bag);
 function paintBag(){   // 바구니: 든 열매만 그림과 숫자로
