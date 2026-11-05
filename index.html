@@ -98,7 +98,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 /* ================= 그래픽 교체용 =================
    assets/ 폴더에 아래 이름의 png를 넣으면 기본 그림 대신 그 그림판으로 바뀌어요. 크기와 비율은 README 참고.
    모두 정면에서 본 모습, 투명 배경, 아래가 땅에 닿게. */
-const ASSET_NAMES = ['agave','grass','broadleaf','fern','lily','whitespike','heartleaf','palm','tree','ruin','player','parrot','leaf'];
+const ASSET_NAMES = ['agave','grass','broadleaf','fern','lily','whitespike','heartleaf','banana','sansevieria','palm','tree','orangetree','lotus','flamingo','tiger','monkey','ruin','player','parrot','leaf'];
 const ASSETS = Object.fromEntries(ASSET_NAMES.map(n => [n, 'assets/' + n + '.png']));
 const COLORS = {
   // 앙리 루소 「적도의 정글」(1909)에서 고른 색
@@ -199,8 +199,8 @@ const PARROTS = [];
 
 /* ---- 상태 ---- */
 const P = { x:SX+.5, y:SY+.5, fx:0, fy:-1, r:.3, moving:false, flip:1 };
-let yaw = 0;   // 카메라가 숲을 바라보는 방향. 판들이 정면을 향하도록 좌우로 조금만 돌아감
-const YAW_MAX = .65;
+let yaw = 0;   // 카메라가 바라보는 방향. 판들이 늘 카메라를 향해 돌아서서 360도 돌아볼 수 있음
+const YAW_MAX = Infinity;
 let clock = 0, myColor = COLORS.me, myBubble = null, myId = null, oldmanT = 0;
 const others = new Map(), parts = [], sheets = [];
 let found = {};   // key -> { date, with:[이름] }
@@ -253,7 +253,7 @@ cv.addEventListener('pointerdown', e => {
 });
 cv.addEventListener('pointermove', e => {
   if (joy && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; }
-  if (look && e.pointerId === look.id) { yaw = Math.max(-YAW_MAX, Math.min(YAW_MAX, yaw - (e.clientX - look.x)*.005)); look.x = e.clientX; }
+  if (look && e.pointerId === look.id) { yaw = Math.max(-YAW_MAX, Math.min(YAW_MAX, yaw - (e.clientX - look.x)*.008)); look.x = e.clientX; }
 });
 const endJoy = e => { if (joy && e.pointerId === joy.id) joy = null; if (look && e.pointerId === look.id) look = null; };
 cv.addEventListener('pointerup', endJoy); cv.addEventListener('pointercancel', endJoy);
@@ -275,7 +275,9 @@ function startAudio(){
     const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1200;
     const g = ac.createGain(); g.gain.value = 0;
     src.connect(bp).connect(hp).connect(g).connect(ac.destination); src.start();
-    audio = { ac, g, bp };
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800; const rg = ac.createGain(); rg.gain.value = 0;
+    src.connect(lp).connect(rg).connect(ac.destination);   // 빗소리
+    audio = { ac, g, bp, rg };
   } catch (e) {}
 }
 $sound.addEventListener('click', () => {
@@ -504,7 +506,7 @@ function step(dt){
   let dx = 0, dy = 0;
   if (!modalOpen()) {
     for (const c of keys) if (KEYMAP[c]) { dx += KEYMAP[c][0]; dy += KEYMAP[c][1]; }
-    yaw = Math.max(-YAW_MAX, Math.min(YAW_MAX, yaw + ((keys.has('KeyQ') ? 1 : 0) - (keys.has('KeyE') ? 1 : 0))*dt*1.2));
+    yaw = Math.max(-YAW_MAX, Math.min(YAW_MAX, yaw + ((keys.has('KeyQ') ? 1 : 0) - (keys.has('KeyE') ? 1 : 0))*dt*1.8));
     if (joy) { const jx = joy.x-joy.sx, jy = joy.y-joy.sy, l = Math.hypot(jx,jy); if (l > 8) { dx = jx/Math.max(l,40); dy = jy/Math.max(l,40); } }
   }
   const len = Math.hypot(dx,dy); if (len > 1) { dx /= len; dy /= len; }
@@ -545,7 +547,7 @@ function step(dt){
 }
 
 function dayState(){
-  const ph = (clock % DAY) / DAY, dark = .12 + .66*(.5 - .5*Math.cos(ph*Math.PI*2));
+  const ph = ((Date.now()/1000) % DAY) / DAY, dark = .12 + .66*(.5 - .5*Math.cos(ph*Math.PI*2));
   return { dark, label: dark < .3 ? '낮' : dark > .62 ? '밤' : ph < .5 ? '해질녘' : '새벽' };
 }
 
@@ -557,9 +559,23 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, 1, .1, 26);
 const DAY_SKY = new THREE.Color('#aab59c'), NIGHT_SKY = new THREE.Color('#16213a');
+const DUSK_SKY = new THREE.Color('#d9a98f'), STORM_SKY = new THREE.Color('#5f6b66'), DUSK_TINT = new THREE.Color('#ffcfb0');
 const DAY_TINT = new THREE.Color('#ffffff'), NIGHT_TINT = new THREE.Color('#4a5878'), tintCol = new THREE.Color();
 scene.background = DAY_SKY.clone();
 scene.fog = new THREE.Fog(DAY_SKY.clone(), 3, 22);
+/* 열대 폭풍: 실제 시각 기준 5분마다 50초. 같이 접속한 사람은 같은 폭풍을 맞음 */
+function stormLevel(){ const t = (Date.now()/1000) % 300; return t < 50 ? Math.max(0, Math.min(1, t/6, (50 - t)/6)) : 0; }
+let flash = 0;
+function thunder(){
+  if (!audio || !soundOn) return;
+  try {
+    const { ac } = audio, len = ac.sampleRate*2.5 | 0, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random()*2 - 1) * Math.pow(1 - i/len, 2);
+    const src = ac.createBufferSource(), lp = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = buf; lp.type = 'lowpass'; lp.frequency.value = 180; g.gain.value = .5;
+    src.connect(lp).connect(g).connect(ac.destination); src.start();
+  } catch (e) {}
+}
 function fitRenderer(){ renderer.setSize(vw, vh, false); camera.aspect = vw / vh; camera.updateProjectionMatrix(); }
 fitRenderer(); addEventListener('resize', fitRenderer);
 
@@ -567,6 +583,27 @@ const tinted = [];
 function mat(tex, tint = true, extra = {}){
   const m = new THREE.MeshBasicMaterial({ map:tex, alphaTest:.5, side:THREE.DoubleSide, ...extra });
   if (tint) tinted.push(m); return m;
+}
+/* 판이 늘 카메라 쪽으로 몸을 돌림(360도 회전 가능) + 바람에 윗부분이 흔들림. 그래픽 카드에서 계산 */
+const U = { uTime:{ value:0 }, uWind:{ value:.03 } };
+function billboard(m){
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uTime = U.uTime; sh.uniforms.uWind = U.uWind;
+    sh.vertexShader = 'uniform float uTime;\nuniform float uWind;\n' + sh.vertexShader.replace('#include <project_vertex>', `
+      vec4 mvPosition = vec4( transformed, 1.0 );
+      #ifdef USE_INSTANCING
+        vec3 ipos = instanceMatrix[3].xyz;
+        vec3 local = ( instanceMatrix * mvPosition ).xyz - ipos;
+        local.x += uWind * local.y * .6 * sin( uTime * 1.7 + ipos.x * .7 + ipos.z * .5 );
+        vec2 dd = cameraPosition.xz - ipos.xz;
+        float ang = atan( dd.x, dd.y ), ca = cos( ang ), sa = sin( ang );
+        local = vec3( ca * local.x + sa * local.z, local.y, -sa * local.x + ca * local.z );
+        mvPosition = vec4( ipos + local, 1.0 );
+      #endif
+      mvPosition = modelViewMatrix * mvPosition;
+      gl_Position = projectionMatrix * mvPosition;`);
+  };
+  return m;
 }
 function ctex(w, h, paint){
   const c = document.createElement('canvas'); c.width = w; c.height = h; paint(c.getContext('2d'), w, h);
@@ -620,6 +657,24 @@ function frond(g, x, y, len, ang, bend, col, leaflet){
     leafShape(g, px, py, L, a - 1.05, col, .2); leafShape(g, px, py, L, a + 1.05, col, .2);
   }
 }
+function paddle(g, x, y, len, ang, wid, col, r){
+  g.save(); g.translate(x, y); g.rotate(ang);
+  g.fillStyle = col; g.strokeStyle = RG.line; g.lineWidth = 1.8;
+  g.beginPath(); g.moveTo(0, 0); g.bezierCurveTo(len*.2, -wid, len*.8, -wid, len, 0); g.bezierCurveTo(len*.8, wid, len*.2, wid, 0, 0); g.fill(); g.stroke();
+  g.strokeStyle = RG.vein; g.lineWidth = 1.1; g.beginPath(); g.moveTo(0, 0); g.lineTo(len*.96, 0);
+  for (let t = .08; t < .92; t += .055) { g.moveTo(len*t, 0); g.lineTo(len*(t + .05), -wid*.8); g.moveTo(len*t, 0); g.lineTo(len*(t + .05), wid*.8); }
+  g.stroke();
+  g.globalCompositeOperation = 'destination-out';   // 바나나 잎의 찢어진 틈
+  for (let i = 0; i < 4; i++) { const t = .2 + r()*.65, sd = r() < .5 ? -1 : 1; g.beginPath(); g.moveTo(len*t, sd*wid*1.1); g.lineTo(len*(t + .025), sd*wid*1.1); g.lineTo(len*(t - .01), sd*wid*.15); g.closePath(); g.fill(); }
+  g.restore();
+}
+function banded(g, x, y, len, ang, wid, fill){
+  blade(g, x, y, len, ang, wid, fill, null);
+  const c = Math.cos(ang), s = Math.sin(ang);
+  g.strokeStyle = RG.pale; g.lineWidth = 1.5; g.globalAlpha = .7;
+  for (let t = .08; t < .85; t += .07) { const px = x + c*len*t, py = y + s*len*t, hw = wid*.42*(1 - t*.9); g.beginPath(); g.moveTo(px + s*hw, py - c*hw); g.lineTo(px - s*hw, py + c*hw); g.stroke(); }
+  g.globalAlpha = 1;
+}
 const qpt = (t, a, b, c) => (1-t)*(1-t)*a + 2*(1-t)*t*b + t*t*c;
 /* 루소의 정글에서 가져온 식물 일곱 가지. wt는 덤불 속 비율 */
 const SPECIES = [
@@ -662,7 +717,16 @@ const SPECIES = [
       g.strokeStyle = RG.line; g.lineWidth = 2.5; g.beginPath(); g.moveTo(w/2, h); g.quadraticCurveTo(w/2 + Math.cos(a)*L*.4, h + Math.sin(a)*L*.9, px, py); g.stroke();
       heart(g, px, py, 34 + r()*12, a + Math.PI/2 + (r() - .5)*.6, [RG.deep, RG.dark, RG.mid][i % 3]);
     }
+  } },
+  { key:'banana', w:1.7, h:2.5, cw:272, ch:400, wt:.1, paint:(g, w, h, r) => {
+    g.fillStyle = RG.moss; g.strokeStyle = RG.line; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(w/2 - 12, h); g.lineTo(w/2 - 7, h*.5); g.lineTo(w/2 + 7, h*.5); g.lineTo(w/2 + 12, h); g.closePath(); g.fill(); g.stroke();
+    for (let i = 0; i < 6; i++) paddle(g, w/2, h*.52, 125 + r()*35, -Math.PI/2 + (i - 2.5)*.45 + (r() - .5)*.15, 22 + r()*6, i % 2 ? RG.mid : RG.sage, r);
+  } },
+  { key:'sansevieria', w:.7, h:1.4, cw:144, ch:288, wt:.07, paint:(g, w, h, r) => {
+    for (let i = 0; i < 8; i++) banded(g, w/2 + (r() - .5)*36, h - 2, 170 + r()*100, -Math.PI/2 + (i - 3.5)*.11 + (r() - .5)*.08, 16 + r()*5, i % 2 ? RG.dark : RG.mid);
   } }
+
 ];
 const TREES = [
   { key:'palm', w:2.8, h:6.2, cw:256, ch:568, paint:(g, w, h, r) => {
@@ -679,6 +743,15 @@ const TREES = [
     for (let i = 0; i < 6; i++) { const x = w/2 + (r() - .5)*200; g.beginPath(); g.moveTo(x, 150); g.quadraticCurveTo(x + 10, 260, x - 6, 280 + r()*120); g.stroke(); }
     for (let i = 0; i < 52; i++) { const a = r()*Math.PI*2, d = r()*72; ovate(g, w/2 + Math.cos(a)*d, 150 + Math.sin(a)*d*.75, 40 + r()*22, a + (r() - .5)*.8, 14, [RG.deep, RG.dark, RG.mid, RG.sage][i % 4]); }
   } }
+  ,{ key:'orangetree', w:2.8, h:4.6, cw:256, ch:420, paint:(g, w, h, r) => {
+    g.fillStyle = '#4b3a2c'; g.strokeStyle = RG.line; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(w/2 - 13, h); g.lineTo(w/2 - 7, 160); g.lineTo(w/2 + 7, 160); g.lineTo(w/2 + 13, h); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = RG.deep; g.beginPath(); g.ellipse(w/2, 130, 96, 84, 0, 0, Math.PI*2); g.fill();
+    for (let i = 0; i < 60; i++) { const a = r()*Math.PI*2, d = r()*78; ovate(g, w/2 + Math.cos(a)*d, 130 + Math.sin(a)*d*.85, 30 + r()*16, a + (r() - .5), 10, [RG.deep, RG.dark, RG.mid][i % 3]); }
+    for (let i = 0; i < 14; i++) { const a = r()*Math.PI*2, d = 20 + r()*62, x = w/2 + Math.cos(a)*d, y = 130 + Math.sin(a)*d*.85;
+      g.fillStyle = '#e8822e'; g.strokeStyle = RG.line; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 8, 0, Math.PI*2); g.fill(); g.stroke();
+      g.fillStyle = '#ffc07a'; g.beginPath(); g.arc(x - 2.5, y - 2.5, 2.5, 0, Math.PI*2); g.fill(); }
+  } }
 ];
 const MONKEY_TEX = ctex(64, 56, (g) => {
   g.strokeStyle = RG.line; g.lineWidth = 2;
@@ -690,6 +763,52 @@ const MONKEY_TEX = ctex(64, 56, (g) => {
 });
 const SP_TEX = SPECIES.map((p, i) => ctex(p.cw, p.ch, (g, w, h) => p.paint(g, w, h, rng(i*977 + 13))));
 const TREE_TEX = TREES.map((p, i) => ctex(p.cw, p.ch, (g, w, h) => p.paint(g, w, h, rng(i*331 + 7))));
+/* 루소 그림 속 동물과 물가 */
+const LOTUS_TEX = ctex(240, 180, (g, w, h) => {
+  const r = rng(404);
+  for (let i = 0; i < 5; i++) { g.fillStyle = [RG.dark, RG.mid, RG.sage][i % 3]; g.strokeStyle = RG.line; g.lineWidth = 2;
+    g.beginPath(); g.ellipse(30 + r()*180, h - 16 - r()*18, 34, 11, 0, 0, Math.PI*2); g.fill(); g.stroke(); }
+  for (let f = 0; f < 2; f++) {
+    const fx = 70 + f*100, fy = 52 + f*22;
+    g.strokeStyle = RG.mid; g.lineWidth = 3; g.beginPath(); g.moveTo(fx, h - 20); g.lineTo(fx + 4, fy); g.stroke();
+    for (let p = 0; p < 9; p++) ovate(g, fx + 4, fy + 4, 40 - Math.abs(p - 4)*3, -Math.PI/2 + (p - 4)*.3, 13, f ? RG.white : RG.pink, f ? RG.cream : RG.pinkDeep);
+  }
+});
+const FLAMINGO_TEX = ctex(80, 160, (g) => {
+  g.strokeStyle = '#9a5a54'; g.lineWidth = 3; g.beginPath(); g.moveTo(38, 160); g.lineTo(40, 104); g.moveTo(46, 160); g.lineTo(44, 120); g.lineTo(52, 108); g.stroke();
+  g.fillStyle = '#e99a90'; g.strokeStyle = RG.line; g.lineWidth = 2;
+  g.beginPath(); g.ellipse(42, 92, 24, 15, -.15, 0, Math.PI*2); g.fill(); g.stroke();
+  g.strokeStyle = '#e99a90'; g.lineWidth = 7; g.beginPath(); g.moveTo(26, 86); g.bezierCurveTo(6, 60, 34, 46, 20, 22); g.stroke();
+  g.fillStyle = '#e99a90'; g.strokeStyle = RG.line; g.lineWidth = 2; g.beginPath(); g.arc(22, 20, 8, 0, Math.PI*2); g.fill(); g.stroke();
+  g.fillStyle = '#2a2420'; g.beginPath(); g.moveTo(14, 18); g.quadraticCurveTo(4, 24, 10, 34); g.lineTo(16, 24); g.closePath(); g.fill();
+  g.fillStyle = '#c9706a'; g.beginPath(); g.ellipse(48, 90, 14, 8, -.3, 0, Math.PI*2); g.fill();
+});
+const TIGER_TEX = ctex(224, 128, (g) => {
+  g.strokeStyle = RG.line; g.lineWidth = 2.5; g.fillStyle = '#d9822b';
+  g.beginPath(); g.moveTo(30, 100); g.quadraticCurveTo(8, 70, 18, 46); g.stroke();
+  g.beginPath(); g.ellipse(100, 92, 70, 26, 0, 0, Math.PI*2); g.fill(); g.stroke();
+  g.beginPath(); g.arc(172, 70, 26, 0, Math.PI*2); g.fill(); g.stroke();
+  for (const x of [156, 186]) { g.beginPath(); g.arc(x, 48, 8, 0, Math.PI*2); g.fill(); g.stroke(); }
+  g.fillStyle = '#f3e3c6'; g.beginPath(); g.ellipse(178, 80, 14, 10, 0, 0, Math.PI*2); g.fill();
+  g.strokeStyle = '#1a120a'; g.lineWidth = 4;
+  for (let x = 48; x < 160; x += 14) { g.beginPath(); g.moveTo(x, 68); g.quadraticCurveTo(x + 6, 84, x + 2, 100); g.stroke(); }
+  for (const dy of [-8, 2]) { g.beginPath(); g.moveTo(152, 66 + dy); g.lineTo(162, 68 + dy); g.stroke(); }
+  g.fillStyle = '#e8c32a'; for (const x of [166, 182]) { g.beginPath(); g.ellipse(x, 64, 4, 3, 0, 0, Math.PI*2); g.fill(); }
+  g.fillStyle = '#1a120a'; for (const x of [166, 182]) g.fillRect(x - 1, 61, 2, 6);
+  g.fillStyle = '#d9822b'; g.strokeStyle = RG.line; g.lineWidth = 2.5;
+  for (const x of [56, 136]) { g.beginPath(); g.ellipse(x, 116, 14, 8, 0, 0, Math.PI*2); g.fill(); g.stroke(); }
+});
+const MONKEY_SIT_TEX = ctex(80, 100, (g) => {
+  g.strokeStyle = RG.line; g.lineWidth = 2; g.fillStyle = '#4a3424';
+  g.beginPath(); g.moveTo(60, 80); g.quadraticCurveTo(78, 60, 70, 30); g.stroke();
+  g.beginPath(); g.ellipse(40, 70, 22, 26, 0, 0, Math.PI*2); g.fill(); g.stroke();
+  g.beginPath(); g.arc(40, 32, 18, 0, Math.PI*2); g.fill(); g.stroke();
+  g.fillStyle = '#c7a07a'; g.beginPath(); g.ellipse(40, 36, 11, 10, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#1a120a'; for (const x of [35, 45]) { g.beginPath(); g.arc(x, 32, 2.4, 0, Math.PI*2); g.fill(); }
+  g.fillStyle = '#e8822e'; g.beginPath(); g.arc(40, 66, 11, 0, Math.PI*2); g.fill(); g.stroke();
+  g.fillStyle = '#ffd08a'; g.beginPath(); g.arc(36, 62, 3, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#4a3424'; for (const x of [26, 54]) { g.beginPath(); g.ellipse(x, 66, 6, 10, x < 40 ? .5 : -.5, 0, Math.PI*2); g.fill(); g.stroke(); }
+});
 const ALTAR_TEX = ctex(160, 80, (g, w, h) => {
   g.fillStyle = COLORS.ruin; g.strokeStyle = '#5a3218'; g.lineWidth = 3;
   g.beginPath(); g.moveTo(10, h-2); g.lineTo(26, 12); g.lineTo(w-26, 12); g.lineTo(w-10, h-2); g.closePath(); g.fill(); g.stroke();
@@ -744,7 +863,7 @@ const disc = (col, glow) => ctex(128, 128, (g) => {
   g.fillStyle = glow; g.beginPath(); g.arc(64, 64, 62, 0, Math.PI*2); g.fill();
   g.fillStyle = col; g.beginPath(); g.arc(64, 64, 46, 0, Math.PI*2); g.fill();
 });
-const SUN_TEX = disc('#f6efd2', 'rgba(246,239,210,.45)'), MOON_TEX = disc('#fff3c4', 'rgba(255,243,196,.55)');
+const RED_SUN_TEX = disc('#d8452f', 'rgba(232,120,80,.45)'), SUN_TEX = disc('#f6efd2', 'rgba(246,239,210,.45)'), MOON_TEX = disc('#fff3c4', 'rgba(255,243,196,.55)');
 const EYES_TEX = ctex(32, 12, (g) => { g.fillStyle = COLORS.jaguar; for (const x of [8, 24]) { g.beginPath(); g.ellipse(x, 6, 6, 4, 0, 0, Math.PI*2); g.fill(); } g.fillStyle = '#1a120a'; for (const x of [8, 24]) g.fillRect(x - 1, 2, 2, 8); });
 const FIREFLY_TEX = ctex(8, 8, (g) => { g.fillStyle = '#fff6a0'; g.beginPath(); g.arc(4, 4, 3.6, 0, Math.PI*2); g.fill(); });
 
@@ -757,6 +876,8 @@ function onAsset(k, im){
   else if (k === 'player') { playerImg = im; Object.values(personCache).forEach(swap); }
   else if (k === 'parrot') PARROT_TEX.forEach(swap);
   else if (k === 'leaf') swap(LEAF_TEX);
+  else if (k === 'lotus') swap(LOTUS_TEX); else if (k === 'flamingo') swap(FLAMINGO_TEX);
+  else if (k === 'tiger') swap(TIGER_TEX); else if (k === 'monkey') swap(MONKEY_SIT_TEX);
 }
 
 /* 바닥: 지도 한 장을 땅에 깔기 */
@@ -797,7 +918,7 @@ for (let k = 0; k < W*H; k++) {
   }
 }
 const counts = SPECIES.map(() => 0); for (const b of BP) b.idx = counts[b.sp]++;
-const bushMeshes = SPECIES.map((p, i) => { const m = new THREE.InstancedMesh(plane(p.w, p.h), mat(SP_TEX[i]), Math.max(1, counts[i])); m.frustumCulled = false; scene.add(m); return m; });
+const bushMeshes = SPECIES.map((p, i) => { const m = new THREE.InstancedMesh(plane(p.w, p.h), billboard(mat(SP_TEX[i])), Math.max(1, counts[i])); m.frustumCulled = false; scene.add(m); return m; });
 function placeBush(b, lean = 0, squash = 1){
   dummy.position.set(b.x, 0, b.z); dummy.rotation.set(0, 0, lean); dummy.scale.set(b.s*b.m, b.s*squash*b.f, 1); dummy.updateMatrix();
   bushMeshes[b.sp].setMatrixAt(b.idx, dummy.matrix);
@@ -807,17 +928,42 @@ BP.forEach(b => placeBush(b));
 /* 나무: 키 큰 판. 카메라와 나 사이에 오면 납작하게 접힘 */
 const TP = [], treeByTile = new Map();
 for (let k = 0; k < W*H; k++) if (type[k] === TREE) {
-  const b = { k, v:hash(k*11) < .5 ? 0 : 1, x:k % W + .5 + (hash(k*13) - .5)*.3, z:(k / W | 0) + .5, s:.85 + hash(k*17)*.35, m:hash(k*19) < .5 ? -1 : 1, f:1 };
+  const th = hash(k*11), b = { k, v:th < .4 ? 0 : th < .75 ? 1 : 2, x:k % W + .5 + (hash(k*13) - .5)*.3, z:(k / W | 0) + .5, s:.85 + hash(k*17)*.35, m:hash(k*19) < .5 ? -1 : 1, f:1 };
   TP.push(b); treeByTile.set(k, b);
 }
 const tcounts = TREES.map(() => 0); for (const b of TP) b.idx = tcounts[b.v]++;
-const treeMeshes = TREES.map((p, v) => { const m = new THREE.InstancedMesh(plane(p.w, p.h), mat(TREE_TEX[v]), Math.max(1, tcounts[v])); m.frustumCulled = false; scene.add(m); return m; });
+const treeMeshes = TREES.map((p, v) => { const m = new THREE.InstancedMesh(plane(p.w, p.h), billboard(mat(TREE_TEX[v])), Math.max(1, tcounts[v])); m.frustumCulled = false; scene.add(m); return m; });
 function placeTree(b){ dummy.position.set(b.x, 0, b.z); dummy.rotation.set(0, 0, 0); dummy.scale.set(b.s*b.m, b.s*b.f, 1); dummy.updateMatrix(); treeMeshes[b.v].setMatrixAt(b.idx, dummy.matrix); }
 TP.forEach(placeTree);
 
+/* 물가의 연꽃과 홍학, 수풀 속 호랑이, 나무 위 오렌지 든 원숭이 */
+const landNear = k => { const x = k % W, y = k / W | 0; return [[1,0],[-1,0],[0,1],[0,-1]].some(([a, b]) => { const t = type[id(x+a, y+b)]; return t === FLOOR || t === BUSH; }); };
+const LOTUS = [], FLAMINGOS = [];
+for (let k = 0; k < W*H; k++) {
+  const x = k % W, y = k / W | 0;
+  if (type[k] !== WATER || border(x,y) || !landNear(k) || Math.hypot(x + .5 - SITE.mirror.cx, y + .5 - SITE.mirror.cy) < 2.5) continue;
+  if (hash(k*71) < .35) LOTUS.push({ x:x + .5 + (hash(k*79) - .5)*.5, z:y + .5, s:.8 + hash(k*83)*.4, m:hash(k*89) < .5 ? -1 : 1 });
+  else if (hash(k*73) < .14) FLAMINGOS.push({ x:x + .5, z:y + .5, s:.9 + hash(k*97)*.25, m:hash(k*91) < .5 ? -1 : 1 });
+}
+function staticFlats(list, geo, tex){
+  const m = new THREE.InstancedMesh(geo, billboard(mat(tex)), Math.max(1, list.length)); m.frustumCulled = false;
+  list.forEach((b, i) => { dummy.position.set(b.x, 0, b.z); dummy.rotation.set(0, 0, 0); dummy.scale.set(b.s*b.m, b.s, 1); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); });
+  if (!list.length) m.count = 0;
+  scene.add(m); return m;
+}
+staticFlats(LOTUS, plane(1.2, .9), LOTUS_TEX);
+staticFlats(FLAMINGOS, plane(.5, 1.0), FLAMINGO_TEX);
+const TIGERS = [], MONKEYS = [];
+for (const [k] of bushByTile) {
+  if (type[k] !== BUSH) continue;
+  const x = k % W, y = k / W | 0;
+  if (hash(k*101) < .0025 && Math.hypot(x - SX, y - SY) > 10) { const me = cutout(plane(1.5, .86), mat(TIGER_TEX)); me.position.set(x + .5, 0, y + .5); TIGERS.push(me); }
+}
+for (const b of TP) if (hash(b.k*103) < .05 && !border(b.k % W, b.k / W | 0)) { const me = cutout(plane(.5, .62), mat(MONKEY_SIT_TEX)); me.position.set(b.x, 1.7*b.s, b.z + .08); MONKEYS.push(me); }
+
 /* 기적의 자리, 앵무새, 노인 */
 const altarGeo = plane(2.2, 1.1);
-for (const s of SITES) if (s.key !== 'mirror') cutout(altarGeo, mat(ALTAR_TEX)).position.set(s.cx, 0, s.cy + .95);
+const ALTARS = []; for (const s of SITES) if (s.key !== 'mirror') { const me = cutout(altarGeo, mat(ALTAR_TEX)); me.position.set(s.cx, 0, s.cy + .95); ALTARS.push(me); }
 const personGeo = plane(.76, 1.14);
 const oldman = cutout(personGeo, mat(OLDMAN_TEX)); oldman.position.set(SITE.oldman.cx + 1.6, 0, SITE.oldman.cy + .6);
 const parrotGeo = plane(.42, .84);
@@ -831,7 +977,7 @@ const EYES = []; for (const [k] of bushByTile) if (type[k] === BUSH && hash(k*17
   const me = cutout(plane(.3, .11, false), mat(EYES_TEX, false, { fog:false })), mk = cutout(plane(.42, .37, false), mat(MONKEY_TEX));
   me.visible = mk.visible = false; me.position.set(k % W + .5, .62, (k / W | 0) + .55); mk.position.set(k % W + .5, .82, (k / W | 0) + .5);
   EYES.push({ k, me, mk }); }
-const sky = cutout(plane(7, 7, false), mat(SUN_TEX, false, { fog:false, depthWrite:false }));
+const sky = cutout(plane(4, 4, false), mat(SUN_TEX, false, { fog:false, depthWrite:false })); sky.renderOrder = 10;
 const myMesh = cutout(personGeo, mat(personTex(myColor)));
 const peopleMeshes = new Map();
 
@@ -844,10 +990,10 @@ function updateBushes(actors, dt, camX, camZ){
     if (tx < 0 || ty < 0 || tx >= W || ty >= H) continue;
     const list = bushByTile.get(id(tx,ty)); if (!list) continue;
     for (const b of list) {
-      const ddx = b.x - a.x, ddz = b.z - a.y, d = Math.hypot(ddx, ddz*1.5);
+      const ddx = b.x - a.x, ddz = b.z - a.y, d = Math.hypot(ddx, ddz), side = ddx*Math.cos(yaw) - ddz*Math.sin(yaw);
       if (d > 1.5) continue;
       const f = (1.5 - d)/1.5, cur = lean.get(b) || [0, 1];
-      cur[0] += (ddx >= 0 ? -1 : 1) * f * 1.25; cur[1] = Math.min(cur[1], 1 - .5*f);
+      cur[0] += (side >= 0 ? -1 : 1) * f * 1.25; cur[1] = Math.min(cur[1], 1 - .5*f);
       lean.set(b, cur); active.add(b);
     }
   }
@@ -925,11 +1071,19 @@ function draw(dt = .016){
   updateTrees(dt, camX, camZ);
   // 낮과 밤
   const { dark, label } = dayState(), nt = Math.max(0, Math.min(1, (dark - .12)/.66));
-  tintCol.copy(DAY_TINT).lerp(NIGHT_TINT, nt); for (const m of tinted) m.color.copy(tintCol);
-  scene.background.copy(DAY_SKY).lerp(NIGHT_SKY, nt); scene.fog.color.copy(scene.background);
-  scene.fog.near = 3 - 1.5*nt; scene.fog.far = 22 - 9*nt;
-  sky.material.map = nt > .5 ? MOON_TEX : SUN_TEX;
-  sky.position.set(camX + fx*48, 12, camZ + fz*48); sky.lookAt(camera.position);
+  const dusk = Math.max(0, 1 - Math.abs(nt - .45)*2.6), st = stormLevel();
+  U.uTime.value = clock; U.uWind.value = .03 + .22*st;
+  tintCol.copy(DAY_TINT).lerp(NIGHT_TINT, nt).lerp(DUSK_TINT, dusk*.45).multiplyScalar(1 - .3*st); for (const m of tinted) m.color.copy(tintCol);
+  scene.background.copy(DAY_SKY).lerp(NIGHT_SKY, nt).lerp(DUSK_SKY, dusk*.75).lerp(STORM_SKY, st*.65); scene.fog.color.copy(scene.background);
+  scene.fog.near = 3 - 1.5*nt; scene.fog.far = 22 - 9*nt - 6*st;
+  // 낮엔 옅은 해, 해질녘엔 크고 붉은 해(「해 질 녘의 처녀림」), 밤엔 큰 달(「뱀 부리는 여인」)
+  sky.material.map = nt > .55 ? MOON_TEX : dusk > .35 ? RED_SUN_TEX : SUN_TEX;
+  sky.visible = st < .6;
+  sky.scale.setScalar(nt > .55 ? 1.35 : 1 + dusk*.9);
+  sky.position.set(camX + fx*20, 9 - 5*dusk, camZ + fz*20); sky.lookAt(camera.position);
+  if (st > .5 && Math.random() < dt*.22) { flash = 1; setTimeout(thunder, 500 + Math.random()*900); }
+  flash = Math.max(0, flash - dt*3);
+  if (audio && audio.rg) audio.rg.gain.setTargetAtTime(soundOn ? st*.1 : 0, audio.ac.currentTime, .3);
   // 사람들 (판은 늘 카메라 쪽을 봄, 걷는 방향으로 좌우 뒤집힘)
   const rx = Math.cos(yaw), rz = -Math.sin(yaw);
   myMesh.position.set(P.x, 0, P.y); myMesh.rotation.y = yaw;
@@ -945,6 +1099,8 @@ function draw(dt = .016){
   for (const [key, me] of peopleMeshes) if (!others.has(key)) { scene.remove(me); peopleMeshes.delete(key); }
   PARROTS.forEach((p, i) => { p.mesh.rotation.y = yaw; p.mesh.position.y = Math.abs(Math.sin(clock*3 + i))*.03; });
   oldman.rotation.y = yaw;
+  const face = me => { me.rotation.y = Math.atan2(camX - me.position.x, camZ - me.position.z); };
+  ALTARS.forEach(face); TIGERS.forEach(face); MONKEYS.forEach(face);
   // 이불, 나비, 흩날리는 잎, 반딧불, 재규어 눈
   sheetMeshes.forEach((me, i) => { const s = sheets[i]; me.visible = !!s; if (s) { me.position.set(s.x + Math.sin(clock + i)*.3, s.h, s.z); me.rotation.set(0, yaw, Math.sin(clock*2 + i)*.25); } });
   const bf = [];
@@ -956,7 +1112,7 @@ function draw(dt = .016){
   leafMeshes.forEach((me, i) => { const p = parts[i]; me.visible = !!p; if (p) { me.position.set(p.x, p.h, p.y); me.rotation.set(0, yaw, p.rot); } });
   fireflies.forEach(f => { f.me.visible = nt > .45; if (f.me.visible) f.me.position.set(P.x + f.ox + Math.sin(clock*.5 + f.ph)*.8, .5 + Math.abs(Math.sin(clock*.8 + f.ph))*1.4, P.y + f.oz + Math.cos(clock*.4 + f.ph)*.8); });
   for (const e of EYES) {
-    const d = Math.hypot(e.me.position.x - P.x, e.me.position.z - P.y);
+    const d = Math.hypot(e.me.position.x - P.x, e.me.position.z - P.y); face(e.me); face(e.mk);
     e.me.visible = nt > .55 && d > 3 && d < 16 && Math.sin(clock*.8 + e.k) < .9;
     e.mk.visible = nt < .45 && d > 4 && d < 14 && Math.sin(clock*.3 + e.k) > -.2;   // 낮엔 원숭이가 수풀 사이로 내다봄
   }
@@ -964,6 +1120,12 @@ function draw(dt = .016){
 
   // 겹쳐 그리기
   ctx.clearRect(0, 0, vw, vh);
+  if (st > .02) {   // 빗줄기와 번개
+    const f = clock*60 | 0, n = 220*st | 0; ctx.strokeStyle = 'rgba(230,236,226,.35)'; ctx.lineWidth = 1; ctx.beginPath();
+    for (let i = 0; i < n; i++) { const x = hash(i*7 + f)*(vw + 100) - 50, y = hash(i*13 + f*3)*vh; ctx.moveTo(x, y); ctx.lineTo(x - 6, y + 18); }
+    ctx.stroke();
+  }
+  if (flash > .01) { ctx.fillStyle = `rgba(255,255,240,${flash*.55})`; ctx.fillRect(0, 0, vw, vh); }
   ctx.font = '11px system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const L of LABELS) {
     const near = Math.hypot(L.x - P.x, L.y - P.y) < 1.9;
@@ -992,7 +1154,7 @@ function draw(dt = .016){
   say(P.x, 1.25, P.y, myBubble);
   if (joy) { ctx.strokeStyle = 'rgba(246,234,210,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(joy.sx, joy.sy, 40, 0, Math.PI*2); ctx.stroke(); }
   const n = others.size;
-  $stat.innerHTML = `${label} · ${n ? `함께 <b>${n + 1}</b>명` : '혼자'}`;
+  $stat.innerHTML = `${label}${st > .2 ? ' · 폭풍' : ''} · ${n ? `함께 <b>${n + 1}</b>명` : '혼자'}`;
 }
 
 /* ---- 저장 (내 위치와 그림첩, 이 브라우저에) ---- */
@@ -1019,7 +1181,7 @@ $reset.addEventListener('click', () => {
 });
 
 const touch = matchMedia('(pointer:coarse)').matches;
-$hint.textContent = (returning ? '다시 왔네요. ' : '') + (touch ? '왼쪽을 끌어 걷고 오른쪽을 끌어 둘러보기' : 'WASD로 걷기 · 마우스를 끌거나 Q·E로 둘러보기 · Enter로 말하기') + ' · 앵무새 곁에서 한 말은 앵무새가 기억해요';
+$hint.textContent = (returning ? '다시 왔네요. ' : '') + (touch ? '왼쪽을 끌어 걷고 오른쪽을 끌어 돌아보기' : 'WASD로 걷기 · 마우스를 끌거나 Q·E로 돌아보기 · Enter로 말하기') + ' · 앵무새 곁에서 한 말은 앵무새가 기억해요';
 setTimeout(() => $hint.style.opacity = 0, 8000);
 
 let last = performance.now();
