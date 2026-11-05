@@ -737,6 +737,7 @@ function billboard(m){
         float breathe = sin( uTime * .5 + ipos.x * .03 + ipos.z * .02 ) * .15;
         local.x += uWind * local.y * .9 * ( gust + breathe ) * ( 1.0 - calm * .7 );
         vec2 dd = cameraPosition.xz - ipos.xz;
+        if ( cameraPosition.y > 4.5 && dot( dd, dd ) < 9.0 ) { gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 ); return; }   // 높은 데서 바로 밑 판은 그리지 않음 (비스듬히 길쭉하게 보여서)
         float ang = atan( dd.x, dd.y ), ca = cos( ang ), sa = sin( ang );
         local = vec3( ca * local.x + sa * local.z, local.y, -sa * local.x + ca * local.z );
         vec3 wp = ipos + local; vec2 dc = wp.xz - cameraPosition.xz;
@@ -1287,7 +1288,7 @@ function openness(){
 function updateRings(camX, camY, camZ, elevP){
   const lift = Math.min(1, elevP/5.2);   // 배경판은 늘 같은 자리·같은 크기. 전망 바위에 올라설 때만 낮아짐
   for (const rg of RINGS) {
-    const R = 30*rg.k, ang = (rg.ang*(1 - lift) + 4*lift)*Math.PI/180;
+    const R = (30 + lift*24)*rg.k, ang = (rg.ang*(1 - lift) + 4*lift)*Math.PI/180;
     rg.me.position.set(camX, -1, camZ);
     rg.me.scale.set(R, camY + 1 + R*Math.tan(ang) - lift*3, R);
   }
@@ -3042,7 +3043,7 @@ function draw(dt = .016){
   scene.background.copy(DAY_SKY).lerp(NIGHT_SKY, nt).lerp(DUSK_SKY, dusk*.75).lerp(STORM_SKY, st*.65); hazeCol.copy(FAR_COL).multiply(tintCol); scene.fog.color.copy(scene.background).lerp(hazeCol, .6).lerp(deepTmp.copy(DEEP_COL).multiply(tintCol), .45);   // 멀수록 흐려지되, 숲 그늘 쪽으로 조금 가라앉은 안개
   openS += (Math.max(0, Math.min(1, (openness() - .35)/.5)) - openS)*Math.min(1, dt*1.2);   // 덤불이 적은 곳일수록
   const view = (1 + elevP*.4)*(1 + openS*1.4)*(energy < 30 ? .55 + .45*energy/30 : 1)*(MOBILE ? .85 : 1);   // 바위 위에선 멀리, 지치면 가까이
-  scene.fog.near = 6 - 2*nt; scene.fog.far = Math.min(44, (38 - 10*nt - 9*st)*view); ringR = Math.max(10, Math.min(27, scene.fog.far)); U.uCull.value = ringR;   // 더 멀리까지 보이게 (안개는 천천히)
+  scene.fog.near = 6 - 2*nt; scene.fog.far = Math.min(44 + elevP*10, (38 - 10*nt - 9*st)*view); ringR = Math.max(10, Math.min(27 + elevP*4, scene.fog.far));   // 높은 곳에선 훨씬 멀리 U.uCull.value = ringR;   // 더 멀리까지 보이게 (안개는 천천히)
   updateRings(camX, CAM_H + elevP, camZ, elevP);
   // 낮엔 옅은 해, 해질녘엔 크고 붉은 해(「해 질 녘의 처녀림」), 밤엔 큰 달(「뱀 부리는 여인」)
   sky.material.map = nt > .55 ? MOON_TEX : dusk > .35 ? RED_SUN_TEX : SUN_TEX;
