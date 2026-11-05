@@ -4055,7 +4055,7 @@ function draw(dt = .016){
   hintButterflies(bf);
   bflyMeshes.forEach((me, i) => { const b = bf[i]; me.visible = !!b; if (b) { me.position.set(b[0], b[1], b[2]); me.rotation.y = yaw; me.scale.x = .3 + Math.abs(Math.sin(clock*16 + b[3]))*.9; } });
   leafMeshes.forEach((me, i) => { const p = parts[i]; me.visible = !!p; if (p) { me.position.set(p.x, p.h, p.y); me.rotation.set(0, yaw, p.rot); } });
-  fireflies.forEach(f => { f.me.visible = nt > .45; if (f.me.visible) f.me.position.set(P.x + f.ox + Math.sin(clock*.5 + f.ph)*.8, .5 + Math.abs(Math.sin(clock*.8 + f.ph))*1.4, P.y + f.oz + Math.cos(clock*.4 + f.ph)*.8); });
+  fireflies.forEach(f => { f.me.visible = nt > .45; if (f.me.visible) { f.me.position.set(P.x + f.ox + Math.sin(clock*.5 + f.ph)*.8, .5 + Math.abs(Math.sin(clock*.8 + f.ph))*1.4, P.y + f.oz + Math.cos(clock*.4 + f.ph)*.8); if (f.me.position.distanceTo(camera.position) < 2.2) f.me.visible = false; } });   // 카메라 바로 앞 반딧불은 커다란 빛 덩어리로 보여서 숨김
   for (const e of EYES) {
     const d = wdist(e.me.position.x, e.me.position.z, P.x, P.y); face(e.me); face(e.mk);
     e.me.visible = nt > .55 && d > 3 && d < 16 && Math.sin(clock*.8 + e.k) < .9;
@@ -4108,7 +4108,7 @@ function draw(dt = .016){
 }
 
 /* ---- 저장 (내 위치와 그림첩, 이 브라우저에) ---- */
-if (location.search.includes('dbg')) window.__g = { P, keys, REGIONS, SITES, STORY_SPOTS, FIRE, WATERFALL, giveMask, get bag(){ return bag; }, PUZZLES, pzSave, lookTargets, sing, get clock(){ return clock; }, get yaw(){ return yaw; }, set yaw(v){ yaw = v; }, get pitch(){ return pitch; }, set pitch(v){ pitch = v; } };   // 시험용 (주소에 ?dbg)
+if (location.search.includes('dbg')) window.__g = { scene, camera, P, keys, REGIONS, SITES, STORY_SPOTS, FIRE, WATERFALL, giveMask, get bag(){ return bag; }, PUZZLES, pzSave, lookTargets, sing, get clock(){ return clock; }, get yaw(){ return yaw; }, set yaw(v){ yaw = v; }, get pitch(){ return pitch; }, set pitch(v){ pitch = v; } };   // 시험용 (주소에 ?dbg)
 const KEY = 'denggul-v3';
 function save(){ if (window.__resetting) return; try { localStorage.setItem(KEY, JSON.stringify({ p:[P.x,P.y], found, c:clock })); } catch (e) {} }
 function load(){
