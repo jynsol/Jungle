@@ -257,7 +257,7 @@ REGIONS.forEach((rg, i) => {
   let end = 28; while (SITES.some(s => wdist(FIRE.x + ux*end, FIRE.y + uy*end, s.cx, s.cy) < 8) && end < 36) end++;
   const ph = i*1.7 + .4; let hx = FIRE.x, hy = FIRE.y;
   for (let t = 3; t <= end; t += .25) {
-    const wob = Math.sin(t*.22 + ph)*2.6 + Math.sin(t*.53 + ph*2)*1.1, x = FIRE.x + ux*t + px*wob, y = FIRE.y + uy*t + py*wob; hx = x; hy = y;
+    const wob = (Math.sin(t*.2 + ph)*4 + Math.sin(t*.47 + ph*2)*2.2)*Math.min(1, t/6), x = FIRE.x + ux*t + px*wob, y = FIRE.y + uy*t + py*wob; hx = x; hy = y;   // 꼬불꼬불
     (rg.pts || (rg.pts = [])).push([x, y]);
     for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
       const tx = Math.floor(x) + dx, ty = Math.floor(y) + dy; if (Math.hypot(tx + .5 - x, ty + .5 - y) > (t % 7 < 2 ? 1.5 : 1.2)) continue;
@@ -286,7 +286,7 @@ REGIONS.forEach((rg, i) => {
 // 노란 나비 공터는 오두막 가는 길가로 (1장)
 { const bs = SITES.find(q => q.key === 'butterflies'), pts = REGIONS[0].pts, p = pts.find(([x, y]) => wdist(x, y, FIRE.x, FIRE.y) > 10) || pts[0];   // 오두막 가는 길 3분의 1쯤
   for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) setT(bs.x + dx, bs.y + dy, FLOOR);   // 옛 자리의 돌은 치움
-  const x = Math.floor(p[0] + 3.2), y = Math.floor(p[1]); bs.x = x; bs.y = y; bs.cx = x + 1; bs.cy = y + 1; clear(x + 1, y + 1, 2.8); }   // 나비 공터엔 돌제단 없이 트인 풀밭
+  const x = Math.floor(p[0] + 6.5), y = Math.floor(p[1]); bs.x = x; bs.y = y; bs.cx = x + 1; bs.cy = y + 1; clear(x + 1, y + 1, 2.8); }   // 나비 공터엔 돌제단 없이 트인 풀밭
 // 길가 덤불: 길 위로 잎이 넘어오지 않게 낮은 풀만
 const TRAIL_EDGE = new Uint8Array(W*H);
 for (let k = 0; k < W*H; k++) if (!TRAIL[k] && type[k] === BUSH) { const x = k % W, y = k / W | 0; if (TRAIL[id(x + 1, y)] || TRAIL[id(x - 1, y)] || TRAIL[id(x, y + 1)] || TRAIL[id(x, y - 1)]) TRAIL_EDGE[k] = 1; }
@@ -458,23 +458,12 @@ function parrotLine(i){   // 말버릇 1칸 + 최근 2칸 중 하나
   const slots = [fav, ...recent].filter(Boolean);
   return slots.length ? slots[Math.random()*slots.length | 0] : null;
 }
-function parrotTalk(p, i, dt){
+function parrotTalk(p, i, dt){   // 앵무새는 가만히 있을 땐 그냥 앵무새답게 가끔 꽥. 눌러야 다음 갈 곳을 외침
   p.cool -= dt;
-  if (i === 0) {   // 모닥불 곁 앵무새: 모닥불에 올 때마다 아직 못 가 본 가장 가까운 곳을 알려 줌
-    const d = wdist(p.x, p.y, P.x, P.y);
-    if (d > 8) p.away = true;
-    if (p.away !== false && d < 5 && !modalOpen() && clock - (p.guideT ?? -99) > 30) {
-      const h = parrotHint(true);
-      if (h) { parrotShow(p, h); p.guideT = clock; p.away = false; p.cool = 14; lastParrot = clock; squawk(); return; }
-    }
-  }
-  if (p.cool > 0 || P.moving || clock - lastParrot < 10 || wdist(p.x, p.y, P.x, P.y) > 3.2) return;
-  let ni = 0, nd = 1e9; PARROTS.forEach((q, j) => { const d = wdist(q.x, q.y, P.x, P.y); if (d < nd) { nd = d; ni = j; } });
-  if (ni !== i) return;   // 가장 가까운 한 마리만
-  const hint = parrotHint(); if (!hint) return;
-  parrotShow(p, hint);   // 앵무새는 늘 '다음에 할 곳'만 외침
-  p.cool = 16 + Math.random()*14; lastParrot = clock; squawk();
+  if (p.cool > 0 || wdist(p.x, p.y, P.x, P.y) > 6 || clock - lastParrot < 12) return;
+  p.cool = 18 + Math.random()*16; lastParrot = clock; if (Math.random() < .5) squawk();
 }
+function parrotAsk(p){ const h = parrotHint(); if (h) parrotShow(p, h); else p.bubble = { text:'꽥!', until:clock + 3 }; squawk(); lastParrot = clock; }
 
 
 /* ---- 나 ---- */
@@ -1163,8 +1152,8 @@ for (const key of [...Object.keys(NEAR_RING), ...STORY_KEYS.filter(k => !NEAR_RI
   const onTrail = (rg, d, side) => { const pts = rg.pts, p = pts.find(([x, y]) => wdist(x, y, rg.hub.x, rg.hub.y) < d) || pts[pts.length - 1], q = pts[Math.max(0, pts.indexOf(p) - 4)], dx = wd(p[0] - q[0], W), dy = wd(p[1] - q[1], H), l = Math.hypot(dx, dy) || 1; return [p[0] - dy/l*side, p[1] + dx/l*side]; };   // 길가 (길 옆으로 side칸)
   { const q = onTrail(REGIONS[0], 22, 1.8); put('mailbox', q[0], q[1], 1.4); }   // 우체통: 처음 바라보는 쪽, 북쪽 길 들머리 옆
   put('galleon', REGIONS[1].hub.x + 1.5, REGIONS[1].hub.y - 1, 3.9);   // 범선: 동쪽 꽃숲에 기운 채 묻힘 (2장)
-  put('gramophone', ...onTrail(REGIONS[2], 15, 2.2), 1.8);   // 물가로 가는 길 중간쯤 길가
-  if (T) { put('clock', ...onTrail(REGIONS[3], 19, 2.2), 1.8); put('piano', ...onTrail(REGIONS[3], 11, -2.4), 2.4); } }   // 폐허로 가는 길: 먼저 괘종시계, 신전 가까이 피아노 (길을 걸으며 하나씩)
+  put('gramophone', ...onTrail(REGIONS[2], 15, 6.5), 1.8);   // 길에서 몇 걸음 들어간 샛길 끝   // 물가로 가는 길 중간쯤 길가
+  if (T) { put('clock', ...onTrail(REGIONS[3], 19, 6.5), 1.8); put('piano', ...onTrail(REGIONS[3], 11, -6.5), 2.4); } }   // 폐허로 가는 길: 먼저 괘종시계, 신전 가까이 피아노 (길을 걸으며 하나씩)
 if (REGIONS[3].temple) VISTA_CLEAR.push({ x:REGIONS[3].temple.cx + .5, y:REGIONS[3].temple.cy + .5, r:5.8 }, { x:REGIONS[3].temple.cx + 7.2, y:REGIONS[3].temple.cy - 2, r:1.6 });
 VISTA_CLEAR.push(...STORY_SPOTS.map(s => ({ x:s.x, y:s.y, r:s.key === 'galleon' ? 4.1 : s.key === 'piano' ? 3 : 1.5 })));
 // 거울 연못: 물을 넓혀 둘레를 걸을 수 있게
@@ -1181,7 +1170,7 @@ const SHORTCUTS = [];
   const ring = [REGIONS[0].hub, REGIONS[1].hub, REGIONS[2].hub, REGIONS[3].hub, BUD_SPOT].map(node);
   for (let i = 0; i < 4; i++) { const A = ring[i], B = ring[i + 1]; let da = B.a - A.a; while (da <= 0) da += Math.PI*2; if (i === 3) { da = B.a - A.a; while (da <= 0) da += Math.PI*2; }
     const pts = [], L = da*(A.r + B.r)/2;
-    for (let t = 0; t <= 1.0001; t += .25/L) { const a = A.a + da*t, r = A.r + (B.r - A.r)*t + Math.sin(t*Math.PI*3 + i)*1.6, x = FIRE.x + Math.sin(a)*r, y = FIRE.y - Math.cos(a)*r; pts.push([x, y]);
+    for (let t = 0; t <= 1.0001; t += .25/L) { const a = A.a + da*t, r = A.r + (B.r - A.r)*t + (Math.sin(t*Math.PI*4 + i)*2.6 + Math.sin(t*Math.PI*9 + i*2)*1.1)*Math.sin(t*Math.PI), x = FIRE.x + Math.sin(a)*r, y = FIRE.y - Math.cos(a)*r; pts.push([x, y]);
       for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const tx = Math.floor(x) + dx, ty = Math.floor(y) + dy; if (Math.hypot(tx + .5 - x, ty + .5 - y) > 1.1) continue; const k = id(tx, ty); if (type[k] === RUIN) continue;
         if (type[k] === WATER && (wdist(tx + .5, ty + .5, REGIONS[2].hub.x, REGIONS[2].hub.y) < 7.5 || wdist(tx + .5, ty + .5, WATERFALL.x, WATERFALL.y) < 5 || wdist(tx + .5, ty + .5, SITE.mirror.cx, SITE.mirror.cy) < 4.5)) continue;   // 연못·폭포 웅덩이·거울 연못은 건드리지 않음 (다른 물은 얕은 여울길로)
         type[k] = FLOOR; TRAIL[k] = 1; } }
@@ -1195,7 +1184,7 @@ const SHORTCUTS = [];
     let best = null, bd = 1e9; for (const k of main) { const d = wdist(k % W + .5, (k / W | 0) + .5, gl.x, gl.y); if (d < bd) { bd = d; best = k; } }
     if (!best || bd < 3) continue;
     const sx = best % W + .5, sy = (best / W | 0) + .5, dx = wd(gl.x - sx, W), dy = wd(gl.y - sy, H), L = Math.hypot(dx, dy), nx = -dy/L, ny = dx/L;
-    for (let t = 0; t <= L - 1.2; t += .3) { const u = t/L, wob = Math.sin(u*Math.PI)*Math.sin(u*7 + gi)*1.4, x = sx + dx*u + nx*wob, y = sy + dy*u + ny*wob, k = id(Math.floor(x), Math.floor(y));
+    for (let t = 0; t <= L - 1.2; t += .3) { const u = t/L, wob = Math.sin(u*Math.PI)*(Math.sin(u*9 + gi)*2.2 + Math.sin(u*17 + gi)*.8), x = sx + dx*u + nx*wob, y = sy + dy*u + ny*wob, k = id(Math.floor(x), Math.floor(y));
       if (type[k] === WATER || type[k] === RUIN) continue; type[k] = FLOOR; TRAIL[k] = 1; } }
   TRAIL_EDGE.fill(0); for (let k = 0; k < W*H; k++) if (!TRAIL[k] && type[k] === BUSH) { const x = k % W, y = k / W | 0; if (TRAIL[id(x + 1, y)] || TRAIL[id(x - 1, y)] || TRAIL[id(x, y + 1)] || TRAIL[id(x, y - 1)]) TRAIL_EDGE[k] = 1; } }
 
@@ -1633,6 +1622,7 @@ function handleTap(x, y){
   if (best.act && wdist(best.x, best.z, P.x, P.y) < (best.reach || 4)) { best.act(); return; }   // 가까이서 누르면 손을 댐
   if (best.act) { const t = best; P.goto = { x:t.x, z:t.z, stop:Math.max(.8, (t.reach || 4)*.7), act:() => { const f = lookTargets().find(q => q.key === t.key && q.act && wdist(q.x, q.z, P.x, P.y) < (q.reach || 4)); if (f) f.act(); }, best:1e9, bestT:clock }; return; }   // 멀리 있는 물건: 걸어가서 손을 댐
   if (best.key === 'galleon' && pzSave.carry > 0 && wdist(best.x, best.z, P.x, P.y) < 6) { hangSail(); return; }
+  if (best.key === 'parrot') { const pp = PARROTS.find(q => q.mesh === best.me); if (pp) { parrotAsk(pp); pokes.push({ me:best.me, t:clock }); return; } }   // 앵무새를 누르면 다음 갈 곳을 알려 줌
   poke(best);   // 멀리서, 또는 손댈 게 없으면: 그 자리에서 움찔하고 소리
   if (!best.noSeen && !seen[best.key]) { seen[best.key] = today(); try { localStorage.setItem('denggul-seen', JSON.stringify(seen)); } catch (er) {} }
 }
