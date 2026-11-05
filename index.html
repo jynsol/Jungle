@@ -1162,6 +1162,7 @@ for (const key of [...Object.keys(NEAR_RING), ...STORY_KEYS.filter(k => !NEAR_RI
 { const wh = REGIONS[2].hub, T = REGIONS[3].temple, put = (k, x, y, r) => { const s = STORY_SPOTS.find(q => q.key === k); s.x = wrapX(Math.floor(x) + .5); s.y = wrapY(Math.floor(y) + .5); clear(s.x, s.y, r); };   // 장마다 그 동네에서 쓰는 물건은 그 동네에
   const onTrail = (rg, d, side) => { const pts = rg.pts, p = pts.find(([x, y]) => wdist(x, y, rg.hub.x, rg.hub.y) < d) || pts[pts.length - 1], q = pts[Math.max(0, pts.indexOf(p) - 4)], dx = wd(p[0] - q[0], W), dy = wd(p[1] - q[1], H), l = Math.hypot(dx, dy) || 1; return [p[0] - dy/l*side, p[1] + dx/l*side]; };   // 길가 (길 옆으로 side칸)
   { const q = onTrail(REGIONS[0], 22, 1.8); put('mailbox', q[0], q[1], 1.4); }   // 우체통: 처음 바라보는 쪽, 북쪽 길 들머리 옆
+  put('galleon', REGIONS[1].hub.x + 1.5, REGIONS[1].hub.y - 1, 3.9);   // 범선: 동쪽 꽃숲에 기운 채 묻힘 (2장)
   put('gramophone', ...onTrail(REGIONS[2], 15, 2.2), 1.8);   // 물가로 가는 길 중간쯤 길가
   if (T) { put('clock', ...onTrail(REGIONS[3], 19, 2.2), 1.8); put('piano', ...onTrail(REGIONS[3], 11, -2.4), 2.4); } }   // 폐허로 가는 길: 먼저 괘종시계, 신전 가까이 피아노 (길을 걸으며 하나씩)
 if (REGIONS[3].temple) VISTA_CLEAR.push({ x:REGIONS[3].temple.cx + .5, y:REGIONS[3].temple.cy + .5, r:5.8 }, { x:REGIONS[3].temple.cx + 7.2, y:REGIONS[3].temple.cy - 2, r:1.6 });
@@ -1171,6 +1172,22 @@ VISTA_CLEAR.push(...STORY_SPOTS.map(s => ({ x:s.x, y:s.y, r:s.key === 'galleon' 
   for (let y = Math.floor(m.cy - 3); y <= m.cy + 3; y++) for (let x = Math.floor(m.cx - 3); x <= m.cx + 3; x++) if (Math.hypot(x + .5 - m.cx, y + .5 - m.cy) < 1.95) setT(x, y, WATER);
   VISTA_CLEAR.push({ x:m.cx, y:m.cy, r:4.2 }); }
 
+// 지름길 둘레길: 장을 풀 때마다 그 지역에서 다음 장 지역으로 바로 가는 길이 열림 (처음엔 덩굴 휘장이 막고 있음)
+//   북 오두막 → 동 범선 → 남 물가 → 서 폐허 → 북서 꽃봉오리
+const BUD_SPOT = { x:wrapX(FIRE.x - 19), y:wrapY(FIRE.y - 19) };   // 4장(꽃봉오리) 자리: 폐허에서 오두막 쪽으로 돌아오는 길목
+clear(BUD_SPOT.x, BUD_SPOT.y, 3.8);
+const SHORTCUTS = [];
+{ const node = p => { const dx = wd(p.x - FIRE.x, W), dy = wd(p.y - FIRE.y, H); return { a:Math.atan2(dx, -dy), r:Math.hypot(dx, dy) }; };
+  const ring = [REGIONS[0].hub, REGIONS[1].hub, REGIONS[2].hub, REGIONS[3].hub, BUD_SPOT].map(node);
+  for (let i = 0; i < 4; i++) { const A = ring[i], B = ring[i + 1]; let da = B.a - A.a; while (da <= 0) da += Math.PI*2; if (i === 3) { da = B.a - A.a; while (da <= 0) da += Math.PI*2; }
+    const pts = [], L = da*(A.r + B.r)/2;
+    for (let t = 0; t <= 1.0001; t += .25/L) { const a = A.a + da*t, r = A.r + (B.r - A.r)*t + Math.sin(t*Math.PI*3 + i)*1.6, x = FIRE.x + Math.sin(a)*r, y = FIRE.y - Math.cos(a)*r; pts.push([x, y]);
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const tx = Math.floor(x) + dx, ty = Math.floor(y) + dy; if (Math.hypot(tx + .5 - x, ty + .5 - y) > 1.1) continue; const k = id(tx, ty); if (type[k] === RUIN) continue;
+        if (type[k] === WATER && (wdist(tx + .5, ty + .5, REGIONS[2].hub.x, REGIONS[2].hub.y) < 7.5 || wdist(tx + .5, ty + .5, WATERFALL.x, WATERFALL.y) < 5 || wdist(tx + .5, ty + .5, SITE.mirror.cx, SITE.mirror.cy) < 4.5)) continue;   // 연못·폭포 웅덩이·거울 연못은 건드리지 않음 (다른 물은 얕은 여울길로)
+        type[k] = FLOOR; TRAIL[k] = 1; } }
+    const gate = pts.find(([x, y]) => wdist(x, y, pts[0][0], pts[0][1]) > 5.5) || pts[2];   // 출발 지역 바로 바깥에 덩굴 휘장
+    const gtiles = []; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const tx = Math.floor(gate[0]) + dx, ty = Math.floor(gate[1]) + dy; if (Math.hypot(tx + .5 - gate[0], ty + .5 - gate[1]) < 1.9 && type[id(tx, ty)] === FLOOR) gtiles.push(id(tx, ty)); }
+    SHORTCUTS.push({ i, pts, gate:{ x:gate[0], z:gate[1] }, tiles:gtiles, open:null }); } }
 // 샛길: 소리 없는 볼거리마다 가까운 짐승 길에서 좁은 오솔길이 갈라져 나감 (풀이 눌린 한 줄)
 { const main = []; for (let k = 0; k < W*H; k++) if (TRAIL[k]) main.push(k);
   const goals = [...SITES.map(s => ({ x:s.cx, y:s.cy })), ...STORY_SPOTS.map(s => ({ x:s.x, y:s.y })), { x:LOOKOUT.x, y:LOOKOUT.y }, { x:WATERFALL.x + 3.5, y:WATERFALL.y + 2.5 }];
@@ -3321,7 +3338,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
 
   /* 8. 꽃숲 (4장): 공터 가운데 커다란 꽃봉오리와 카피바라들. 사람이 다가가면 카피바라가 물러나 숨지만,
         카피바라 탈을 쓰고 곁에 가만히 서 있으면 하나씩 다가와 기대고, 새가 등에 내려앉고, 봉오리가 천천히 열려 빛나는 씨앗 */
-  { const hub = REGIONS[1].hub, C = { x:hub.x, z:hub.y }, FL = { id:'flower', x:hub.x, y:hub.y, done:2, calm:0, thumb:() => BUD_T.image };
+  { const hub = { x:BUD_SPOT.x, y:BUD_SPOT.y }, C = { x:hub.x, z:hub.y }, FL = { id:'flower', x:hub.x, y:hub.y, done:2, calm:0, thumb:() => BUD_T.image };   // 폐허에서 오두막 쪽으로 돌아오는 길목
     const BUD_T = ctex(128, 192, (g) => { g.strokeStyle = RG.line; g.lineWidth = 2.5; g.fillStyle = '#4f7a3e'; g.fillRect(60, 110, 8, 82); g.strokeRect(60, 110, 8, 82);
       for (const s of [-1, 1]) { g.beginPath(); g.ellipse(64 + s*26, 160, 26, 9, s*.5, 0, Math.PI*2); g.fill(); g.stroke(); }
       g.fillStyle = '#d86a8a'; g.beginPath(); g.moveTo(64, 14); g.quadraticCurveTo(104, 70, 70, 118); g.lineTo(58, 118); g.quadraticCurveTo(24, 70, 64, 14); g.fill(); g.stroke(); g.strokeStyle = '#a04a68'; g.beginPath(); g.moveTo(64, 20); g.lineTo(64, 116); g.stroke(); });
@@ -3350,6 +3367,35 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
       seedM.visible = st === 1; if (seedM.visible) place(seedM, C, 1.05 + Math.sin(clock*2)*.04, camX, camZ);
       beacon.visible = st < 2 && d > 6 && d < 40; if (beacon.visible) { const [x, z] = wrapNear(C.x, C.z, camX, camZ); beacon.position.set(x, 4, z); beacon.lookAt(camera.position); beacon.material.opacity = .22 + Math.sin(clock*.8)*.06; } };
     PUZZLES.push(FL); }
+
+  /* 2장 범선 (첫 모양): 동쪽 꽃숲에 기울어 묻힌 범선. 배 밑창에 물이 가득 차 있음. 수달 탈을 쓰고 들여다보면 물속으로 들어가 밑창 마개를 뽑음 → 물이 빠지며 남쪽 물가로 가는 물길이 드러남
+        (나중에 배 안을 걸어 다니는 큰 퍼즐로 키울 자리) */
+  { const gs = spot('galleon'), GL = { id:'galleon', x:gs.x, y:gs.z, done:1, thumb:() => STORIES.find(q => q.key === 'galleon').me.material.map.image };
+    const HATCH = { x:gs.x - .6, z:wrapY(gs.z + 1.6) };
+    const paintHold = g => { const b = g.createLinearGradient(0, 0, 0, 300); b.addColorStop(0, '#2a5a6a'); b.addColorStop(1, '#0c2230'); g.fillStyle = b; g.fillRect(0, 0, 300, 300);
+      g.strokeStyle = 'rgba(40,24,12,.8)'; g.lineWidth = 10; for (let i = 0; i < 6; i++) { g.beginPath(); g.moveTo(-20, 60 + i*44); g.quadraticCurveTo(150, 30 + i*44, 320, 60 + i*44); g.stroke(); }
+      g.fillStyle = 'rgba(200,230,240,.5)'; for (let i = 0; i < 14; i++) { g.beginPath(); g.arc((i*47 + clock*20) % 300, 290 - ((clock*40 + i*37) % 290), 3 + (i % 3), 0, Math.PI*2); g.fill(); }
+      if (!GL.pulled) { g.fillStyle = '#7a5530'; g.strokeStyle = '#2a1808'; g.lineWidth = 3; g.fillRect(132, 236, 36, 30); g.strokeRect(132, 236, 36, 30); g.fillStyle = '#c8a24a'; g.beginPath(); g.arc(150, 230, 9, 0, Math.PI*2); g.fill(); g.stroke(); } };   // 밑창의 나무 마개
+    const tapHold = (x, y) => { if (GL.pulled || Math.abs(x - 150) > 34 || y < 210) return; GL.pulled = true; CARD.paint(); for (let i = 0; i < 8; i++) setTimeout(() => tick(120 + Math.random()*60, .25, .07, 'sine'), i*160); setTimeout(() => { CARD.close(); setPzStep(GL, 1); pzSfx.chime(.1); }, 1600); };
+    GL.targets = () => pzStep(GL) >= 1 ? [] : [{ key:'pz-hatch', noSeen:true, x:HATCH.x, h:.5, z:HATCH.z, reach:3, act:() => {
+      if (pzSave.mask !== 'otter') { want(MASK_TEX.otter[1], HATCH.x, 1.4, HATCH.z); tick(200, .3, .05, 'sine'); return; }   // 물이 차서 못 들어감 → 수달 탈을 떠올림
+      tick(300, .4, .06, 'sine'); CARD.open(paintHold, tapHold); const t0 = clock, rp = () => { if (!cardV.hidden && clock - t0 < 30) { CARD.paint(); requestAnimationFrame(rp); } }; rp(); } }];
+    GL.update = () => {};
+    PUZZLES.push(GL); }
+
+  /* 지름길: 장을 풀면 덩굴 휘장이 걷히고 다음 장으로 바로 가는 둘레길이 열림 */
+  { const CURTAIN_T = ctex(160, 140, (g) => { for (let i = 0; i < 14; i++) { const x = 6 + i*11; g.strokeStyle = ['#3e6a32', '#2f5a2a', '#4f7a3e'][i % 3]; g.lineWidth = 4; g.beginPath(); g.moveTo(x, 0); g.quadraticCurveTo(x + (i % 2 ? 8 : -8), 70, x + 2, 132 - (i % 4)*8); g.stroke();
+      for (let j = 0; j < 4; j++) leafShape(g, x + 2, 20 + j*30 + (i % 3)*6, 14, (i + j) % 2 ? .6 : -.6 + Math.PI, COLORS.leaves[(i + j) % 4], .4); } g.strokeStyle = '#5a3c22'; g.lineWidth = 7; g.beginPath(); g.moveTo(0, 4); g.lineTo(160, 4); g.stroke(); });
+    onArt('vine_curtain', im => swapTex(CURTAIN_T, im));
+    const OPEN_IF = [() => pzStep(PUZZLES.find(q => q.id === 'sloth')) >= 6, () => pzStep(PUZZLES.find(q => q.id === 'galleon')) >= 1, () => pzStep(PUZZLES.find(q => q.id === 'cave')) >= 3, () => pzStep(PUZZLES.find(q => q.id === 'temple')) >= 4];
+    const GT = { id:'gates', optional:true, x:FIRE.x, y:FIRE.y, done:9, thumb:() => null };
+    for (const sc of SHORTCUTS) { sc.m = cutout(plane(2.8, 2.4), mat(CURTAIN_T)); sc.post = [-1.3, 1.3].map(() => cutout(plane(.3, 2.6), mat(LOG_TEX))); sc.t = -99; }
+    GT.targets = () => SHORTCUTS.filter(sc => !sc.open && wdist(P.x, P.y, sc.gate.x, sc.gate.z) < 6).map(sc => ({ key:'pz-curtain', noSeen:true, x:sc.gate.x, h:1.2, h0:.2, h1:2.3, z:sc.gate.z, reach:3, me:sc.m, act:() => { pzSfx.rope(.05); sc.shake = clock; } }));   // 손으로는 안 걷힘
+    GT.update = (dt, camX, camZ) => { SHORTCUTS.forEach((sc, i) => { const open = OPEN_IF[i](); if (open !== sc.open) { sc.open = open; for (const k of sc.tiles) type[k] = open ? FLOOR : RUIN; if (open) { sc.t = clock; if (wdist(P.x, P.y, sc.gate.x, sc.gate.z) < 30) { pzSfx.rope(.08); setTimeout(() => pzSfx.chime(.06), 900); } } }
+      const k = sc.open ? Math.min(1, (clock - sc.t)/2.5) : 0, [x, z] = wrapNear(sc.gate.x, sc.gate.z, camX, camZ); sc.m.visible = k < 1;
+      if (sc.m.visible) { sc.m.position.set(x, k*2.6, z); sc.m.lookAt(camera.position.x, k*2.6, camera.position.z); sc.m.scale.set(1, 1 - k*.9, 1); sc.m.rotation.z = clock - (sc.shake || -9) < .6 ? Math.sin((clock - sc.shake)*30)*.04 : 0; }
+      const ang = Math.atan2(camX - x, camZ - z); sc.post.forEach((m, j) => { m.position.set(x + Math.cos(ang)*(j ? 1.4 : -1.4), 0, z - Math.sin(ang)*(j ? 1.4 : -1.4)); m.rotation.y = ang; m.visible = true; }); }); };
+    PUZZLES.push(GT); }
 
   /* 9. 끝맺음: 모닥불 곁에 빛나는 씨앗을 심으면 숲에 밤이 내리고, 도와준 동물들이 하나씩 모닥불 둘레에 모여 앉음.
         다 모이면 노래를 다섯 번 부르면 모두 따라 부르며 씨앗이 커다란 꽃으로 피어오르고 끝맺음 그림 */
@@ -3645,7 +3691,7 @@ function placeThumb(kind, key){   // 앵무새 그림 풍선에 넣을 장소 �
     if (kind === 'pz') return PUZZLES.find(q => q.id === key).thumb();
   } catch (e) {} return null;
 }
-const MAIN_PATH = ['letter', 'butterfly', 'toucan', 'sloth', 'gramo', 'pond', 'cave', 'temple', 'clock', 'piano', 'flower', 'chorus'];   // 장 순서대로 '다음에 할 곳'
+const MAIN_PATH = ['letter', 'butterfly', 'toucan', 'sloth', 'galleon', 'gramo', 'pond', 'cave', 'temple', 'clock', 'piano', 'flower', 'chorus'];   // 장 순서대로 '다음에 할 곳'
 function parrotHint(){
   for (const id of MAIN_PATH) { const p = PUZZLES.find(q => q.id === id); if (!p || pzStep(p) >= p.done) continue;
     if ((id === 'clock' || id === 'piano') && pzStep(PUZZLES.find(q => q.id === 'temple')) < 2) continue;   // 신전 안을 본 뒤에
@@ -3653,7 +3699,7 @@ function parrotHint(){
     const t = { kind:'pz', key:id, x:p.x, y:p.y }; t.img = placeThumb('pz', id); return t.img ? t : { ...t, img:null }; }
   return null;
 }
-const PLACE_WORD = { waterfall:'폭포', lookout:'바위', sloth:'나무늘보', letter:'우체통', butterfly:'노란 나비', toucan:'큰부리새', gramo:'축음기', pond:'개구리', cave:'폭포', temple:'신전', clock:'괘종시계', piano:'피아노', flower:'꽃숲', chorus:'모닥불' };
+const PLACE_WORD = { waterfall:'폭포', lookout:'바위', sloth:'나무늘보', letter:'우체통', butterfly:'노란 나비', toucan:'큰부리새', gramo:'축음기', pond:'개구리', cave:'폭포', temple:'신전', clock:'괘종시계', piano:'피아노', flower:'꽃봉오리', chorus:'모닥불', galleon:'범선' };
 function placeWord(t){ if (t.kind === 'site') return SITE[t.key].name.split(' ').pop(); if (t.kind === 'story') return STORY_INFO[t.key].name.split(' ').pop(); return PLACE_WORD[t.key || t.kind] || '저기'; }
 function parrotShow(p, t){   // 앵무새답게 이름을 두 번 외치고 그쪽으로 고개를 돌림
   const w = placeWord(t); p.bubble = { text:`${w}! ${w}!`, until:clock + 6 };
