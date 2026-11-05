@@ -238,6 +238,16 @@ SITES.forEach((s,i) => {
   for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) setT(x+dx, y+dy, s.key === 'mirror' ? WATER : RUIN);
   if (s.key === 'labels') { setT(x-2, y-1, TREE); setT(x+3, y+2, TREE); setT(x+3, y-1, WATER); }
 });
+// 퍼즐 자리(길 끝)와 겹친 이야기 자리는 다른 곳으로 옮김 (다른 자리는 그대로 두려고 뽑기 순서는 건드리지 않음)
+{ const nearHub = (px, py) => REGIONS.some(r => { const a = r.ang*Math.PI/180; return wdist(px, py, SX + .5 + Math.sin(a)*28, SY + .5 - Math.cos(a)*28) < 10; });
+  for (const s of SITES) { if (!nearHub(s.cx, s.cy)) continue;
+    for (let k = 1; k < 800; k++) { const a = k*2.39996, d = 18 + (k % 20), x = Math.floor(wrapX(SX + Math.cos(a)*d)), y = Math.floor(wrapY(SY + Math.sin(a)*d));
+      if (nearHub(x + 1, y + 1) || SITES.some(o => o !== s && wdist(o.x, o.y, x, y) < 16)) continue;
+      s.x = x; s.y = y; s.cx = x + 1; s.cy = y + 1;
+      for (let cx = Math.min(SX,x); cx <= Math.max(SX,x); cx++) if (type[id(cx,SY)] !== FLOOR) setT(cx,SY,BUSH);
+      for (let cy = Math.min(SY,y); cy <= Math.max(SY,y); cy++) if (type[id(x,cy)] !== FLOOR) setT(x,cy,BUSH);
+      clear(x+1, y+1, 2.8); for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) setT(x+dx, y+dy, RUIN);
+      break; } } }
 clear(SX+.5, SY+.5, 3.2);
 // 짐승 길: 모닥불에서 네 지역으로 풀이 눌린 오솔길. 길 끝이 그 지역의 퍼즐 자리
 const TRAIL = new Uint8Array(W*H);
