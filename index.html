@@ -1532,6 +1532,7 @@ let lookT = -9, pitchHint = 0, still = 0, obs = 0, pitch = 0, spawned = false, l
 let seen = {}; try { seen = JSON.parse(localStorage.getItem('denggul-seen')) || {}; } catch (e) {}
 cv.addEventListener('pointermove', e => { if (look && e.pointerId === look.id) { const dy = e.clientY - (look.py ?? e.clientY); look.py = e.clientY; pitch = Math.max(-.35, Math.min(1.05, pitch - dy*.006)); lookT = clock; } });
 function spawnCritters(){
+  if ((window.CAVE && window.CAVE.inside(P.x, P.y)) || (window.TEMPLE_IN && window.TEMPLE_IN())) return;   // 동굴·신전 안엔 새·원숭이가 나오지 않음
   const keys = Object.keys(CR_TYPES), tot = keys.reduce((a, k) => a + CR_TYPES[k].wt, 0);
   for (let i = 0; i < 3; i++) for (let tries = 0; tries < 25; tries++) {
     let u = Math.random()*tot, key = keys[0]; for (const k of keys) { if ((u -= CR_TYPES[k].wt) <= 0) { key = k; break; } }
