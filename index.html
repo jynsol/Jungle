@@ -1516,6 +1516,7 @@ function lookTargets(){
   L.push({ key:'waterfall', x:WATERFALL.x, h:2.6, z:WATERFALL.y - 3.1 }, { key:'lookout', x:LOOKOUT.x, h:elevAt(LOOKOUT.x, LOOKOUT.y) + .6, z:LOOKOUT.y });
   if (false) for (const r of ribbons) L.push({ key:'ribbon', x:r.me.position.x, h:1.2, z:r.me.position.z, noSeen:true, me:r.me,
     info:{ name:r.mine ? '내 리본' : `${r.name || '누군가'}의 리본`, text:'여기까지 왔었다는 표시예요. 리본을 따라가면 그 사람이 걸은 길이에요.' } });
+  for (const p of PICKS) if (p.me.visible && wdist(p.x, p.z, P.x, P.y) < 6) L.push({ key:'pick', noSeen:true, x:p.x, h:.25, z:p.z, reach:3.5, act:() => collectPick(p) });
   for (const pz of PUZZLES) L.push(...pz.targets());
   return L;
 }
@@ -1827,12 +1828,13 @@ function updatePicks(camX, camZ){
     if (!up) continue;
     p.me.position.y = .08 + Math.abs(Math.sin(clock*2 + p.k))*.04;
     p.me.rotation.y = Math.atan2(camX - p.me.position.x, camZ - p.me.position.z);
-    if (wdist(p.x, p.z, P.x, P.y) < .7) {
-      if ((bag[p.key] || 0) >= BAG_MAX) continue;   // 바구니가 차면 그냥 그 자리에 둠
-      picked[p.k] = now; bag[p.key] = (bag[p.key] || 0) + 1; saveBag(); paintBag(); paintFire();
-      pickFx.push({ key:p.key, x:p.x, z:p.z, t:clock }); pickChime();
-    }
+    if (wdist(p.x, p.z, P.x, P.y) < .7) collectPick(p);
   }
+}
+function collectPick(p){   // 걸어서 지나가거나, 눌러서 주움
+  if ((bag[p.key] || 0) >= BAG_MAX || (picked[p.k] && Date.now() - picked[p.k] <= REGROW)) return;   // 바구니가 차면 그냥 그 자리에 둠
+  picked[p.k] = Date.now(); bag[p.key] = (bag[p.key] || 0) + 1; saveBag(); paintBag(); paintFire();
+  pickFx.push({ key:p.key, x:p.x, z:p.z, t:clock }); pickChime();
 }
 // 주운 열매: 천천히 떠올라 돌다가 빛 알갱이로 흩어짐
 const pickFx = [];
@@ -2275,7 +2277,7 @@ const pzSfx = {
    ④ 사다리로 올라가 발판 위를 걸음: 상자 속 돛 두루마리, 망원경(다음 갈 곳이 크게 보임), 오두막 */
 const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
 {
-  const hub = REGIONS[0].hub, DECK = 8, MY = DECK + 2.1;   // 발판은 숲 지붕 위, 원숭이는 그 위 잎 덩어리
+  const hub = REGIONS[0].hub, DECK = 7, BR = 4.6, MY = 5.4;   // 발판은 숲 지붕 위, 나무늘보는 눈에 보이는 낮은 가지(BR), 원숭이는 그 위 가지(MY)
   const W_ = (dx, dz) => ({ x:wrapX(hub.x + dx), z:wrapY(hub.y + dz) });   // 나무 둘레의 고정된 자리 (모닥불 쪽이 +z)
   const SPOT = { sloth:W_(1.4, 1.6), ladder:W_(-1.4, 1.6), vine:W_(.35, 2.05), monkey:W_(.7, .9), hut:W_(-.5, -1.25), chest:W_(1.05, -.85), spy:W_(1.75, -.1) };
   const plat = { x:hub.x, y:hub.y, r:2.15, inner:.55, h:DECK }; PLATS.push(plat);
@@ -2377,7 +2379,8 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
   const tree = cutout(plane(7.5, 13), mat(TREE_T));
   const deck = cutout(new THREE.CircleGeometry(2.45, 40), mat(DECK_T, true, { alphaTest:.3 })); deck.rotation.x = -Math.PI/2;
   const sloth = cutout(plane(1.1, 1.45), mat(ST.idle));
-  const vine = cutout(plane(.38, DECK - 1.3), mat(VINE_T));
+  const vine = cutout(plane(.38, BR - 1.3), mat(VINE_T));
+  const brS = cutout(plane(1.9, .32), mat(LOG_TEX)), brM = cutout(plane(1.5, .28), mat(LOG_TEX));   // 나무늘보와 원숭이가 앉은 가지
   const basket = cutout(plane(.95, .72), mat(BASKET_T));
   const inBasket = cutout(plane(.42, .42), mat(ITEMS.banana.tex));
   const rope = cutout(plane(.04, 1), new THREE.MeshBasicMaterial({ color:'#7a5a32' }));
@@ -2394,7 +2397,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
   const hutGlow = cutout(plane(2.2, 2.2, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.5 }));
   onArt('bigtree', im => { swapTex(TREE_T, im); fitGeo(tree, 13, im); });
   for (const k of ['idle', 'eat', 'sleep']) onArt('sloth_' + k, im => { swapTex(ST[k], im); if (k === 'idle') fitGeo(sloth, 1.45, im); });
-  onArt('vine', im => { swapTex(VINE_T, im); fitGeo(vine, DECK - 1.3, im); });
+  onArt('vine', im => { swapTex(VINE_T, im); fitGeo(vine, BR - 1.3, im); });
   onArt('basket', im => { swapTex(BASKET_T, im); fitGeo(basket, .72, im); });
   onArt('item_sail', im => swapTex(ROLL_T, im));
   onArt('ladder', im => swapTex(LADDER_T, im)); onArt('ladder_rolled', im => swapTex(ROLLED_T, im)); onArt('treehut', im => { swapTex(HUT_T, im); fitGeo(hut, 2.1, im); });
@@ -2403,7 +2406,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
   window.SAIL_ROLL_T = ROLL_T; ROLL_T.userData.keep = true;
   // 단계: 0 잠듦, 1 깨어남, 2 바나나 바구니 올라감(먹음), 3 기어가서 매듭 풂, 4 사다리 풀려 내려옴, 5 사다리 내려와 있음, 6 상자에서 두루마리 꺼냄
   const SL = { id:'sloth', x:hub.x, y:hub.y, done:6, t:0, last:-1, react:null, trial:null, bi:null, orange:null, throwT:3, snd:false, thumb:() => ST.idle.image };
-  const LOW = .02, HIGH = DECK - 2.3, near = (r = 14) => Math.max(0, 1 - wdist(P.x, P.y, hub.x, hub.y)/r);
+  const LOW = .02, HIGH = BR - 2.2, near = (r = 14) => Math.max(0, 1 - wdist(P.x, P.y, hub.x, hub.y)/r);
   let bh = LOW, slothAt = { ...SPOT.sloth }, stars = null, spyOn = null, toss = null, birdT = -9, doorT = -9, blurT = -9;
   const LENS_DROP = W_(.2, 2.6);   // 원숭이가 떨어뜨린 렌즈가 놓이는 곳
   // 원숭이에게 열매 던지기: 망고면 받고 렌즈를 떨어뜨림, 다른 건 도로 던짐
@@ -2428,7 +2431,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
   const onGround = () => !P.onPlat && !P.climb;
   const putIn = { x:SPOT.basket, z:0,
     give(k){ if (SL.trial || pzStep(SL) >= 2) return; bag[k]--; saveBag(); paintBag(); paintFire(); pzSfx.thump(.08); SL.bi = k; },
-    want(){ wants.push({ x:slothAt.x, h:5, z:slothAt.z, key:'banana', until:clock + 3.5 }); pzSfx.hm(.06); } };
+    want(){ wants.push({ x:slothAt.x, h:BR + .2, z:slothAt.z, key:'banana', until:clock + 3.5 }); pzSfx.hm(.06); } };
   const pull = () => {
     SL.react = { kind:'vine', t:clock }; const st = pzStep(SL);
     if (SL.trial || st >= 2) return;
@@ -2448,11 +2451,11 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     L.push({ key:'pz-tree', noSeen:true, x:hub.x, h:1.4, h0:.2, h1:4.5, z:hub.y, reach:4, me:tree,
       act:() => { [0, .16].forEach(d => setTimeout(() => tick(170, .12, .14, 'triangle'), d*1000));
         for (let i = 0; i < 6; i++) { const a = Math.random()*6.28; parts.push({ x:hub.x + Math.cos(a)*1.8, y:hub.y + Math.sin(a)*1.8, vx:(Math.random() - .5)*.3, vy:(Math.random() - .5)*.3, life:3.4, rot:a, h:DECK - 1 + Math.random(), vh:-.2 }); } } });
-    L.push({ key:'sloth', noSeen:true, x:slothAt.x, h:4.8, h0:4.1, h1:5.5, z:slothAt.z, reach:5.5, me:sloth,
+    L.push({ key:'sloth', noSeen:true, x:slothAt.x, h:BR - .7, h0:BR - 1.45, h1:BR, z:slothAt.z, reach:5.5, me:sloth,
       act:() => { const s = pzStep(SL); if (s === 0) { pzSfx.hm(.05); sfx((ac, t) => { const src = ac.createBufferSource(), lp = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = noiseBuf(ac, 1.2); lp.type = 'lowpass'; lp.frequency.value = 300; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.08, t + .5); g.gain.exponentialRampToValueAtTime(.0001, t + 1.1); src.connect(lp).connect(g).connect(ac.destination); src.start(t); src.stop(t + 1.2); }); }
         else if (s === 1) putIn.want(); else { SL.react = { kind:'blink', t:clock }; pzSfx.hm(.05); } } });
     if (!up) {
-      L.push({ key:'pz-vine', noSeen:true, x:SPOT.vine.x, h:1.8, h0:1.3, h1:5.4, z:SPOT.vine.z, reach:4, act:pull });
+      L.push({ key:'pz-vine', noSeen:true, x:SPOT.vine.x, h:1.8, h0:1.3, h1:BR, z:SPOT.vine.z, reach:4, act:pull });
       L.push({ key:'pz-basket', noSeen:true, x:SPOT.sloth.x, h:bh + .4, h0:bh, h1:bh + .75, z:SPOT.sloth.z, reach:4, me:basket,
         act:() => { if (SL.trial || bh > .3 || pzStep(SL) >= 2) return;
           if (SL.bi) { bag[SL.bi] = (bag[SL.bi] || 0) + 1; saveBag(); paintBag(); pickFx.push({ key:SL.bi, x:SPOT.sloth.x, z:SPOT.sloth.z, t:clock }); SL.bi = null; pickChime(); return; }
@@ -2499,11 +2502,11 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     if (st === 2 && el > 8.6) bh = HIGH + (LOW - HIGH)*ease((el - 8.6)/3);
     const tr = SL.trial;
     if (tr) { const te = clock - tr.t; bh = te < 4 ? LOW + (HIGH - LOW)*ease(te/4) : te < 6.5 ? HIGH : LOW + (HIGH - LOW)*(1 - ease((te - 6.5)/4));
-      if (te > 4 && !tr.seen) { tr.seen = true; if (tr.kind === 'sleep') { SL.react = { kind:'snore', t:clock }; } else { SL.react = { kind:'no', t:clock }; pzSfx.hm(.08*near()); wants.push({ x:slothAt.x, h:5, z:slothAt.z, key:'banana', until:clock + 3 }); } }
+      if (te > 4 && !tr.seen) { tr.seen = true; if (tr.kind === 'sleep') { SL.react = { kind:'snore', t:clock }; } else { SL.react = { kind:'no', t:clock }; pzSfx.hm(.08*near()); wants.push({ x:slothAt.x, h:BR + .2, z:slothAt.z, key:'banana', until:clock + 3 }); } }
       if (te > 6.5 && !tr.down) { tr.down = true; pzSfx.rope(.06*near()); }
       if (te > 10.5) SL.trial = null; }
     { const [x, z] = at(SPOT.sloth); basket.position.set(x, bh, z); face(basket, x, z); basket.rotation.z = (bh > LOW + .05 && bh < HIGH - .05) ? Math.sin(clock*3)*.07 : 0;
-      rope.position.set(x, bh + .62, z); rope.scale.set(1, Math.max(.01, DECK - (bh + .62)), 1); face(rope, x, z);
+      rope.position.set(x, bh + .62, z); rope.scale.set(1, Math.max(.01, BR - (bh + .62)), 1); face(rope, x, z);
       const item = st === 2 && el < 4.6 ? 'banana' : st < 2 ? SL.bi : null; inBasket.visible = !!item;
       if (item) { if (inBasket.material.map !== ITEMS[item].tex) { inBasket.material.map = ITEMS[item].tex; inBasket.material.needsUpdate = true; } inBasket.position.set(x, bh + .5, z); face(inBasket, x, z); } }
     // 나무늘보: 자다가 → 깨어 → 먹고 → 발판 밑을 기어 사다리 매듭으로
@@ -2515,7 +2518,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     if (r && (r.kind === 'blink' || r.kind === 'wake') && re < 1.2) tilt += .14*Math.sin(re*Math.PI/1.2);
     const eating = st === 2 && el > 4 && el < 8.6;
     sloth.material.map = eating ? ST.eat : (st === 0 || st >= 5) ? ST.sleep : ST.idle;
-    { const [x, z] = at(slothAt); sloth.position.set(x, DECK - 1.5 - (eating ? .06 : 0), z); face(sloth, x, z); sloth.rotation.z = tilt + (st === 3 ? Math.sin(clock*2)*.06 : 0); }
+    { const [x, z] = at(slothAt); sloth.position.set(x, BR - 1.45 + crawl*(DECK - BR) - (eating ? .06 : 0), z);   // 다 먹으면 줄기를 타고 발판 끝 매듭까지 기어오름 face(sloth, x, z); sloth.rotation.z = tilt + (st === 3 ? Math.sin(clock*2)*.06 : 0); }
     // 사다리: 말려 있다가 → 풀려 내려옴
     { const [x, z] = at(SPOT.ladder); rolled.visible = st < 4; rolled.position.set(x, DECK - .05, z); face(rolled, x, z); rolled.rotation.z = st === 3 && el > 6 ? Math.sin(clock*14)*.1 : 0;
       ladder.visible = st >= 4; const k = st === 4 ? ease(el/2.2) : 1; ladder.scale.set(1, Math.max(.02, k), 1); ladder.position.set(x, DECK, z); face(ladder, x, z); ladder.rotation.z = st === 4 ? Math.sin(el*6)*.06*(1 - k) : 0; }
@@ -2531,15 +2534,17 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     if (r && r.kind === 'vine' && re < 1.4) { vw += Math.sin(re*12)*.08*(1 - re/1.4); vy -= Math.sin(Math.min(1, re/.5)*Math.PI)*.35; }
     { const [x, z] = at(SPOT.vine); vine.position.set(x, vy, z); face(vine, x, z); vine.rotation.z = vw; }
     // 원숭이: 나무 아래로 오면 오렌지를 던짐 (나무늘보가 깨면 그만)
+    { const [x, z] = at(SPOT.sloth); brS.position.set(x, BR - .1, z); face(brS, x, z); }
+    { const [x, z] = at(SPOT.monkey); brM.position.set(x, MY - .12, z); face(brM, x, z); }
     { const [x, z] = at(SPOT.monkey); monkey.position.set(x, MY + Math.abs(Math.sin(clock*1.3))*.03, z); face(monkey, x, z); monkey.rotation.z = Math.sin(clock*.7)*.05; }
-    if (onGround() && d < 4.2) pitchHint = .75;   // 나무 밑에선 위를 보게
+    if (onGround() && d < 4.5) pitchHint = .6;   // 나무 밑에선 위를 보게
     if (st === 0 && onGround() && d < 4.5 && !SL.orange && (SL.throwT -= dt) <= 0) { SL.throwT = 3.5 + Math.random()*2.5; throwOrange(); }
     const o = SL.orange;
     if (o) { const k = clock - o.t; orange.visible = true; let px, pz, py;
       if (k < .9) { const u = k/.9; px = o.x0 + wd(o.x1 - o.x0, W)*u; pz = o.z0 + wd(o.z1 - o.z0, H)*u; py = MY - .05 + (1.5 - MY + .05)*u + Math.sin(u*Math.PI)*1.6; }
-      else if (o.under) { const u = Math.min(1, (k - .9)/.6); px = o.x1; pz = o.z1; py = 1.5 + (DECK - 1.6 - 1.5)*Math.sin(u*Math.PI/2);   // 머리에서 튀어 올라 나무늘보에게
+      else if (o.under) { const u = Math.min(1, (k - .9)/.6); px = o.x1; pz = o.z1; py = 1.5 + (BR - 1 - 1.5)*Math.sin(u*Math.PI/2);   // 머리에서 튀어 올라 나무늘보에게
         if (u >= 1 && !o.hit2) { o.hit2 = true; tick(520, .1, .1, 'triangle'); if (o.wakes) setPzStep(SL, 1); else SL.react = { kind:'blink', t:clock }; }
-        if (k > 1.5) { const u2 = Math.min(1, (k - 1.5)/.7); py = DECK - 1.6 - (DECK - 1.8)*u2*u2; } }
+        if (k > 1.5) { const u2 = Math.min(1, (k - 1.5)/.7); py = BR - 1 - (BR - 1.2)*u2*u2; } }
       else { const u = Math.min(1, (k - .9)/.9); px = o.x1 + .8*u; pz = o.z1; py = Math.max(.12, 1.5 + Math.sin(u*Math.PI)*.8 - 1.4*u); }
       if (k > .9 && !o.hit) { o.hit = true; tick(560, .1, .12, 'triangle'); if (wdist(P.x, P.y, o.x1, o.z1) < 1.2) stars = { t:clock }; }
       const [ox, oz] = wrapNear(px, pz, camX, camZ); orange.position.set(ox, py, oz); orange.lookAt(camera.position);
@@ -2633,11 +2638,11 @@ function maskPaint(kind, view){   // view: 0 뒤, 1 앞, 2 옆(오른쪽을 봄)
 const MASK_TEX = Object.fromEntries(Object.keys(MASKS).map(k => [k, [0, 1, 2].map(v => maskPaint(k, v))]));
 for (const k in MASK_TEX) for (const t of MASK_TEX[k]) t.userData.keep = true;
 for (const k of Object.keys(MASKS)) ['back', 'front', 'side'].forEach((v, i) => onArt(`mask_${k}_${v}`, im => swapTex(MASK_TEX[k][i], im)));
-const maskGeo = plane(.34, .34, false);
+const maskGeo = plane(.2, .2, false);
 function wearMask(mesh, kind, row){   // 사람 그림에 탈을 얹음 (그림과 같이 돌고 뒤집힘)
   let m = mesh.userData.maskMesh;
-  if (!m) { m = new THREE.Mesh(maskGeo, mat(MASK_TEX.ocelot[1])); m.position.set(0, .96, .02); mesh.add(m); mesh.userData.maskMesh = m; }
-  m.visible = !!(kind && MASK_TEX[kind]); if (!m.visible) return;
+  if (!m) { m = new THREE.Mesh(maskGeo, mat(MASK_TEX.ocelot[1])); m.position.set(0, .93, .02); mesh.add(m); mesh.userData.maskMesh = m; }
+  m.visible = !!(kind && MASK_TEX[kind]) && row !== 0; if (!m.visible) return;   // 뒤에서 보면 모자에 가려 안 보임
   const t = MASK_TEX[kind][row ?? 1]; if (m.material.map !== t) { m.material.map = t; m.material.needsUpdate = true; }
 }
 // 처음 들어오면 탈을 고름
