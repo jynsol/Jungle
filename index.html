@@ -1505,11 +1505,15 @@ cv.addEventListener('pointerup', e => {
   if (moved < 9 && quick) handleTap(e.clientX, e.clientY);   // 거의 안 움직이고 뗐으면 누른 것
 });
 function handleTap(x, y){
-  let best = null, bd = 64*64;
+  let best = null, bd = (MOBILE ? 80 : 64)**2;
+  const segD = (a, b) => { const vx = b[0] - a[0], vy = b[1] - a[1], l = vx*vx + vy*vy || 1, u = Math.max(0, Math.min(1, ((x - a[0])*vx + (y - a[1])*vy)/l)); return (a[0] + vx*u - x)**2 + (a[1] + vy*u - y)**2; };
   for (const t of lookTargets()) {
     if (wdist(t.x, t.z, P.x, P.y) > 13) continue;
-    const s = toScreen(t.x, t.h, t.z); if (!s) continue;
-    const d = (s[0] - x)**2 + (s[1] - y)**2; if (d < bd) { bd = d; best = t; }
+    let d;
+    if (t.h0 != null) { const a = toScreen(t.x, t.h0, t.z), b = toScreen(t.x, t.h1, t.z); if (!a || !b) continue; d = segD(a, b); }   // 긴 물건은 길이 전체가 눌림
+    else { const s = toScreen(t.x, t.h, t.z); if (!s) continue; d = (s[0] - x)**2 + (s[1] - y)**2; }
+    if (t.act && wdist(t.x, t.z, P.x, P.y) < (t.reach || 4)) d *= .45;   // 손닿는 곳에 있는 건 더 잘 잡힘
+    if (d < bd) { bd = d; best = t; }
   }
   if (!best) return;
   if (best.act && wdist(best.x, best.z, P.x, P.y) < (best.reach || 4)) { best.act(); return; }   // 가까이서 누르면 손을 댐
@@ -2364,27 +2368,27 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
   }
   SL.targets = () => {
     const st = pzStep(SL), L = [], up = !!P.onPlat;
-    L.push({ key:'pz-tree', noSeen:true, x:hub.x, h:1.4, z:hub.y, reach:4, me:tree,
+    L.push({ key:'pz-tree', noSeen:true, x:hub.x, h:1.4, h0:.2, h1:4.5, z:hub.y, reach:4, me:tree,
       act:() => { [0, .16].forEach(d => setTimeout(() => tick(170, .12, .14, 'triangle'), d*1000));
         for (let i = 0; i < 6; i++) { const a = Math.random()*6.28; parts.push({ x:hub.x + Math.cos(a)*1.8, y:hub.y + Math.sin(a)*1.8, vx:(Math.random() - .5)*.3, vy:(Math.random() - .5)*.3, life:3.4, rot:a, h:7.5 + Math.random(), vh:-.2 }); } } });
-    L.push({ key:'sloth', noSeen:true, x:slothAt.x, h:4.8, z:slothAt.z, reach:5.5, me:sloth,
+    L.push({ key:'sloth', noSeen:true, x:slothAt.x, h:4.8, h0:4.1, h1:5.5, z:slothAt.z, reach:5.5, me:sloth,
       act:() => { const s = pzStep(SL); if (s === 0) { pzSfx.hm(.05); sfx((ac, t) => { const src = ac.createBufferSource(), lp = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = noiseBuf(ac, 1.2); lp.type = 'lowpass'; lp.frequency.value = 300; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.08, t + .5); g.gain.exponentialRampToValueAtTime(.0001, t + 1.1); src.connect(lp).connect(g).connect(ac.destination); src.start(t); src.stop(t + 1.2); }); }
         else if (s === 1) putIn.want(); else { SL.react = { kind:'blink', t:clock }; pzSfx.hm(.05); } } });
     if (!up) {
-      L.push({ key:'pz-vine', noSeen:true, x:SPOT.vine.x, h:1.8, z:SPOT.vine.z, reach:4, act:pull });
-      L.push({ key:'pz-basket', noSeen:true, x:SPOT.sloth.x, h:bh + .4, z:SPOT.sloth.z, reach:4, me:basket,
+      L.push({ key:'pz-vine', noSeen:true, x:SPOT.vine.x, h:1.8, h0:1.3, h1:5.4, z:SPOT.vine.z, reach:4, act:pull });
+      L.push({ key:'pz-basket', noSeen:true, x:SPOT.sloth.x, h:bh + .4, h0:bh, h1:bh + .75, z:SPOT.sloth.z, reach:4, me:basket,
         act:() => { if (SL.trial || bh > .3 || pzStep(SL) >= 2) return;
           if (SL.bi) { bag[SL.bi] = (bag[SL.bi] || 0) + 1; saveBag(); paintBag(); pickFx.push({ key:SL.bi, x:SPOT.sloth.x, z:SPOT.sloth.z, t:clock }); SL.bi = null; pickChime(); return; }
           putIn.x = SPOT.sloth.x; putIn.z = SPOT.sloth.z; openFeed(putIn); } });
-      L.push({ key:'orangemonkey', noSeen:true, x:SPOT.monkey.x, h:8.1, z:SPOT.monkey.z, reach:8, me:monkey, act:throwOrange });
+      L.push({ key:'orangemonkey', noSeen:true, x:SPOT.monkey.x, h:8.1, h0:7.75, h1:8.4, z:SPOT.monkey.z, reach:8, me:monkey, act:throwOrange });
     }
-    if (st >= 5) L.push({ key:'pz-ladder', noSeen:true, x:SPOT.ladder.x, h:up ? DECK + .4 : 1.6, z:SPOT.ladder.z, reach:up ? 2.4 : 3.2, act:() => climb(!up) });
+    if (st >= 5) L.push({ key:'pz-ladder', noSeen:true, x:SPOT.ladder.x, h:up ? DECK + .4 : 1.6, h0:up ? DECK - 1.5 : 0, h1:up ? DECK + .8 : DECK, z:SPOT.ladder.z, reach:up ? 3 : 3.6, act:() => climb(!up) });
     else L.push({ key:'pz-rolled', noSeen:true, x:SPOT.ladder.x, h:DECK + .2, z:SPOT.ladder.z, me:rolled });
     if (up) {
-      L.push({ key:'pz-chest', noSeen:true, x:SPOT.chest.x, h:DECK + .3, z:SPOT.chest.z, reach:2.4, me:chest,
+      L.push({ key:'pz-chest', noSeen:true, x:SPOT.chest.x, h:DECK + .3, h0:DECK, h1:DECK + .65, z:SPOT.chest.z, reach:3, me:chest,
         act:() => { if (pzStep(SL) !== 5) { tick(220, .15, .08, 'triangle'); pokes.push({ me:chest, t:clock }); return; }
           pzSave.carry = (pzSave.carry || 0) + 1; savePz(); paintBag(); pickFx.push({ img:ROLL_T.userData.canvas, x:SPOT.chest.x, z:SPOT.chest.z, t:clock }); pzSfx.chime(.1); setPzStep(SL, 6); } });
-      L.push({ key:'pz-spy', noSeen:true, x:SPOT.spy.x, h:DECK + .5, z:SPOT.spy.z, reach:2.4, me:spy, act:() => { spyOn = { t:clock, x:P.x, y:P.y }; tick(880, .2, .05); } });
+      L.push({ key:'pz-spy', noSeen:true, x:SPOT.spy.x, h:DECK + .5, h0:DECK, h1:DECK + .9, z:SPOT.spy.z, reach:3, me:spy, act:() => { spyOn = { t:clock, x:P.x, y:P.y }; tick(880, .2, .05); } });
       L.push({ key:'pz-hut', noSeen:true, x:SPOT.hut.x, h:DECK + 1, z:SPOT.hut.z, me:hut });
     }
     return L;
