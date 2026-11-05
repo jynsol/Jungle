@@ -96,17 +96,19 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--marigold);outli
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 /* ================= 그래픽 교체용 =================
-   assets/ 폴더에 아래 이름의 png를 넣으면 색 대신 그 그림으로 그려져요. 없는 파일은 색으로 그려요.
-   한 칸 = 28px. 자세한 크기는 README 참고. */
-const ASSETS = { floor:'assets/floor.png', bush:'assets/bush.png', leaf:'assets/leaf.png', tree:'assets/tree.png',
-  water:'assets/water.png', ruin:'assets/ruin.png', player:'assets/player.png', parrot:'assets/parrot.png' };
+   assets/ 폴더에 아래 이름의 png를 넣으면 기본 그림 대신 그 그림판으로 바뀌어요. 크기와 비율은 README 참고.
+   모두 정면에서 본 모습, 투명 배경, 아래가 땅에 닿게. */
+const ASSET_NAMES = ['agave','grass','broadleaf','fern','lily','whitespike','heartleaf','palm','tree','ruin','player','parrot','leaf'];
+const ASSETS = Object.fromEntries(ASSET_NAMES.map(n => [n, 'assets/' + n + '.png']));
 const COLORS = {
-  floor:'#6f8a3e', floorMark:'#86a24a', bush:'#1e5a3c', bent:'#3c7a44',
-  leaves:['#2f8f4e','#4fae4c','#1f6f5c','#8cc44a'], leafLine:'#123a28',
-  flowers:['#ff5f8f','#ff9b2e','#fff1d6'], flowerEye:'#f5c330',
-  tree:'#14452f', treeRim:'#2a7a45', treeHi:'#5aa04a', water:'#2aa6a6', waterHi:'#9fe3d6',
-  ruin:'#d08a52', ruinLine:'#8a4f2c', ruinDot:'#f2a93b',
-  me:'#f2a93b', eye:'#1a120a', night:'22,16,64', jaguar:'#ffd34a'
+  // 앙리 루소 「적도의 정글」(1909)에서 고른 색
+  rousseau:{ deep:'#1c3428', dark:'#26443a', mid:'#355a45', sage:'#4d7356', moss:'#6a8a5a', pale:'#9db07a', agave:'#b9c98a', cream:'#ece6b4',
+    vein:'#86a888', line:'#14261c', pink:'#ec9f86', pinkDeep:'#d77b66', white:'#f1edb6' },
+  floor:'#3d5a3e', floorMark:'#56744f',
+  leaves:['#2d4f3a','#4d7356','#26443a','#6a8a5a'], leafLine:'#14261c',
+  flowers:['#ec9f86','#f1edb6','#d77b66'], flowerEye:'#e8c36a',
+  tree:'#1c3428', water:'#3e6f6a', waterHi:'#8fb5a6', ruin:'#a58b6a', ruinLine:'#6e5a44', ruinDot:'#c9a46a',
+  me:'#f2a93b', eye:'#1a120a', jaguar:'#ffd34a'
 };
 /* ================================================ */
 
@@ -526,7 +528,7 @@ function step(dt){
   }
   for (let i = parts.length-1; i >= 0; i--) {
     const p = parts[i]; p.life -= dt; if (p.life <= 0) { parts.splice(i,1); continue; }
-    p.x += p.vx*dt; p.y += p.vy*dt; p.vh = (p.vh ?? 1) - dt*2.2; p.h = Math.max(.02, (p.h ?? .5) + p.vh*dt); p.vx *= .92; p.vy *= .92; p.rot += dt*6;
+    p.x += p.vx*dt; p.y += p.vy*dt; p.vh = (p.vh ?? 1) - dt*2.2; p.h = Math.max(.02, (p.h ?? .7) + p.vh*dt); p.vx *= .92; p.vy *= .92; p.rot += dt*6;
   }
   // 하늘로 올라가는 이불
   if (Math.random() < dt*.35 && sheets.length < 8) sheets.push({ x:SITE.rising.cx + (Math.random()-.5), z:SITE.rising.cy + 1.2, h:1, life:10 });
@@ -548,16 +550,16 @@ function dayState(){
 }
 
 /* ---- 무대: 그림판들을 간격을 두고 세우고, 뒤에서 따라가며 봄 ---- */
-const CAM_D = 3.8, CAM_H = 2.5;
+const CAM_D = 2.7, CAM_H = 1.65;
 const renderer = new THREE.WebGLRenderer({ canvas:cv, antialias:true });
-renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+renderer.setPixelRatio(Math.min(1.5, devicePixelRatio || 1));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(55, 1, .1, 90);
-const DAY_SKY = new THREE.Color('#f3c98f'), NIGHT_SKY = new THREE.Color('#1d1850');
-const DAY_TINT = new THREE.Color('#ffffff'), NIGHT_TINT = new THREE.Color('#5a5aa8'), tintCol = new THREE.Color();
+const camera = new THREE.PerspectiveCamera(62, 1, .1, 26);
+const DAY_SKY = new THREE.Color('#aab59c'), NIGHT_SKY = new THREE.Color('#16213a');
+const DAY_TINT = new THREE.Color('#ffffff'), NIGHT_TINT = new THREE.Color('#4a5878'), tintCol = new THREE.Color();
 scene.background = DAY_SKY.clone();
-scene.fog = new THREE.Fog(DAY_SKY.clone(), 6, 30);
+scene.fog = new THREE.Fog(DAY_SKY.clone(), 3, 22);
 function fitRenderer(){ renderer.setSize(vw, vh, false); camera.aspect = vw / vh; camera.updateProjectionMatrix(); }
 fitRenderer(); addEventListener('resize', fitRenderer);
 
@@ -584,24 +586,110 @@ function flower(g, x, y, r, col){
   g.fillStyle = col; for (let a = 0; a < 5; a++) { g.beginPath(); g.arc(x + Math.cos(a*1.26)*r, y + Math.sin(a*1.26)*r, r*.8, 0, Math.PI*2); g.fill(); }
   g.fillStyle = COLORS.flowerEye; g.beginPath(); g.arc(x, y, r*.55, 0, Math.PI*2); g.fill();
 }
-const BUSH_TEX = [0,1,2,3].map(v => ctex(128, 96, (g, w, h) => {
-  const r = rng(v*131 + 5);
-  for (let i = 0; i < 18; i++) leafShape(g, 14 + r()*(w-28), h - 2, 32 + r()*34, -Math.PI*(.14 + r()*.72), COLORS.leaves[(i + v) % 4], .22 + r()*.14);
-  if (v % 2) for (let i = 0; i < 2; i++) flower(g, 26 + r()*(w-52), 20 + r()*28, 5, COLORS.flowers[(v + i) % 3]);
-}));
-const TREE_TEX = [0,1].map(v => ctex(160, 240, (g, w, h) => {
-  const r = rng(v*71 + 3), cx = w/2, cy = 86;
-  g.strokeStyle = LINE; g.lineWidth = 3; g.fillStyle = '#5b3a22';
-  g.beginPath(); g.moveTo(cx - 12, h); g.lineTo(cx - 6, cy); g.lineTo(cx + 6, cy); g.lineTo(cx + 12, h); g.closePath(); g.fill(); g.stroke();
-  g.strokeStyle = '#8a5f3a'; g.lineWidth = 2;
-  for (let y = 112; y < h; y += 15) { g.beginPath(); g.moveTo(cx - 9, y); g.lineTo(cx + 9, y - 5); g.stroke(); }
-  g.fillStyle = COLORS.tree; g.beginPath(); g.ellipse(cx, cy, 50, 36, 0, 0, Math.PI*2); g.fill();
-  for (let i = 0; i < 22; i++) {
-    const a = -Math.PI - .45 + r()*(Math.PI + .9);
-    leafShape(g, cx, cy, (v ? 44 : 52) + r()*26, a, COLORS.leaves[i % 4], v ? .34 : .2);
+const RG = COLORS.rousseau;
+function blade(g, x, y, len, ang, wid, fill, stripe){
+  const c = Math.cos(ang), s = Math.sin(ang), tx = x + c*len, ty = y + s*len, nx = -s*wid/2, ny = c*wid/2, mx = x + c*len*.5, my = y + s*len*.5;
+  g.fillStyle = fill; g.strokeStyle = RG.line; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(x - nx, y - ny); g.quadraticCurveTo(mx - nx*.8, my - ny*.8, tx, ty); g.quadraticCurveTo(mx + nx*.8, my + ny*.8, x + nx, y + ny); g.closePath(); g.fill(); g.stroke();
+  if (stripe) { g.strokeStyle = stripe; g.lineWidth = Math.max(1.5, wid*.2); g.beginPath(); g.moveTo(x - nx*.5, y - ny*.5); g.quadraticCurveTo(mx - nx*.42, my - ny*.42, tx, ty); g.stroke(); }
+}
+function ovate(g, x, y, len, ang, wid, fill, vein = RG.vein){
+  g.save(); g.translate(x, y); g.rotate(ang);
+  g.fillStyle = fill; g.strokeStyle = RG.line; g.lineWidth = 1.6;
+  g.beginPath(); g.moveTo(0, 0); g.bezierCurveTo(len*.25, -wid, len*.72, -wid*.85, len, 0); g.bezierCurveTo(len*.72, wid*.85, len*.25, wid, 0, 0); g.fill(); g.stroke();
+  g.strokeStyle = vein; g.lineWidth = 1.3; g.beginPath(); g.moveTo(len*.04, 0); g.lineTo(len*.9, 0);
+  for (let i = 1; i < 5; i++) { const t = len*i/5.3; g.moveTo(t, 0); g.lineTo(t + len*.13, -wid*.55); g.moveTo(t, 0); g.lineTo(t + len*.13, wid*.55); }
+  g.stroke(); g.restore();
+}
+function heart(g, x, y, sz, ang, fill){
+  g.save(); g.translate(x, y); g.rotate(ang);
+  g.fillStyle = fill; g.strokeStyle = RG.line; g.lineWidth = 1.6;
+  g.beginPath(); g.moveTo(0, 0); g.bezierCurveTo(-sz*.95, -sz*.45, -sz*.85, sz*.7, 0, sz*1.25); g.bezierCurveTo(sz*.85, sz*.7, sz*.95, -sz*.45, 0, 0); g.fill(); g.stroke();
+  g.strokeStyle = RG.vein; g.lineWidth = 1.3; g.beginPath(); g.moveTo(0, sz*.05); g.lineTo(0, sz*1.12);
+  for (let i = 1; i < 4; i++) { const t = sz*i/3.6; g.moveTo(0, t); g.lineTo(-sz*.45, t + sz*.18); g.moveTo(0, t); g.lineTo(sz*.45, t + sz*.18); }
+  g.stroke(); g.restore();
+}
+function frond(g, x, y, len, ang, bend, col, leaflet){
+  const pa = ang + Math.PI/2, cx = x + Math.cos(ang)*len*.55 + Math.cos(pa)*bend, cy = y + Math.sin(ang)*len*.55 + Math.sin(pa)*bend;
+  const ex = x + Math.cos(ang)*len, ey = y + Math.sin(ang)*len + Math.abs(bend)*.5;
+  g.strokeStyle = RG.line; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(cx, cy, ex, ey); g.stroke();
+  const n = 18;
+  for (let i = 2; i < n; i++) {
+    const t = i/n, u = 1 - t, px = u*u*x + 2*u*t*cx + t*t*ex, py = u*u*y + 2*u*t*cy + t*t*ey;
+    const a = Math.atan2(2*u*(cy - y) + 2*t*(ey - cy), 2*u*(cx - x) + 2*t*(ex - cx)), L = leaflet*(1 - t*.55);
+    leafShape(g, px, py, L, a - 1.05, col, .2); leafShape(g, px, py, L, a + 1.05, col, .2);
   }
-  if (v) flower(g, cx + 20, cy - 24, 6, COLORS.flowers[0]);
-}));
+}
+const qpt = (t, a, b, c) => (1-t)*(1-t)*a + 2*(1-t)*t*b + t*t*c;
+/* 루소의 정글에서 가져온 식물 일곱 가지. wt는 덤불 속 비율 */
+const SPECIES = [
+  { key:'agave', w:1.1, h:.86, cw:256, ch:200, wt:.12, paint:(g, w, h, r) => {
+    for (let i = 0; i < 17; i++) blade(g, w/2 + (r() - .5)*70, h - 2, 100 + r()*90, -Math.PI/2 + (r() - .5)*2.3, 12 + r()*8, i % 3 ? RG.agave : RG.pale, RG.cream);
+  } },
+  { key:'grass', w:.9, h:.56, cw:256, ch:160, wt:.13, paint:(g, w, h, r) => {
+    for (let i = 0; i < 46; i++) blade(g, 20 + r()*(w - 40), h - 1, 60 + r()*95, -Math.PI/2 + (r() - .5)*1.0, 4 + r()*3, [RG.sage, RG.moss, RG.pale, RG.mid][i % 4], null);
+  } },
+  { key:'broadleaf', w:1.15, h:2.3, cw:256, ch:512, wt:.17, paint:(g, w, h, r) => {
+    for (let s = 0; s < 2; s++) {
+      const bx = w/2 + (s ? 34 : -26), top = 40 + r()*70, sway = (r() - .5)*70, mx = bx + sway, ex = bx + sway*.6;
+      g.strokeStyle = RG.line; g.lineWidth = 4; g.beginPath(); g.moveTo(bx, h); g.quadraticCurveTo(mx, h*.55, ex, top); g.stroke();
+      for (let i = 0; i < 9; i++) {
+        const t = .16 + i*.095, x = qpt(t, bx, mx, ex), y = qpt(t, h, h*.55, top), L = 92 - i*6, col = [RG.deep, RG.dark, RG.mid][(i + s) % 3];
+        ovate(g, x, y, L, Math.PI + .25 + (r() - .5)*.5, L*.33, col); ovate(g, x, y, L, -.25 + (r() - .5)*.5, L*.33, col);
+      }
+      ovate(g, ex, top + 6, 56, -Math.PI/2 + (r() - .5)*.4, 18, RG.dark);
+    }
+  } },
+  { key:'fern', w:1.5, h:1.6, cw:288, ch:304, wt:.18, paint:(g, w, h, r) => {
+    for (let i = 0; i < 8; i++) frond(g, w/2 + (r() - .5)*20, h - 4, 140 + r()*70, -Math.PI/2 + (i - 3.5)*.3 + (r() - .5)*.2, (r() - .5)*50, [RG.mid, RG.sage, RG.dark][i % 3], 24 + r()*6);
+  } },
+  { key:'lily', w:.8, h:1.4, cw:176, ch:304, wt:.07, paint:(g, w, h, r) => {
+    for (let i = 0; i < 8; i++) blade(g, w/2 + (r() - .5)*40, h - 2, 70 + r()*60, -Math.PI/2 + (r() - .5)*1.6, 10, i % 2 ? RG.mid : RG.sage, null);
+    for (let i = 0; i < 3; i++) {
+      const sx = w/2 + (i - 1)*34 + (r() - .5)*14, ty = 40 + r()*70;
+      g.strokeStyle = RG.mid; g.lineWidth = 3; g.beginPath(); g.moveTo(w/2, h - 20); g.quadraticCurveTo(sx, ty + 80, sx, ty); g.stroke();
+      for (let p = 0; p < 6; p++) ovate(g, sx, ty, 30, -Math.PI/2 + (p - 2.5)*.42, 9, p % 2 ? RG.pink : RG.pinkDeep, RG.pinkDeep);
+    }
+  } },
+  { key:'whitespike', w:.9, h:1.75, cw:176, ch:336, wt:.06, paint:(g, w, h, r) => {
+    g.strokeStyle = RG.mid; g.lineWidth = 4; g.beginPath(); g.moveTo(w/2, h - 40); g.lineTo(w/2 + 6, 26); g.stroke();
+    for (let j = 0; j < 14; j++) { const y = 30 + j*11, x = w/2 + 4 + (j % 2 ? 9 : -9); ovate(g, x, y, 20 - j*.4, j % 2 ? .9 : Math.PI - .9, 8, RG.white, RG.cream); }
+    for (let i = 0; i < 7; i++) blade(g, w/2 + (r() - .5)*30, h - 2, 90 + r()*60, -Math.PI/2 + (i - 3)*.32, 18, i % 2 ? RG.dark : RG.mid, RG.vein);
+  } },
+  { key:'heartleaf', w:1.3, h:1.25, cw:256, ch:248, wt:.17, paint:(g, w, h, r) => {
+    for (let i = 0; i < 7; i++) {
+      const a = -Math.PI/2 + (i - 3)*.42 + (r() - .5)*.2, L = 90 + r()*60, px = w/2 + Math.cos(a)*L, py = h + Math.sin(a)*L;
+      g.strokeStyle = RG.line; g.lineWidth = 2.5; g.beginPath(); g.moveTo(w/2, h); g.quadraticCurveTo(w/2 + Math.cos(a)*L*.4, h + Math.sin(a)*L*.9, px, py); g.stroke();
+      heart(g, px, py, 34 + r()*12, a + Math.PI/2 + (r() - .5)*.6, [RG.deep, RG.dark, RG.mid][i % 3]);
+    }
+  } }
+];
+const TREES = [
+  { key:'palm', w:2.8, h:6.2, cw:256, ch:568, paint:(g, w, h, r) => {
+    const tx = w/2 + 8, ty = 110;
+    g.strokeStyle = '#5d5444'; g.lineWidth = 14; g.lineCap = 'round'; g.beginPath(); g.moveTo(w/2 - 10, h); g.quadraticCurveTo(w/2 - 30, h*.5, tx, ty); g.stroke();
+    g.strokeStyle = '#3f3a2e'; g.lineWidth = 2;
+    for (let t = .05; t < .95; t += .05) { const x = qpt(t, w/2 - 10, w/2 - 30, tx), y = qpt(t, h, h*.5, ty); g.beginPath(); g.moveTo(x - 7, y); g.lineTo(x + 7, y - 3); g.stroke(); }
+    for (let i = 0; i < 11; i++) frond(g, tx, ty, 92 + r()*26, -Math.PI - .3 + i*(Math.PI + .6)/10, 24 + r()*16, [RG.dark, RG.mid, RG.sage][i % 3], 26);
+  } },
+  { key:'tree', w:3.0, h:5.6, cw:272, ch:508, paint:(g, w, h, r) => {
+    g.fillStyle = '#4b3a2c'; g.strokeStyle = RG.line; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(w/2 - 16, h); g.lineTo(w/2 - 8, 170); g.lineTo(w/2 + 8, 170); g.lineTo(w/2 + 16, h); g.closePath(); g.fill(); g.stroke();
+    g.strokeStyle = RG.mid; g.lineWidth = 2;
+    for (let i = 0; i < 6; i++) { const x = w/2 + (r() - .5)*200; g.beginPath(); g.moveTo(x, 150); g.quadraticCurveTo(x + 10, 260, x - 6, 280 + r()*120); g.stroke(); }
+    for (let i = 0; i < 52; i++) { const a = r()*Math.PI*2, d = r()*72; ovate(g, w/2 + Math.cos(a)*d, 150 + Math.sin(a)*d*.75, 40 + r()*22, a + (r() - .5)*.8, 14, [RG.deep, RG.dark, RG.mid, RG.sage][i % 4]); }
+  } }
+];
+const MONKEY_TEX = ctex(64, 56, (g) => {
+  g.strokeStyle = RG.line; g.lineWidth = 2;
+  g.fillStyle = '#4a3424'; for (const x of [10, 54]) { g.beginPath(); g.arc(x, 26, 8, 0, Math.PI*2); g.fill(); g.stroke(); }
+  g.beginPath(); g.arc(32, 28, 22, 0, Math.PI*2); g.fill(); g.stroke();
+  g.fillStyle = '#c7a07a'; g.beginPath(); g.ellipse(32, 33, 14, 13, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#1a120a'; for (const x of [26, 38]) { g.beginPath(); g.arc(x, 28, 3, 0, Math.PI*2); g.fill(); }
+  g.beginPath(); g.ellipse(32, 40, 4, 2, 0, 0, Math.PI*2); g.fill();
+});
+const SP_TEX = SPECIES.map((p, i) => ctex(p.cw, p.ch, (g, w, h) => p.paint(g, w, h, rng(i*977 + 13))));
+const TREE_TEX = TREES.map((p, i) => ctex(p.cw, p.ch, (g, w, h) => p.paint(g, w, h, rng(i*331 + 7))));
 const ALTAR_TEX = ctex(160, 80, (g, w, h) => {
   g.fillStyle = COLORS.ruin; g.strokeStyle = '#5a3218'; g.lineWidth = 3;
   g.beginPath(); g.moveTo(10, h-2); g.lineTo(26, 12); g.lineTo(w-26, 12); g.lineTo(w-10, h-2); g.closePath(); g.fill(); g.stroke();
@@ -656,14 +744,15 @@ const disc = (col, glow) => ctex(128, 128, (g) => {
   g.fillStyle = glow; g.beginPath(); g.arc(64, 64, 62, 0, Math.PI*2); g.fill();
   g.fillStyle = col; g.beginPath(); g.arc(64, 64, 46, 0, Math.PI*2); g.fill();
 });
-const SUN_TEX = disc('#ffe36b', 'rgba(255,190,90,.9)'), MOON_TEX = disc('#fff3c4', 'rgba(255,243,196,.55)');
+const SUN_TEX = disc('#f6efd2', 'rgba(246,239,210,.45)'), MOON_TEX = disc('#fff3c4', 'rgba(255,243,196,.55)');
 const EYES_TEX = ctex(32, 12, (g) => { g.fillStyle = COLORS.jaguar; for (const x of [8, 24]) { g.beginPath(); g.ellipse(x, 6, 6, 4, 0, 0, Math.PI*2); g.fill(); } g.fillStyle = '#1a120a'; for (const x of [8, 24]) g.fillRect(x - 1, 2, 2, 8); });
 const FIREFLY_TEX = ctex(8, 8, (g) => { g.fillStyle = '#fff6a0'; g.beginPath(); g.arc(4, 4, 3.6, 0, Math.PI*2); g.fill(); });
 
 function onAsset(k, im){
   const swap = t => { t.image = im; t.magFilter = THREE.NearestFilter; t.needsUpdate = true; };
-  if (k === 'bush') BUSH_TEX.forEach(swap);
-  else if (k === 'tree') TREE_TEX.forEach(swap);
+  const si = SPECIES.findIndex(p => p.key === k), ti = TREES.findIndex(p => p.key === k);
+  if (si >= 0) swap(SP_TEX[si]);
+  else if (ti >= 0) swap(TREE_TEX[ti]);
   else if (k === 'ruin') swap(ALTAR_TEX);
   else if (k === 'player') { playerImg = im; Object.values(personCache).forEach(swap); }
   else if (k === 'parrot') PARROT_TEX.forEach(swap);
@@ -673,7 +762,7 @@ function onAsset(k, im){
 /* 바닥: 지도 한 장을 땅에 깔기 */
 const GPX = 8, gcv = document.createElement('canvas'); gcv.width = W*GPX; gcv.height = H*GPX;
 { const g = gcv.getContext('2d');
-  const base = { [FLOOR]:COLORS.floor, [BUSH]:'#2c5e34', [TREE]:'#3d5e2c', [WATER]:COLORS.water, [RUIN]:COLORS.ruin };
+  const base = { [FLOOR]:COLORS.floor, [BUSH]:'#24402e', [TREE]:'#2c4632', [WATER]:COLORS.water, [RUIN]:COLORS.ruin };
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const k = id(x,y), t = type[k];
     g.fillStyle = base[t]; g.fillRect(x*GPX, y*GPX, GPX, GPX);
@@ -689,31 +778,41 @@ const groundTex = new THREE.CanvasTexture(gcv); groundTex.colorSpace = THREE.SRG
 const ground = cutout(new THREE.PlaneGeometry(W, H), mat(groundTex, true, { alphaTest:0, side:THREE.FrontSide }));
 ground.rotation.x = -Math.PI/2; ground.position.set(W/2, 0, H/2);
 
-/* 덤불: 칸마다 판 두 장, 같은 그림끼리 묶어서 그림 */
+/* 식물: 덤불 칸마다 판 세 장을 앞뒤로, 공터엔 가끔 풀. 같은 그림끼리 묶어서 그림 */
 const dummy = new THREE.Object3D();
-const bushGeo = plane(1.6, 1.2), BP = [], bushByTile = new Map();
-for (let k = 0; k < W*H; k++) if (type[k] === BUSH) for (const j of [0, 1]) {
-  const tx = k % W, ty = k / W | 0;
-  const b = { k, v:hash(k*7 + j)*4 | 0, x:tx + .5 + (hash(k*3 + j) - .5)*.5, z:ty + (j ? .78 : .28), s:.8 + hash(k*9 + j)*.45, h:.85 + hash(k*5 + j)*.45 };
+const SP_SUM = SPECIES.reduce((a, p) => a + p.wt, 0);
+const pickSpecies = u => { let acc = 0; for (let i = 0; i < SPECIES.length; i++) { acc += SPECIES[i].wt/SP_SUM; if (u < acc) return i; } return SPECIES.length - 1; };
+const GRASS = SPECIES.findIndex(p => p.key === 'grass'), AGAVE = SPECIES.findIndex(p => p.key === 'agave');
+const BP = [], bushByTile = new Map();
+function addFlat(k, sp, x, z, j){
+  const b = { k, sp, x, z, s:.8 + hash(k*9 + j)*.5, m:hash(k*29 + j) < .5 ? -1 : 1, f:1, ft:1 };
   BP.push(b); if (!bushByTile.has(k)) bushByTile.set(k, []); bushByTile.get(k).push(b);
 }
-const counts = [0,0,0,0]; for (const b of BP) b.idx = counts[b.v]++;
-const bushMeshes = BUSH_TEX.map((t, v) => { const m = new THREE.InstancedMesh(bushGeo, mat(t), Math.max(1, counts[v])); m.frustumCulled = false; scene.add(m); return m; });
+for (let k = 0; k < W*H; k++) {
+  const tx = k % W, ty = k / W | 0;
+  if (type[k] === BUSH) for (let j = 0; j < 3; j++) addFlat(k, pickSpecies(hash(k*7 + j)), tx + .5 + (hash(k*3 + j) - .5)*.7, ty + .17 + j*.33, j);
+  else if (type[k] === FLOOR) {
+    if (hash(k*53) < .3) addFlat(k, GRASS, tx + .5 + (hash(k*61) - .5)*.6, ty + .5, 5);
+    else if (hash(k*59) < .05) addFlat(k, AGAVE, tx + .5, ty + .5, 6);
+  }
+}
+const counts = SPECIES.map(() => 0); for (const b of BP) b.idx = counts[b.sp]++;
+const bushMeshes = SPECIES.map((p, i) => { const m = new THREE.InstancedMesh(plane(p.w, p.h), mat(SP_TEX[i]), Math.max(1, counts[i])); m.frustumCulled = false; scene.add(m); return m; });
 function placeBush(b, lean = 0, squash = 1){
-  dummy.position.set(b.x, 0, b.z); dummy.rotation.set(0, 0, lean); dummy.scale.set(b.s, b.h*squash, 1); dummy.updateMatrix();
-  bushMeshes[b.v].setMatrixAt(b.idx, dummy.matrix);
+  dummy.position.set(b.x, 0, b.z); dummy.rotation.set(0, 0, lean); dummy.scale.set(b.s*b.m, b.s*squash*b.f, 1); dummy.updateMatrix();
+  bushMeshes[b.sp].setMatrixAt(b.idx, dummy.matrix);
 }
 BP.forEach(b => placeBush(b));
 
 /* 나무: 키 큰 판. 카메라와 나 사이에 오면 납작하게 접힘 */
-const treeGeo = plane(2.4, 3.6), TP = [], treeByTile = new Map();
+const TP = [], treeByTile = new Map();
 for (let k = 0; k < W*H; k++) if (type[k] === TREE) {
-  const b = { k, v:hash(k*11) < .5 ? 0 : 1, x:k % W + .5 + (hash(k*13) - .5)*.3, z:(k / W | 0) + .5, s:.9 + hash(k*17)*.35, f:1 };
+  const b = { k, v:hash(k*11) < .5 ? 0 : 1, x:k % W + .5 + (hash(k*13) - .5)*.3, z:(k / W | 0) + .5, s:.85 + hash(k*17)*.35, m:hash(k*19) < .5 ? -1 : 1, f:1 };
   TP.push(b); treeByTile.set(k, b);
 }
-const tcounts = [0,0]; for (const b of TP) b.idx = tcounts[b.v]++;
-const treeMeshes = TREE_TEX.map((t, v) => { const m = new THREE.InstancedMesh(treeGeo, mat(t), Math.max(1, tcounts[v])); m.frustumCulled = false; scene.add(m); return m; });
-function placeTree(b){ dummy.position.set(b.x, 0, b.z); dummy.rotation.set(0, 0, 0); dummy.scale.set(b.s, b.s*b.f, 1); dummy.updateMatrix(); treeMeshes[b.v].setMatrixAt(b.idx, dummy.matrix); }
+const tcounts = TREES.map(() => 0); for (const b of TP) b.idx = tcounts[b.v]++;
+const treeMeshes = TREES.map((p, v) => { const m = new THREE.InstancedMesh(plane(p.w, p.h), mat(TREE_TEX[v]), Math.max(1, tcounts[v])); m.frustumCulled = false; scene.add(m); return m; });
+function placeTree(b){ dummy.position.set(b.x, 0, b.z); dummy.rotation.set(0, 0, 0); dummy.scale.set(b.s*b.m, b.s*b.f, 1); dummy.updateMatrix(); treeMeshes[b.v].setMatrixAt(b.idx, dummy.matrix); }
 TP.forEach(placeTree);
 
 /* 기적의 자리, 앵무새, 노인 */
@@ -728,30 +827,51 @@ const sheetMeshes = pool(8, plane(.7, .5, false), mat(SHEET_TEX));
 const bflyMeshes = pool(40, plane(.24, .18, false), mat(BFLY_TEX));
 const leafMeshes = pool(60, plane(.22, .11, false), mat(LEAF_TEX));
 const fireflies = pool(30, plane(.07, .07, false), mat(FIREFLY_TEX, false, { fog:false })).map(me => ({ me, ox:(Math.random()-.5)*14, oz:(Math.random()-.5)*14, ph:Math.random()*9 }));
-const EYES = []; for (const [k] of bushByTile) if (hash(k*17) < .012) { const me = cutout(plane(.3, .11, false), mat(EYES_TEX, false, { fog:false })); me.visible = false; me.position.set(k % W + .5, .62, (k / W | 0) + .55); EYES.push({ k, me }); }
+const EYES = []; for (const [k] of bushByTile) if (type[k] === BUSH && hash(k*17) < .012) {
+  const me = cutout(plane(.3, .11, false), mat(EYES_TEX, false, { fog:false })), mk = cutout(plane(.42, .37, false), mat(MONKEY_TEX));
+  me.visible = mk.visible = false; me.position.set(k % W + .5, .62, (k / W | 0) + .55); mk.position.set(k % W + .5, .82, (k / W | 0) + .5);
+  EYES.push({ k, me, mk }); }
 const sky = cutout(plane(7, 7, false), mat(SUN_TEX, false, { fog:false, depthWrite:false }));
 const myMesh = cutout(personGeo, mat(personTex(myColor)));
 const peopleMeshes = new Map();
 
-/* 덤불 헤치기: 가까운 판은 옆으로 젖혀지고 낮아짐 */
-const dirtyB = new Set();
-function updateBushes(actors){
-  const touched = new Map();
+/* 헤치기: 가까운 판은 옆으로 젖혀지고 낮아짐. 카메라와 나 사이의 판은 접힘 */
+let dirtyB = new Set();
+const foldedB = new Set();
+function updateBushes(actors, dt, camX, camZ){
+  const lean = new Map(), active = new Set(), folding = new Set();
   for (const a of actors) for (let ty = (a.y|0) - 2; ty <= (a.y|0) + 2; ty++) for (let tx = (a.x|0) - 2; tx <= (a.x|0) + 2; tx++) {
     if (tx < 0 || ty < 0 || tx >= W || ty >= H) continue;
     const list = bushByTile.get(id(tx,ty)); if (!list) continue;
     for (const b of list) {
-      const ddx = b.x - a.x, ddz = b.z - a.y, d = Math.hypot(ddx, ddz*1.6);
-      if (d > 1.3) continue;
-      const f = (1.3 - d)/1.3, cur = touched.get(b) || [0, 1];
-      cur[0] += (ddx >= 0 ? -1 : 1) * f * .95; cur[1] = Math.min(cur[1], 1 - .45*f);
-      touched.set(b, cur);
+      const ddx = b.x - a.x, ddz = b.z - a.y, d = Math.hypot(ddx, ddz*1.5);
+      if (d > 1.5) continue;
+      const f = (1.5 - d)/1.5, cur = lean.get(b) || [0, 1];
+      cur[0] += (ddx >= 0 ? -1 : 1) * f * 1.25; cur[1] = Math.min(cur[1], 1 - .5*f);
+      lean.set(b, cur); active.add(b);
     }
   }
+  const ax = camX - P.x, az = camZ - P.y, L = Math.hypot(ax, az);
+  for (let ty = Math.floor(Math.min(P.y, camZ)) - 1; ty <= Math.floor(Math.max(P.y, camZ)) + 1; ty++)
+    for (let tx = Math.floor(Math.min(P.x, camX)) - 1; tx <= Math.floor(Math.max(P.x, camX)) + 1; tx++) {
+      if (tx < 0 || ty < 0 || tx >= W || ty >= H) continue;
+      const list = bushByTile.get(id(tx,ty)); if (!list) continue;
+      for (const b of list) {
+        const bx = b.x - P.x, bz = b.z - P.y, u = (bx*ax + bz*az)/(L*L), perp = Math.abs(bx*az - bz*ax)/L;
+        if (u > .12 && u < 1.3 && perp < .95) { folding.add(b); active.add(b); }
+      }
+    }
+  for (const b of foldedB) active.add(b);
   const dirtyMeshes = new Set();
-  for (const [b, [lean, sq]] of touched) { placeBush(b, lean + sway[b.k]*Math.sin(clock*24 + b.idx)*.12, sq); dirtyMeshes.add(b.v); }
-  for (const b of dirtyB) if (!touched.has(b)) { placeBush(b); dirtyMeshes.add(b.v); }
-  dirtyB.clear(); for (const b of touched.keys()) dirtyB.add(b);
+  for (const b of active) {
+    b.ft = folding.has(b) ? .14 : 1;
+    b.f += (b.ft - b.f)*Math.min(1, dt*10); if (b.ft === 1 && b.f > .995) b.f = 1;
+    if (b.f < 1) foldedB.add(b); else foldedB.delete(b);
+    const [ln, sq] = lean.get(b) || [0, 1];
+    placeBush(b, ln + sway[b.k]*Math.sin(clock*24 + b.idx)*.12, sq); dirtyMeshes.add(b.sp);
+  }
+  for (const b of dirtyB) if (!active.has(b)) { placeBush(b); dirtyMeshes.add(b.sp); }
+  dirtyB = active;
   for (const v of dirtyMeshes) bushMeshes[v].instanceMatrix.needsUpdate = true;
 }
 const foldedT = new Set();
@@ -765,7 +885,7 @@ function updateTrees(dt, camX, camZ){
   const ax = camX - P.x, az = camZ - P.y, L2 = ax*ax + az*az, dirty = new Set();
   for (const b of near) {
     const bx = b.x - P.x, bz = b.z - P.y, u = (bx*ax + bz*az)/L2, perp = Math.abs(bx*az - bz*ax)/Math.sqrt(L2);
-    const target = u > -.05 && u < 1.2 && perp < 1.3 ? .12 : 1;
+    const target = u > .05 && u < 1.3 && perp < 1.5 ? .1 : 1;
     const nf = b.f + (target - b.f)*Math.min(1, dt*8);
     if (Math.abs(nf - b.f) > .001) { b.f = nf; placeTree(b); dirty.add(b.v); }
     if (b.f < .999) foldedT.add(b); else foldedT.delete(b);
@@ -799,15 +919,15 @@ function draw(dt = .016){
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
   const camX = P.x - fx*CAM_D, camZ = P.y - fz*CAM_D;
   camera.position.set(camX, CAM_H, camZ);
-  camera.lookAt(P.x + fx*2.2, .55, P.y + fz*2.2);
+  camera.lookAt(P.x + fx*3, 1.0, P.y + fz*3);
   const actors = [{ x:P.x, y:P.y }]; for (const o of others.values()) actors.push({ x:o.rx, y:o.ry });
-  updateBushes(actors);
+  updateBushes(actors, dt, camX, camZ);
   updateTrees(dt, camX, camZ);
   // 낮과 밤
   const { dark, label } = dayState(), nt = Math.max(0, Math.min(1, (dark - .12)/.66));
   tintCol.copy(DAY_TINT).lerp(NIGHT_TINT, nt); for (const m of tinted) m.color.copy(tintCol);
   scene.background.copy(DAY_SKY).lerp(NIGHT_SKY, nt); scene.fog.color.copy(scene.background);
-  scene.fog.near = 6 - 3*nt; scene.fog.far = 30 - 16*nt;
+  scene.fog.near = 3 - 1.5*nt; scene.fog.far = 22 - 9*nt;
   sky.material.map = nt > .5 ? MOON_TEX : SUN_TEX;
   sky.position.set(camX + fx*48, 12, camZ + fz*48); sky.lookAt(camera.position);
   // 사람들 (판은 늘 카메라 쪽을 봄, 걷는 방향으로 좌우 뒤집힘)
@@ -838,6 +958,7 @@ function draw(dt = .016){
   for (const e of EYES) {
     const d = Math.hypot(e.me.position.x - P.x, e.me.position.z - P.y);
     e.me.visible = nt > .55 && d > 3 && d < 16 && Math.sin(clock*.8 + e.k) < .9;
+    e.mk.visible = nt < .45 && d > 4 && d < 14 && Math.sin(clock*.3 + e.k) > -.2;   // 낮엔 원숭이가 수풀 사이로 내다봄
   }
   renderer.render(scene, camera);
 
