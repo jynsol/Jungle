@@ -741,7 +741,7 @@ function billboard(m){
         float ang = atan( dd.x, dd.y ), ca = cos( ang ), sa = sin( ang );
         local = vec3( ca * local.x + sa * local.z, local.y, -sa * local.x + ca * local.z );
         vec3 wp = ipos + local; vec2 dc = wp.xz - cameraPosition.xz;
-        if ( dot( dc, dc ) > uCull * uCull ) { gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 ); return; }   // 안개 너머는 그리지 않음
+        if ( dot( dd, dd ) > uCull * uCull ) { gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 ); return; }   // 판 하나를 통째로 (반만 지우면 길게 늘어나 보임)   // 안개 너머는 그리지 않음
         wp.y -= dot( dc, dc ) * uCurve;   // 둥근 지평선
         mvPosition = viewMatrix * vec4( wp, 1.0 );
       #else
@@ -1251,15 +1251,16 @@ const FAR_COL = new THREE.Color('#8a9a84'), DEEP_COL = new THREE.Color('#1a3024'
 const ringGeo = new THREE.CylinderGeometry(1, 1, 1, 56, 1, true); ringGeo.translate(0, .5, 0);
 const RINGS = [
   { tex:treeline('#7f927c', true, 31), k:1, ang:22, rep:3 },
+  { tex:treeline('#5f7a62', true, 44), k:.965, ang:18, rep:5 },   // 가운데 한 겹 더 (먼 숲이 겹겹이 보이게)
   { tex:treeline('#45624a', false, 57), k:.93, ang:14, rep:4 }
 ].map((rg, i) => {
   rg.tex.wrapS = THREE.RepeatWrapping; rg.tex.repeat.set(rg.rep, 1);
-  const m = mat(rg.tex, true, { side:THREE.BackSide, fog:true }), cap = i === 0 ? .78 : .64;   // 먼 숲도 같은 어둠에 가라앉되, 실루엣은 남게
+  const m = mat(rg.tex, true, { side:THREE.BackSide, fog:true }), cap = [.8, .72, .6][i];   // 먼 숲도 같은 어둠에 가라앉되, 실루엣은 남게
   m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <fog_fragment>', `#ifdef USE_FOG
   float fogFactor = ${cap.toFixed(2)} * smoothstep( fogNear, fogFar, vFogDepth );
   gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
 #endif`); };
-  const me = cutout(ringGeo, m); me.renderOrder = -2 + i; me.frustumCulled = false;
+  const me = cutout(ringGeo, m); me.renderOrder = -3 + i; me.frustumCulled = false;
   return { ...rg, me };
 });
 // 그림 파일(나무·야자·잎)이 다 오면 먼 숲 배경판도 그 그림으로 다시 그림 (멀수록 안개 색에 묻힘)
@@ -1277,7 +1278,7 @@ function repaintRing(tex, col, light, seed){
   g.globalCompositeOperation = 'source-atop'; g.globalAlpha = light ? .15 : .05; g.fillStyle = col; g.fillRect(0, 0, w, h); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
   tex.needsUpdate = true;
 }
-function repaintRings(){ try { repaintRing(RINGS[0].tex, '#7f927c', true, 31); repaintRing(RINGS[1].tex, '#45624a', false, 57); } catch (e) {} }
+function repaintRings(){ try { repaintRing(RINGS[0].tex, '#7f927c', true, 31); repaintRing(RINGS[1].tex, '#5f7a62', true, 44); repaintRing(RINGS[2].tex, '#45624a', false, 57); } catch (e) {} }
 let ringR = 18, ringAng = 22;
 let openS = 0;
 function openness(){
@@ -1288,8 +1289,8 @@ function openness(){
 function updateRings(camX, camY, camZ, elevP){
   const lift = Math.min(1, elevP/5.2);   // 배경판은 늘 같은 자리·같은 크기. 전망 바위에 올라설 때만 낮아짐
   for (const rg of RINGS) {
-    const R = (30 + lift*24)*rg.k, ang = (rg.ang*(1 - lift) + 4*lift)*Math.PI/180;
-    rg.me.position.set(camX, -1, camZ);
+    const R = (Math.max(27, U.uCull.value) + 2.5)*rg.k, ang = (rg.ang*(1 - lift) + 4*lift)*Math.PI/180;   // 숲이 끝나는 곳에 딱 붙임
+    rg.me.position.set(camX, -1 - R*R*U.uCurve.value, camZ);   // 숲과 같이 지평선 따라 내려감 (사이가 뜨지 않게)
     rg.me.scale.set(R, camY + 1 + R*Math.tan(ang) - lift*3, R);
   }
   ringAng = (22*(1 - lift) + 4*lift)*Math.PI/180;
