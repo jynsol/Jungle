@@ -788,7 +788,7 @@ function billboard(m, stiff = 0, fade = 0){   // stiff: 큰 나무는 줄기가 
         local.x += uWind * local.y * .9 * ( gust + breathe ) * ( 1.0 - calm * .7 );
         #endif
         vec2 dd = cameraPosition.xz - ipos.xz;
-        vFade = min( vFade, clamp( ( length( dd ) - 1.0 ) / .9, 0.0, 1.0 ) );   // 카메라에 바짝 붙은 잎은 비쳐 보이게 (덤불 속에 카메라가 들어가도 앞이 보이게)
+        vFade = min( vFade, step( 1.5, length( dd ) ) );   // 카메라에 바짝 붙은 잎은 비쳐 보이게 (덤불 속에 카메라가 들어가도 앞이 보이게)
         if ( cameraPosition.y > 4.5 && dot( dd, dd ) < 9.0 ) { gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 ); return; }   // 높은 데서 바로 밑 판은 그리지 않음 (비스듬히 길쭉하게 보여서)
         float ang = atan( dd.x, dd.y ), ca = cos( ang ), sa = sin( ang );
         local = vec3( ca * local.x + sa * local.z, local.y, -sa * local.x + ca * local.z );
