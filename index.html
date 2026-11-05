@@ -1138,7 +1138,8 @@ for (let y = Math.floor(WATERFALL.y - 3); y <= WATERFALL.y + 1; y++) for (let x 
 // 폭포 뒤 동굴: 웅덩이 오른쪽 바위턱(세로 한 줄)을 따라 폭포 뒤로 들어가면 7×7 동굴 방
 { const X = Math.floor(WATERFALL.x), Y = Math.floor(WATERFALL.y);
   for (let y = Y - 12; y <= Y - 4; y++) for (let x = X - 4; x <= X + 4; x++) setT(x, y, (x === X - 4 || x === X + 4 || y === Y - 12 || y === Y - 4) ? RUIN : FLOOR);
-  for (let y = Y - 4; y <= Y + 1; y++) { setT(X + 3, y, FLOOR); setT(X + 4, y, RUIN); }
+  for (let y = Y - 4; y <= Y + 1; y++) { setT(X + 3, y, FLOOR); setT(X + 4, y, FLOOR); setT(X + 5, y, RUIN); TRAIL[id(X + 3, y)] = TRAIL[id(X + 4, y)] = 1; }   // 두 칸 너비 바위턱 (오솔길처럼 보임)
+  setT(X + 4, Y - 4, FLOOR);
   window.CAVE = { X, Y, inside:(px, py) => { const dx = wd(px - (X - 3), W), dy = wd(py - (Y - 11), H); return dx >= 0 && dx < 7 && dy >= 0 && dy < 7; } }; }
 clear(LOOKOUT.x, LOOKOUT.y, 4.6);
 const VISTA_CLEAR = [{ ...WATERFALL, r:4.4 }, { ...LOOKOUT, r:4.8 }];
@@ -1407,7 +1408,7 @@ function updateBushes(actors, dt, camX, camZ){
   for (const b of relaxB) active.add(b);
   const dirtyMeshes = new Set();
   for (const b of active) {
-    b.ft = folding.has(b) ? .25 : 1;
+    b.ft = folding.has(b) ? 0 : 1;
     b.f += (b.ft - b.f)*Math.min(1, dt*6); if (b.ft === 1 && b.f > .995) b.f = 1;
     if (b.f < 1) foldedB.add(b); else foldedB.delete(b);
     const [tl, tq] = lean.get(b) || [0, 1], l0 = b.ln || 0, q0 = b.sq ?? 1;
@@ -1430,7 +1431,7 @@ function updateTrees(dt, camX, camZ){
   const ax = camX - P.x, az = camZ - P.y, L2 = ax*ax + az*az, dirty = new Set();
   for (const b of near) {
     const bx = wd(b.x - P.x, W), bz = wd(b.z - P.y, H), u = (bx*ax + bz*az)/L2, perp = Math.abs(bx*az - bz*ax)/Math.sqrt(L2);
-    const target = u > .05 && u < 1.3 && perp < 1.5 ? .22 : 1;
+    const target = u > .05 && u < 1.3 && perp < 1.5 ? 0 : 1;
     const nf = b.f + (target - b.f)*Math.min(1, dt*8);
     if (Math.abs(nf - b.f) > .001) { b.f = nf; placeTree(b); dirty.add(b.v); }
     if (b.f < .999) foldedT.add(b); else foldedT.delete(b);
@@ -3166,15 +3167,18 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
         안은 깜깜하고 물방울 소리만. 횃불을 벽의 쇠고리에 꽂으면 동굴이 밝아지고, 돌 조각 셋의 그림자가 벽화에 비침.
         조각을 돌려 그림자를 벽화의 금(초승달·부리·귀)에 맞추면 벽화가 갈라지고 거울 */
   { const CV = window.CAVE, X = CV.X, Y = CV.Y, WF = { id:'cave', x:WATERFALL.x, y:WATERFALL.y, done:3, movedT:-9, thumb:() => FLAMINGO_TEX.image };
-    const POOL = { x:WATERFALL.x, z:WATERFALL.y - 1 }, LEDGE = { x:X + 3.5, z:Y + 1.6 }, BLOCK = [X + 3, Y + 1];
-    const setBlock = on => setT(BLOCK[0], BLOCK[1], on ? RUIN : FLOOR); if (pzStep(WF) === 0) setBlock(true);
-    const flam = [-.45, 0, .45].map(() => cutout(plane(.5, 1.0), mat(FLAMINGO_TEX)));
+    const POOL = { x:WATERFALL.x, z:WATERFALL.y - 1 }, LEDGE = { x:X + 4, z:Y + 1.7 };
+    const setBlock = on => { setT(X + 3, Y + 1, on ? RUIN : FLOOR); setT(X + 4, Y + 1, on ? RUIN : FLOOR); }; if (pzStep(WF) === 0) setBlock(true);
+    const flam = [-.55, 0, .55].map(() => cutout(plane(.5, 1.0), mat(FLAMINGO_TEX)));
     const WET_T = ctex(256, 96, (g, w, h) => { g.fillStyle = '#3a4440'; g.fillRect(0, 0, w, h); g.fillStyle = '#2e3834'; for (let i = 0; i < 24; i++) { g.beginPath(); g.ellipse((i*61) % w, (i*29) % h, 26, 12, (i % 4)*.5, 0, Math.PI*2); g.fill(); } g.strokeStyle = 'rgba(150,200,190,.25)'; g.lineWidth = 2; for (let i = 0; i < 9; i++) { g.beginPath(); g.moveTo((i*31) % w, 0); g.lineTo((i*31) % w + 4, h); g.stroke(); } });
     WET_T.wrapS = THREE.RepeatWrapping; onArt('cave_wall', im => swapTex(WET_T, im));
     const CH = 2.6, walls = [];
     const wall = (x, z, len, rotY) => { const m = cutout(plane(len, CH), mat(WET_T)); m.rotation.y = rotY; walls.push({ m, x, z }); };
-    wall(X + .5, Y - 11, 9, 0); wall(X - 3, Y - 7.5, 7, Math.PI/2); wall(X + 4, Y - 7.5, 7, Math.PI/2); wall(X - .5, Y - 4, 7, 0); wall(X + 4, Y - 1.5, 5, Math.PI/2);   // 앞벽은 입구 자리(오른쪽 끝)를 비움, 바위턱 바깥쪽 벽
-    const roof = cutout(new THREE.PlaneGeometry(8, 8), new THREE.MeshBasicMaterial({ color:'#0e1412', side:THREE.DoubleSide })); roof.rotation.x = Math.PI/2;
+    wall(X + .5, Y - 11, 9, 0); wall(X - 3, Y - 7.5, 7, Math.PI/2); wall(X + 4, Y - 7.5, 7, Math.PI/2); wall(X - .5, Y - 4, 7, 0); wall(X + 5, Y - 1.5, 5, Math.PI/2);   // 앞벽은 입구 자리(오른쪽 끝)를 비움, 바위턱 바깥쪽 벽
+    const roof = cutout(new THREE.PlaneGeometry(8, 8), new THREE.MeshBasicMaterial({ color:'#0e1412', side:THREE.DoubleSide, fog:false })); roof.rotation.x = Math.PI/2;
+    const ARCH_T = ctex(128, 112, (g) => { g.fillStyle = '#3e4842'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.beginPath(); g.moveTo(0, 112); g.lineTo(4, 40); g.quadraticCurveTo(64, -10, 124, 40); g.lineTo(128, 112); g.closePath(); g.fill(); g.stroke(); g.fillStyle = '#070908'; g.beginPath(); g.moveTo(26, 112); g.lineTo(28, 56); g.quadraticCurveTo(64, 18, 100, 56); g.lineTo(102, 112); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(90,120,70,.8)'; for (let i = 0; i < 8; i++) { g.beginPath(); g.ellipse(10 + i*15, 30 + Math.abs(i - 3.5)*6, 9, 5, 0, 0, Math.PI*2); g.fill(); } });
+    const arch = cutout(plane(2, 1.75), mat(ARCH_T)); arch.rotation.y = 0; onArt('cave', im => swapTex(ARCH_T, im));   // 폭포 옆 바위턱 끝의 어두운 동굴 입구
     // 벽화와 돌 조각
     const SHAPES = [   // 그림자 모양: 초승달, 새 부리, 뾰족한 귀 — 맞는 방향(0~3, 90도씩)
       { ok:1, draw:(g, s) => { g.beginPath(); g.arc(0, 0, s, -Math.PI/2, Math.PI/2); g.arc(-s*.35, 0, s*.8, Math.PI/2, -Math.PI/2, true); g.closePath(); g.fill(); } },
@@ -3215,7 +3219,8 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     WF.update = (dt, camX, camZ) => { const st = pzStep(WF), m = st >= 1 ? Math.min(1, (clock - WF.movedT)/3) : 0;
       flam.forEach((f, i) => { const p = { x:LEDGE.x + (i - 1)*.45 + m*(1.6 + i*.5), z:LEDGE.z + m*(1.4 + i*.3) }; place(f, p, m > 0 && m < 1 ? Math.abs(Math.sin(clock*6 + i))*.04 : 0, camX, camZ); });
       for (const w of walls) { const [x, z] = wrapNear(w.x, w.z, camX, camZ); w.m.position.set(x, 0, z); }
-      { const [x, z] = wrapNear(X + .5, Y - 7.5, camX, camZ); roof.position.set(x, CH, z); }
+      { const [x, z] = wrapNear(X + .5, Y - 7.5, camX, camZ); roof.position.set(x, CH, z); roof.visible = CV.inside(P.x, P.y); }
+      { const [x, z] = wrapNear(X + 4, Y - 3.95, camX, camZ); arch.position.set(x, 0, z); arch.visible = !CV.inside(P.x, P.y); }
       { const [x, z] = wrapNear(MURAL.x, MURAL.z, camX, camZ); mural.position.set(x, .5, z); }
       place(figs, FIGS, 0, camX, camZ);
       { const [x, z] = wrapNear(SCONCE.x, SCONCE.z, camX, camZ); sconce.position.set(x, 1.2, z); sFlame.visible = sHalo.visible = lit(); sFlame.position.set(x, 1.5, z); sFlame.lookAt(camera.position); sFlame.scale.set(1 + Math.sin(clock*11)*.08, 1 + Math.sin(clock*15)*.1, 1); sHalo.position.set(x, 1.4, z); sHalo.lookAt(camera.position); }
