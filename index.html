@@ -257,6 +257,7 @@ REGIONS.forEach((rg, i) => {
   const ph = i*1.7 + .4; let hx = FIRE.x, hy = FIRE.y;
   for (let t = 3; t <= end; t += .25) {
     const wob = Math.sin(t*.22 + ph)*2.6 + Math.sin(t*.53 + ph*2)*1.1, x = FIRE.x + ux*t + px*wob, y = FIRE.y + uy*t + py*wob; hx = x; hy = y;
+    (rg.pts || (rg.pts = [])).push([x, y]);
     for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
       const tx = Math.floor(x) + dx, ty = Math.floor(y) + dy; if (Math.hypot(tx + .5 - x, ty + .5 - y) > (t % 7 < 2 ? 1.5 : 1.2)) continue;
       const k = id(tx, ty); if (type[k] === RUIN) continue; type[k] = FLOOR; TRAIL[k] = 1;
@@ -267,7 +268,10 @@ REGIONS.forEach((rg, i) => {
     clear(rg.hub.x, rg.hub.y, 6.4); const cx = Math.floor(rg.hub.x), cy = Math.floor(rg.hub.y);
     for (let dy = -5; dy <= 5; dy++) for (let dx = -5; dx <= 5; dx++) { const d = Math.hypot(dx, dy); if (d > 1.25 && d <= 4.45) setT(cx + dx, cy + dy, WATER); }
     for (let k = 6; k <= 11; k++) for (const dy of [0, 1]) setT(cx + k, cy + dy, WATER);   // 둑 너머 물길
-    rg.stones = [2, 3, 4].map(k => ({ tx:cx, ty:cy - k }));
+    { const seen = new Set(); rg.stones = [];   // 징검다리: 길이 들어오던 그 줄을 따라 섬까지 이어짐 (길이 물속으로 그대로 이어지는 듯)
+      for (const [px, py] of rg.pts) { const d = wdist(px, py, rg.hub.x, rg.hub.y); if (d < 1.1 || d > 4.7) continue;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const tx = Math.floor(px) + dx, ty = Math.floor(py) + dy;
+          if (Math.hypot(tx + .5 - px, ty + .5 - py) > .95 || type[id(tx, ty)] !== WATER) continue; const k = id(tx, ty); if (seen.has(k)) continue; seen.add(k); rg.stones.push({ tx:wrapX(tx), ty:wrapY(ty) }); } } }
   }
   if (rg.key === 'ruin') {   // 폐허 퍼즐: 9×9 돌 신전. 동쪽(모닥불 쪽)에 세 칸짜리 돌문, 안엔 쓰러진 기둥 벽 둘로 된 길, 서쪽 끝 방에 우상
     clear(rg.hub.x, rg.hub.y, 7.8); const cx = Math.floor(rg.hub.x), cy = Math.floor(rg.hub.y);
@@ -2850,7 +2854,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
         m.position.set(x + rx*(i - 1)*.65, 1.15 - dip*1.1 + Math.abs(Math.sin(clock*2 + i))*.03, z + rz*(i - 1)*.65); face(m, x, z); m.rotation.z = tilt; m.visible = dip < .95; }); }
     // 물이 차오름: 진흙 그늘이 걷히고 연잎이 떠오름
     { const [x, z] = at(C); mud.position.set(x, .025, z); const rise = st >= 2 ? 1 : st === 1 ? Math.min(1, el/5) : 0; mud.material.opacity = 1 - rise*.95;
-      pads.forEach(p => { const [px, pz] = at(p); p.m.position.set(px, -.2 + rise*.24, pz); p.m.visible = rise > .05 || !p.step; });
+      pads.forEach(p => { const [px, pz] = at(p); p.m.position.set(px, -.2 + rise*.24, pz); p.m.visible = rise > .05; });   // 물이 차오르기 전엔 연잎이 하나도 안 보임
       roll.visible = st < 3; roll.position.set(x, .2, z); face(roll, x, z); }
     if (st === 1 && el > 5.2) { setPath(true); setPzStep(WP, 2, { auto:true }); }
     if (st >= 2 && type[id(rg.stones[0].tx, rg.stones[0].ty)] !== FLOOR) setPath(true);
