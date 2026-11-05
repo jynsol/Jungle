@@ -108,7 +108,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
    모두 정면에서 본 모습, 투명 배경, 아래가 땅에 닿게. */
 const ASSET_NAMES = ['agave','grass','broadleaf','fern','lily','whitespike','heartleaf','banana','sansevieria','palm','tree','orangetree','lotus','flamingo','tiger','monkey','ruin','player','parrot','leaf','player_walk','butterfly','fire','log','cliff','waterfall_flow'];
 // 아직 기본 그림인 것들: 파일을 넣으면 바로 바뀜 (목록과 크기는 ART_LIST.md)
-ASSET_NAMES.push('galleon', 'galleon_front', 'piano', 'clock', 'gramophone', 'bicycle', 'mailbox', 'swing', 'chair', 'monkeys', 'whitebird', 'toucan', 'oldman', 'rock', 'fruit_banana', 'fruit_mango', 'fruit_cacao', 'bigtree', 'sloth_idle', 'sloth_eat', 'sloth_sleep', 'basket', 'vine', 'item_sail', 'sail_full', 'ladder', 'ladder_rolled', 'treehut', 'chest', 'chest_open', 'spyglass', 'deck');
+ASSET_NAMES.push('galleon', 'galleon_front', 'piano', 'clock', 'gramophone', 'bicycle', 'mailbox', 'swing', 'chair', 'monkeys', 'whitebird', 'toucan', 'oldman', 'rock', 'fruit_banana', 'fruit_mango', 'fruit_cacao', 'bigtree', 'sloth_idle', 'sloth_eat', 'sloth_sleep', 'basket', 'vine', 'item_sail', 'sail_full', 'ladder', 'ladder_rolled', 'treehut', 'chest', 'chest_open', 'spyglass', 'deck', 'lens', 'treehut_peek');
 const ASSETS = Object.fromEntries(ASSET_NAMES.map(n => [n, 'assets/' + n + '.png']));
 const ART = {};   // 그림 이름 → 그림이 오면 할 일 (그림판 바꾸고 비율 맞추기)
 const onArt = (k, fn) => (ART[k] || (ART[k] = [])).push(fn);
@@ -310,7 +310,7 @@ const keys = new Set();
 const KEYMAP = { KeyW:[0,-1], ArrowUp:[0,-1], KeyS:[0,1], ArrowDown:[0,1], KeyA:[-1,0], ArrowLeft:[-1,0], KeyD:[1,0], ArrowRight:[1,0] };
 const KEYALIAS = { w:'KeyW', 'ㅈ':'KeyW', a:'KeyA', 'ㅁ':'KeyA', s:'KeyS', 'ㄴ':'KeyS', d:'KeyD', 'ㅇ':'KeyD', q:'KeyQ', 'ㅂ':'KeyQ', e:'KeyE', 'ㄷ':'KeyE' };
 const normKey = e => (KEYMAP[e.code] || e.code === 'KeyQ' || e.code === 'KeyE') ? e.code : KEYALIAS[(e.key || '').toLowerCase()] || null;
-const modalOpen = () => !$popVeil.hidden || !$albumVeil.hidden || !document.getElementById('nameVeil').hidden;
+const modalOpen = () => !$popVeil.hidden || !$albumVeil.hidden || !document.getElementById('nameVeil').hidden || !!document.querySelector('[role=dialog]:not([hidden])');
 addEventListener('keydown', e => {
   if (modalOpen()) { if (e.key === 'Escape') closeModals(); return; }
   if (e.target === $say) { if (e.key === 'Escape') { $say.value = ''; $say.blur(); cv.focus(); } return; }
@@ -1790,6 +1790,7 @@ const REGROW = 5*60*1000;   // 주운 자리는 5분 뒤 다시 열림
 const $bag = document.createElement('div'); $bag.className = 'bagi'; $bag.setAttribute('aria-label', '바구니'); document.querySelector('.hud').append($bag);
 function paintBag(){   // 바구니: 든 열매만 그림과 숫자로
   $bag.replaceChildren(...ITEM_KEYS.filter(k => bag[k] > 0).map(k => { const sp = document.createElement('span'), im = new Image(); im.src = ITEMS[k].tex.userData.canvas.toDataURL(); im.alt = ITEMS[k].name; sp.append(im, String(bag[k])); return sp; }));
+  if (pzSave.lens === 1 && window.LENS_T) { const sp = document.createElement('span'), im = new Image(); im.src = window.LENS_T.userData.canvas.toDataURL(); im.alt = '렌즈'; sp.append(im); $bag.append(sp); }
   if (pzSave.carry > 0 && window.SAIL_ROLL_T) { const sp = document.createElement('span'), im = new Image(); im.src = window.SAIL_ROLL_T.userData.canvas.toDataURL(); im.alt = '돛 두루마리'; im.style.width = '40px'; sp.append(im); if (pzSave.carry > 1) sp.append(String(pzSave.carry)); $bag.append(sp); }
 }
 paintBag();
@@ -2301,13 +2302,30 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     g.strokeStyle = '#6a4a28'; for (let i = 1; i < 4; i++) { g.beginPath(); g.ellipse(48, 26, 40 - i*9, 16 - i*3.5, 0, 0, Math.PI*2); g.stroke(); }
     g.strokeStyle = '#c0402a'; g.lineWidth = 4; g.beginPath(); g.moveTo(40, 6); g.lineTo(44, 46); g.stroke();   // 매듭 끈
   });
-  const HUT_T = ctex(160, 176, (g, w, h) => {
+  const SYMS = ['sun', 'moon', 'leaf', 'fish'], LOCK_ANS = [2, 1, 0];   // 상자 자물쇠의 답: 잎 · 달 · 해 (오두막 문 위에 새겨져 있음)
+  function drawSym(g, k, x, y, r, col){
+    g.save(); g.translate(x, y); g.fillStyle = col; g.strokeStyle = col; g.lineWidth = Math.max(1.5, r*.18); g.lineCap = 'round';
+    if (k === 'sun') { g.beginPath(); g.arc(0, 0, r*.45, 0, Math.PI*2); g.fill(); for (let i = 0; i < 8; i++) { const a = i*Math.PI/4; g.beginPath(); g.moveTo(Math.cos(a)*r*.62, Math.sin(a)*r*.62); g.lineTo(Math.cos(a)*r*.95, Math.sin(a)*r*.95); g.stroke(); } }
+    else if (k === 'moon') { g.beginPath(); g.arc(0, 0, r*.85, 0, Math.PI*2); g.fill(); g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.arc(r*.38, -r*.2, r*.7, 0, Math.PI*2); g.fill(); }
+    else if (k === 'leaf') { g.beginPath(); g.moveTo(-r*.8, r*.6); g.quadraticCurveTo(-r*.6, -r*.8, r*.85, -r*.7); g.quadraticCurveTo(r*.6, r*.7, -r*.8, r*.6); g.fill(); }
+    else { g.beginPath(); g.ellipse(-r*.1, 0, r*.6, r*.38, 0, 0, Math.PI*2); g.fill(); g.beginPath(); g.moveTo(r*.45, 0); g.lineTo(r*.95, -r*.4); g.lineTo(r*.95, r*.4); g.closePath(); g.fill(); }
+    g.restore();
+  }
+  const hutPaint = peek => ctex(160, 176, (g, w, h) => {
     g.fillStyle = '#7a5a36'; g.strokeStyle = RG.line; g.lineWidth = 3; g.fillRect(24, 70, 112, 104); g.strokeRect(24, 70, 112, 104);
     g.fillStyle = '#c8a860'; g.beginPath(); g.moveTo(6, 78); g.lineTo(80, 6); g.lineTo(154, 78); g.closePath(); g.fill(); g.stroke();
     g.strokeStyle = '#a08040'; g.lineWidth = 2; for (let i = 0; i < 10; i++) { g.beginPath(); g.moveTo(14 + i*14, 74); g.lineTo(80, 10); g.stroke(); }
+    g.fillStyle = '#5a3c22'; g.fillRect(58, 86, 44, 20); g.strokeStyle = '#3a2618'; g.strokeRect(58, 86, 44, 20);   // 문 위 나무판의 새김 그림
+    LOCK_ANS.forEach((si, n) => drawSym(g, SYMS[si], 66 + n*14, 96, 6, '#e8d2a0'));
     g.fillStyle = '#2a1c12'; g.fillRect(64, 112, 32, 62);
+    if (peek) { g.fillStyle = '#0a0604'; g.fillRect(64, 112, 32, 62); g.fillStyle = '#ffe36a'; for (const x of [74, 86]) { g.beginPath(); g.ellipse(x, 132, 3.5, 2.2, 0, 0, Math.PI*2); g.fill(); } }
+    else { g.fillStyle = '#5a3c22'; g.fillRect(66, 114, 28, 58); g.fillStyle = '#c9a046'; g.beginPath(); g.arc(88, 144, 2.5, 0, Math.PI*2); g.fill(); }
     g.fillStyle = '#ffd87a'; g.fillRect(36, 98, 18, 16); g.strokeStyle = '#4a3220'; g.strokeRect(36, 98, 18, 16);
   });
+  const HUT_T = hutPaint(false), HUT_PEEK_T = hutPaint(true);
+  const LENS_T = ctex(48, 48, (g) => { g.fillStyle = 'rgba(190,230,240,.85)'; g.strokeStyle = '#b08a3a'; g.lineWidth = 5; g.beginPath(); g.arc(24, 24, 18, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = 'rgba(255,255,255,.9)'; g.beginPath(); g.ellipse(17, 17, 5, 3, -.6, 0, Math.PI*2); g.fill(); });
+  const BIRDHEAD_T = ctex(48, 48, (g) => { g.fillStyle = '#3e6fb0'; g.strokeStyle = RG.line; g.lineWidth = 2; g.beginPath(); g.arc(24, 28, 14, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = '#f2c230'; g.beginPath(); g.moveTo(36, 26); g.lineTo(47, 30); g.lineTo(36, 33); g.closePath(); g.fill(); g.fillStyle = '#fff'; g.beginPath(); g.arc(29, 24, 4, 0, Math.PI*2); g.fill(); g.fillStyle = '#111'; g.beginPath(); g.arc(30, 24, 2, 0, Math.PI*2); g.fill(); });
+  window.LENS_T = LENS_T;
   const chestPaint = open => ctex(96, 72, (g) => {
     g.fillStyle = '#6b4a2a'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.fillRect(8, 30, 80, 40); g.strokeRect(8, 30, 80, 40);
     g.fillStyle = '#c9a046'; g.fillRect(44, 38, 8, 10);
@@ -2335,6 +2353,8 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
   const spy = cutout(plane(.55, .85), mat(SPY_T));
   const monkey = cutout(plane(.5, .62), mat(MONKEY_SIT_TEX));
   const orange = cutout(plane(.24, .24, false), mat(ORANGE_T)); orange.visible = false;
+  const lensM = cutout(plane(.22, .22, false), mat(LENS_T)); const tossM = cutout(plane(.3, .3, false), mat(ITEMS.mango.tex)); tossM.visible = false;
+  const birdM = cutout(plane(.36, .36, false), mat(BIRDHEAD_T)); birdM.visible = false;
   const hutGlow = cutout(plane(2.2, 2.2, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.5 }));
   onArt('bigtree', im => { swapTex(TREE_T, im); fitGeo(tree, 10.5, im); });
   for (const k of ['idle', 'eat', 'sleep']) onArt('sloth_' + k, im => { swapTex(ST[k], im); if (k === 'idle') fitGeo(sloth, 1.45, im); });
@@ -2342,12 +2362,33 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
   onArt('basket', im => { swapTex(BASKET_T, im); fitGeo(basket, .72, im); });
   onArt('item_sail', im => swapTex(ROLL_T, im));
   onArt('ladder', im => swapTex(LADDER_T, im)); onArt('ladder_rolled', im => swapTex(ROLLED_T, im)); onArt('treehut', im => { swapTex(HUT_T, im); fitGeo(hut, 2.1, im); });
+  onArt('lens', im => swapTex(LENS_T, im)); onArt('treehut_peek', im => swapTex(HUT_PEEK_T, im));
   onArt('chest', im => swapTex(CH.shut, im)); onArt('chest_open', im => swapTex(CH.open, im)); onArt('spyglass', im => swapTex(SPY_T, im)); onArt('deck', im => swapTex(DECK_T, im));
   window.SAIL_ROLL_T = ROLL_T;
   // 단계: 0 잠듦, 1 깨어남, 2 바나나 바구니 올라감(먹음), 3 기어가서 매듭 풂, 4 사다리 풀려 내려옴, 5 사다리 내려와 있음, 6 상자에서 두루마리 꺼냄
   const SL = { id:'sloth', x:hub.x, y:hub.y, done:6, t:0, last:-1, react:null, trial:null, bi:null, orange:null, throwT:3, snd:false, thumb:() => ST.idle.image };
   const LOW = .02, HIGH = 3.3, near = (r = 14) => Math.max(0, 1 - wdist(P.x, P.y, hub.x, hub.y)/r);
-  let bh = LOW, slothAt = { ...SPOT.sloth }, stars = null, spyOn = null;
+  let bh = LOW, slothAt = { ...SPOT.sloth }, stars = null, spyOn = null, toss = null, birdT = -9, doorT = -9, blurT = -9;
+  const LENS_DROP = W_(.2, 2.6);   // 원숭이가 떨어뜨린 렌즈가 놓이는 곳
+  // 원숭이에게 열매 던지기: 망고면 받고 렌즈를 떨어뜨림, 다른 건 도로 던짐
+  const tossTo = { x:0, z:0, give(k){ bag[k]--; saveBag(); paintBag(); toss = { key:k, t:clock, x0:P.x, z0:P.y, back:k !== 'mango' }; tick(700, .12, .05); },
+    want(){ wants.push({ x:SPOT.monkey.x, h:8.5, z:SPOT.monkey.z, key:'mango', until:clock + 3 }); POKE_SND.jesters(.8); } };
+  // 상자 자물쇠: 그림 다이얼 셋을 가까이 들여다보고 돌림
+  const lockBox = document.createElement('div'); lockBox.hidden = true; lockBox.setAttribute('role', 'dialog'); lockBox.setAttribute('aria-label', '상자 자물쇠');
+  lockBox.style.cssText = 'position:fixed;inset:0;z-index:20;background:rgba(8,6,4,.72);display:flex;align-items:center;justify-content:center';
+  lockBox.innerHTML = '<div style="background:#5a3c22;border:6px solid #3a2618;border-radius:14px;padding:22px 20px;display:flex;flex-direction:column;align-items:center;gap:16px;box-shadow:0 20px 50px rgba(0,0,0,.6)"><div id="dials" style="display:flex;gap:12px"></div><button type="button" id="lockX" aria-label="닫기" style="background:none;border:0;cursor:pointer"></button></div>';
+  document.body.append(lockBox);
+  const dialVal = [0, 0, 0], $dials = lockBox.querySelector('#dials');
+  lockBox.querySelector('#lockX').innerHTML = ICON(IC.close);
+  lockBox.querySelector('#lockX').addEventListener('click', () => { lockBox.hidden = true; cv.focus(); });
+  lockBox.addEventListener('click', e => { if (e.target === lockBox) { lockBox.hidden = true; cv.focus(); } });
+  function paintDials(){ $dials.replaceChildren(...dialVal.map((v, n) => { const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', `다이얼 ${n + 1}`);
+    b.style.cssText = 'width:76px;height:96px;border-radius:10px;background:#c9a46a;border:4px solid #3a2618;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0';
+    const c = document.createElement('canvas'); c.width = c.height = 64; drawSym(c.getContext('2d'), SYMS[v], 32, 32, 24, '#3a2618'); b.append(c);
+    b.addEventListener('click', () => { dialVal[n] = (dialVal[n] + 1) % SYMS.length; tick(900 + n*90, .06, .07, 'square'); paintDials();
+      if (dialVal.every((d, i) => d === LOCK_ANS[i])) { [1046, 1318, 1568].forEach((f, i) => setTimeout(() => tick(f, .3, .06), 200 + i*110)); setTimeout(() => { lockBox.hidden = true; openChest(); }, 700); } });
+    return b; })); }
+  function openChest(){ if (pzStep(SL) !== 5) return; pzSave.carry = (pzSave.carry || 0) + 1; savePz(); paintBag(); pickFx.push({ img:ROLL_T.userData.canvas, x:SPOT.chest.x, z:SPOT.chest.z, t:clock }); pzSfx.chime(.1); setPzStep(SL, 6); }
   const onGround = () => !P.onPlat && !P.climb;
   const putIn = { x:SPOT.basket, z:0,
     give(k){ if (SL.trial || pzStep(SL) >= 2) return; bag[k]--; saveBag(); paintBag(); paintFire(); pzSfx.thump(.08); SL.bi = k; },
@@ -2380,16 +2421,19 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
         act:() => { if (SL.trial || bh > .3 || pzStep(SL) >= 2) return;
           if (SL.bi) { bag[SL.bi] = (bag[SL.bi] || 0) + 1; saveBag(); paintBag(); pickFx.push({ key:SL.bi, x:SPOT.sloth.x, z:SPOT.sloth.z, t:clock }); SL.bi = null; pickChime(); return; }
           putIn.x = SPOT.sloth.x; putIn.z = SPOT.sloth.z; openFeed(putIn); } });
-      L.push({ key:'orangemonkey', noSeen:true, x:SPOT.monkey.x, h:8.1, h0:7.75, h1:8.4, z:SPOT.monkey.z, reach:8, me:monkey, act:throwOrange });
+      L.push({ key:'orangemonkey', noSeen:true, x:SPOT.monkey.x, h:8.1, h0:7.75, h1:8.4, z:SPOT.monkey.z, reach:8, me:monkey,
+        act:() => { if (st === 0) throwOrange(); else if (!pzSave.monkeyFed && !toss) { tossTo.x = P.x; tossTo.z = P.y; openFeed(tossTo); } else POKE_SND.jesters(.6); } });
+      if (pzSave.monkeyFed && !pzSave.lens) L.push({ key:'pz-lens', noSeen:true, x:LENS_DROP.x, h:.2, z:LENS_DROP.z, reach:3, act:() => { pzSave.lens = 1; savePz(); paintBag(); pickFx.push({ img:LENS_T.userData.canvas, x:LENS_DROP.x, z:LENS_DROP.z, t:clock }); pickChime(); } });
+      L.push({ key:'pz-hole', noSeen:true, x:hub.x, h:3.3, z:hub.y, reach:4.5, act:() => { birdT = clock; [0, .15, .3].forEach(d => setTimeout(() => tick(2600 + Math.random()*400, .08, .05), d*1000)); } });
     }
     if (st >= 5) L.push({ key:'pz-ladder', noSeen:true, x:SPOT.ladder.x, h:up ? DECK + .4 : 1.6, h0:up ? DECK - 1.5 : 0, h1:up ? DECK + .8 : DECK, z:SPOT.ladder.z, reach:up ? 3 : 3.6, act:() => climb(!up) });
     else L.push({ key:'pz-rolled', noSeen:true, x:SPOT.ladder.x, h:DECK + .2, z:SPOT.ladder.z, me:rolled });
     if (up) {
       L.push({ key:'pz-chest', noSeen:true, x:SPOT.chest.x, h:DECK + .3, h0:DECK, h1:DECK + .65, z:SPOT.chest.z, reach:3, me:chest,
-        act:() => { if (pzStep(SL) !== 5) { tick(220, .15, .08, 'triangle'); pokes.push({ me:chest, t:clock }); return; }
-          pzSave.carry = (pzSave.carry || 0) + 1; savePz(); paintBag(); pickFx.push({ img:ROLL_T.userData.canvas, x:SPOT.chest.x, z:SPOT.chest.z, t:clock }); pzSfx.chime(.1); setPzStep(SL, 6); } });
-      L.push({ key:'pz-spy', noSeen:true, x:SPOT.spy.x, h:DECK + .5, h0:DECK, h1:DECK + .9, z:SPOT.spy.z, reach:3, me:spy, act:() => { spyOn = { t:clock, x:P.x, y:P.y }; tick(880, .2, .05); } });
-      L.push({ key:'pz-hut', noSeen:true, x:SPOT.hut.x, h:DECK + 1, z:SPOT.hut.z, me:hut });
+        act:() => { if (pzStep(SL) !== 5) { tick(220, .15, .08, 'triangle'); pokes.push({ me:chest, t:clock }); return; } paintDials(); lockBox.hidden = false; keys.clear(); joy = null; } });
+      L.push({ key:'pz-spy', noSeen:true, x:SPOT.spy.x, h:DECK + .5, h0:DECK, h1:DECK + .9, z:SPOT.spy.z, reach:3, me:spy, act:() => { if (pzSave.lens === 1) { pzSave.lens = 2; savePz(); paintBag(); pzSfx.chime(.08); pokes.push({ me:spy, t:clock }); return; }
+        if (pzSave.lens === 2) { spyOn = { t:clock, x:P.x, y:P.y }; tick(880, .2, .05); } else { blurT = clock; tick(300, .2, .06, 'triangle'); } } });
+      L.push({ key:'pz-hut', noSeen:true, x:SPOT.hut.x, h:DECK + .8, h0:DECK, h1:DECK + 1.6, z:SPOT.hut.z, me:hut, reach:3.2, act:() => { if (clock - doorT < 2) return; doorT = clock; [0, .18].forEach(d => setTimeout(() => tick(200, .1, .12, 'triangle'), d*1000)); } });
     }
     return L;
   };
@@ -2401,6 +2445,16 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     deck.position.set(hx, DECK, hz);
     // 오두막·상자·망원경 (발판 위)
     { const [x, z] = at(SPOT.hut); hut.position.set(x, DECK, z); face(hut, x, z); const on = dayState().dark > .45; hutGlow.visible = on; if (on) { hutGlow.position.set(x, DECK + .9, z); hutGlow.lookAt(camera.position); } }
+    { const dk = clock - doorT; hut.material.map = dk > .5 && dk < 1.6 ? HUT_PEEK_T : HUT_T; if (dk > 1.6 && dk < 1.7 && !SL.slam) { SL.slam = true; pzSfx.thump(.25); pokes.push({ me:hut, t:clock }); } if (dk < 1) SL.slam = false; }   // 두드리면 문틈으로 눈이 내다보다가 쾅
+    { const bk = clock - birdT; birdM.visible = bk < 1.8; if (birdM.visible) { const [x, z] = at({ x:hub.x, z:hub.y }), ang = Math.atan2(camX - x, camZ - z), pop = Math.sin(Math.min(1, bk/1.8)*Math.PI); birdM.position.set(x + Math.sin(ang)*.35, 3.15 + pop*.12, z + Math.cos(ang)*.35); birdM.scale.setScalar(Math.max(.05, pop)); face(birdM, x, z); } }
+    { const lens = !pzSave.monkeyFed ? SPOT.monkey : !pzSave.lens ? LENS_DROP : null; lensM.visible = !!lens;   // 원숭이 손의 반짝이는 렌즈 → 떨어진 렌즈
+      if (lens) { const [x, z] = at(lens); lensM.position.set(x + .2, pzSave.monkeyFed ? .08 : 7.95, z); lensM.lookAt(camera.position); } }
+    if (toss) { const k = (clock - toss.t)/(toss.back ? .7 : .8);
+      if (tossM.material.map !== ITEMS[toss.key].tex) { tossM.material.map = ITEMS[toss.key].tex; tossM.material.needsUpdate = true; }
+      const up = !toss.flipped, u = Math.min(1, k), ax = up ? toss.x0 : SPOT.monkey.x, az = up ? toss.z0 : SPOT.monkey.z, bx = up ? SPOT.monkey.x : P.x, bz = up ? SPOT.monkey.z : P.y, ah = up ? 1.4 : 7.9, bhh = up ? 7.9 : 1.4;
+      const [x, z] = wrapNear(ax + wd(bx - ax, W)*u, az + wd(bz - az, H)*u, camX, camZ); tossM.visible = true; tossM.position.set(x, ah + (bhh - ah)*u + Math.sin(u*Math.PI)*1.5, z); tossM.lookAt(camera.position);
+      if (k >= 1 && up) { if (toss.back) { toss.flipped = true; toss.t = clock; POKE_SND.jesters(.7); } else { toss = null; tossM.visible = false; pzSave.monkeyFed = 1; savePz(); POKE_SND.jesters(1); pzSfx.thump(.1); } }
+      else if (k >= 1) { tick(560, .1, .1, 'triangle'); stars = { t:clock }; bag[toss.key] = (bag[toss.key] || 0) + 1; saveBag(); paintBag(); toss = null; tossM.visible = false; } }
     { const [x, z] = at(SPOT.chest); chest.position.set(x, DECK, z); face(chest, x, z); chest.material.map = st >= 6 ? CH.open : CH.shut; }
     { const [x, z] = at(SPOT.spy); spy.position.set(x, DECK, z); face(spy, x, z); }
     // 바구니 높이
@@ -2459,6 +2513,8 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
       else { const tgt = parrotHint(true) || { x:FIRE.x, y:FIRE.y }; const ty = Math.atan2(-wd(tgt.x - P.x, W), -wd(tgt.y - P.y, H)); yaw += wd(ty - yaw, Math.PI*2)*Math.min(1, dt*3); camera.fov = 16; camera.updateProjectionMatrix(); myMesh.visible = false; scene.fog.near = 25; scene.fog.far = 90; } }   // 망원경으론 안개 너머까지
   };
   SL.overlay = () => {
+    if (pzStep(SL) === 0 && wdist(P.x, P.y, hub.x, hub.y) < 12) { const s = toScreen(slothAt.x, 5.2, slothAt.z); if (s) { ctx.fillStyle = 'rgba(243,230,200,.75)'; ctx.font = 'italic 15px Georgia,serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; for (let j = 0; j < 3; j++) { const k = (clock*.4 + j/3) % 1; ctx.globalAlpha = Math.sin(k*Math.PI)*.8; ctx.fillText('z', s[0] + 14 + k*16, s[1] - 10 - k*26); } ctx.globalAlpha = 1; } }
+    if (clock - blurT < 1.6) { ctx.save(); ctx.globalAlpha = 1 - (clock - blurT)/1.6; ctx.fillStyle = 'rgba(8,6,4,.92)'; ctx.beginPath(); ctx.rect(0, 0, vw, vh); ctx.arc(vw/2, vh/2, Math.min(vw, vh)*.38, 0, Math.PI*2, true); ctx.fill('evenodd'); ctx.fillStyle = 'rgba(150,160,150,.85)'; ctx.beginPath(); ctx.arc(vw/2, vh/2, Math.min(vw, vh)*.38, 0, Math.PI*2); ctx.fill(); ctx.restore(); }   // 렌즈가 없어서 뿌옇기만 함
     if (stars) { const k = (clock - stars.t)/1.3; if (k >= 1) stars = null; else { const s = toScreen(P.x, 1.6 + (P.upH || 0), P.y); if (s) { ctx.fillStyle = `rgba(255,236,140,${1 - k})`; ctx.font = '14px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; for (let j = 0; j < 4; j++) { const a = clock*5 + j*1.57; ctx.fillText('✦', s[0] + Math.cos(a)*18, s[1] + Math.sin(a)*6); } } } }
     if (spyOn) { ctx.save(); ctx.fillStyle = 'rgba(8,6,4,.92)'; ctx.beginPath(); ctx.rect(0, 0, vw, vh); ctx.arc(vw/2, vh/2, Math.min(vw, vh)*.38, 0, Math.PI*2, true); ctx.fill('evenodd'); ctx.strokeStyle = '#8a6a2a'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(vw/2, vh/2, Math.min(vw, vh)*.38, 0, Math.PI*2); ctx.stroke(); ctx.restore(); }
   };
