@@ -611,14 +611,17 @@ const U = { uTime:{ value:0 }, uWind:{ value:.03 }, uCurve:{ value:.006 }, uSize
 function billboard(m){
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, U);
-    sh.vertexShader = 'uniform float uTime;\nuniform float uWind;\nuniform float uCurve;\nuniform vec2 uSize;\nuniform float uCull;\n' + sh.vertexShader.replace('#include <project_vertex>', `
+    sh.vertexShader = 'uniform float uTime;\nuniform float uWind;\nuniform float uCurve;\nuniform vec2 uSize;\nuniform float uCull;\nvarying float vCalm;\n' + sh.vertexShader.replace('#include <project_vertex>', `
       vec4 mvPosition = vec4( transformed, 1.0 );
       #ifdef USE_INSTANCING
         vec3 ipos = instanceMatrix[3].xyz;
         vec2 rel = ipos.xz - cameraPosition.xz;
         ipos.xz = cameraPosition.xz + rel - uSize * floor( rel / uSize + .5 );   // 끝과 끝이 이어진 숲: 가장 가까운 쪽에 그림
         vec3 local = ( instanceMatrix * mvPosition ).xyz - ipos;
-        local.x += uWind * local.y * .6 * sin( uTime * 1.7 + ipos.x * .7 + ipos.z * .5 );
+        float calm = clamp( ( length( ipos.xz - cameraPosition.xz ) - 4.0 ) / 12.0, 0.0, 1.0 ); vCalm = calm;
+        float gust = pow( max( 0.0, sin( dot( ipos.xz, vec2( .8, .6 ) ) * .09 - uTime * .55 ) ), 10.0 );   // 몇 초에 한 번 숲을 쓸고 지나가는 바람 물결
+        float breathe = sin( uTime * .5 + ipos.x * .03 + ipos.z * .02 ) * .15;
+        local.x += uWind * local.y * .9 * ( gust + breathe ) * ( 1.0 - calm * .7 );
         vec2 dd = cameraPosition.xz - ipos.xz;
         float ang = atan( dd.x, dd.y ), ca = cos( ang ), sa = sin( ang );
         local = vec3( ca * local.x + sa * local.z, local.y, -sa * local.x + ca * local.z );
@@ -627,9 +630,11 @@ function billboard(m){
         wp.y -= dot( dc, dc ) * uCurve;   // 둥근 지평선
         mvPosition = viewMatrix * vec4( wp, 1.0 );
       #else
+        vCalm = 0.0;
         mvPosition = modelViewMatrix * mvPosition;
       #endif
       gl_Position = projectionMatrix * mvPosition;`);
+    sh.fragmentShader = 'varying float vCalm;\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n      float lum = dot( diffuseColor.rgb, vec3( .3, .59, .11 ) ); diffuseColor.rgb = mix( diffuseColor.rgb, vec3( lum ), vCalm * .45 );');   // 먼 겹은 색이 차분해짐
   };
   return m;
 }
@@ -1067,8 +1072,14 @@ const RINGS = [
   return { ...rg, me };
 });
 let ringR = 18, ringAng = 22;
+let openS = 0;
+function openness(){
+  let o = 0, n = 0;
+  for (let dy = -4; dy <= 4; dy += 2) for (let dx = -4; dx <= 4; dx += 2) { const t = type[id(Math.floor(P.x) + dx, Math.floor(P.y) + dy)]; o += t === WATER ? 1.4 : t === BUSH || t === TREE ? 0 : 1; n++; }
+  return Math.min(1, o/n);
+}
 function updateRings(camX, camY, camZ, elevP){
-  const lift = Math.min(1, elevP/5.2);
+  const lift = Math.max(Math.min(1, elevP/5.2), openS*.55);
   for (const rg of RINGS) {
     const R = ringR*rg.k, ang = (rg.ang*(1 - lift) + 4*lift)*Math.PI/180;
     rg.me.position.set(camX, -1, camZ);
@@ -1081,7 +1092,7 @@ const peopleMeshes = new Map();
 
 /* 헤치기: 가까운 판은 옆으로 젖혀지고 낮아짐. 카메라와 나 사이의 판은 접힘 */
 let dirtyB = new Set();
-const foldedB = new Set();
+const foldedB = new Set(), relaxB = new Set();
 function updateBushes(actors, dt, camX, camZ){
   const lean = new Map(), active = new Set(), folding = new Set();
   for (const a of actors) for (let ty = (a.y|0) - 2; ty <= (a.y|0) + 2; ty++) for (let tx = (a.x|0) - 2; tx <= (a.x|0) + 2; tx++) {
@@ -1109,13 +1120,17 @@ function updateBushes(actors, dt, camX, camZ){
     for (const b of list) if (wdist(b.x, b.z, camX, camZ) < .7) { folding.add(b); active.add(b); }
   }
   for (const b of foldedB) active.add(b);
+  for (const b of relaxB) active.add(b);
   const dirtyMeshes = new Set();
   for (const b of active) {
     b.ft = folding.has(b) ? .14 : 1;
-    b.f += (b.ft - b.f)*Math.min(1, dt*10); if (b.ft === 1 && b.f > .995) b.f = 1;
+    b.f += (b.ft - b.f)*Math.min(1, dt*6); if (b.ft === 1 && b.f > .995) b.f = 1;
     if (b.f < 1) foldedB.add(b); else foldedB.delete(b);
-    const [ln, sq] = lean.get(b) || [0, 1];
-    placeBush(b, ln + sway[b.k]*Math.sin(clock*24 + b.idx)*.12, sq); dirtyMeshes.add(b.sp);
+    const [tl, tq] = lean.get(b) || [0, 1], l0 = b.ln || 0, q0 = b.sq ?? 1;
+    b.ln = l0 + (tl - l0)*Math.min(1, dt*(Math.abs(tl) > Math.abs(l0) ? 5 : 1.8));
+    b.sq = q0 + (tq - q0)*Math.min(1, dt*(tq < q0 ? 5 : 1.8));
+    placeBush(b, b.ln + sway[b.k]*Math.sin(clock*6 + b.idx)*.06, b.sq); dirtyMeshes.add(b.sp);
+    if (Math.abs(b.ln) > .01 || b.sq < .99 || sway[b.k] > 0) relaxB.add(b); else { relaxB.delete(b); b.ln = 0; b.sq = 1; }
   }
   for (const b of dirtyB) if (!active.has(b)) { placeBush(b); dirtyMeshes.add(b.sp); }
   dirtyB = active;
@@ -1271,34 +1286,44 @@ function lookTargets(){
 }
 function wrapText(text, max){ const lines = []; let cur = ''; for (const ch of text) { if (ctx.measureText(cur + ch).width > max) { lines.push(cur); cur = ch; } else cur += ch; } lines.push(cur); return lines; }
 const hudEl = document.querySelector('.hud');
-function drawObsOverlay(e, dt){
-  if (e < .5) { lookHold = 0; lookKey = null; return; }
-  const cx = vw/2, cy = vh/2;
-  let best = null, bd = 85*85;
+let selected = null, tapStart = null;
+cv.addEventListener('pointerdown', e => { tapStart = { x:e.clientX, y:e.clientY, t:performance.now(), id:e.pointerId }; });
+cv.addEventListener('pointerup', e => {
+  if (!tapStart || tapStart.id !== e.pointerId) return;
+  const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y), quick = performance.now() - tapStart.t < 400; tapStart = null;
+  if (moved < 9 && quick) handleTap(e.clientX, e.clientY);   // 거의 안 움직이고 뗐으면 누른 것
+});
+function handleTap(x, y){
+  let best = null, bd = 64*64;
   for (const t of lookTargets()) {
-    if (wdist(t.x, t.z, P.x, P.y) > 11) continue;
+    if (wdist(t.x, t.z, P.x, P.y) > 13) continue;
     const s = toScreen(t.x, t.h, t.z); if (!s) continue;
-    const d = (s[0] - cx)**2 + (s[1] - cy)**2; if (d < bd) { bd = d; best = { ...t, s }; }
+    const d = (s[0] - x)**2 + (s[1] - y)**2; if (d < bd) { bd = d; best = t; }
   }
-  ctx.globalAlpha = (e - .5)*2;
-  if (best) {
-    if (lookKey !== best.key) { lookKey = best.key; lookHold = 0; }
-    lookHold += dt;
-    ctx.strokeStyle = 'rgba(242,169,59,.9)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(best.s[0], best.s[1], 26 + Math.sin(clock*4)*2, 0, Math.PI*2); ctx.stroke();
-    if (lookHold > .45) {
-      const info = OBS_INFO[best.key];
-      if (!seen[best.key]) { seen[best.key] = today(); newSeen = 2.5; try { localStorage.setItem('denggul-seen', JSON.stringify(seen)); } catch (er) {} }
-      ctx.font = '19px "Nanum Pen Script", cursive';
-      const w = Math.min(330, vw - 24), lines = wrapText(info.text, w - 28), h = 50 + lines.length*21;
-      const bx = 12, by = (hudEl.getBoundingClientRect().bottom || 80) + 8;
-      ctx.fillStyle = '#f3e6c8'; ctx.fillRect(bx, by, w, h); ctx.strokeStyle = '#3a2410'; ctx.lineWidth = 3; ctx.strokeRect(bx, by, w, h);
-      ctx.fillStyle = '#4a2a16'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      ctx.font = '26px "Nanum Pen Script", cursive'; ctx.fillText(info.name, bx + 14, by + 9);
-      if (newSeen > 0) { ctx.fillStyle = '#c96a12'; ctx.textAlign = 'right'; ctx.font = '17px "Nanum Pen Script", cursive'; ctx.fillText('관찰 기록에 남김', bx + w - 12, by + 14); ctx.textAlign = 'left'; ctx.fillStyle = '#4a2a16'; }
-      ctx.font = '19px "Nanum Pen Script", cursive'; lines.forEach((l, i) => ctx.fillText(l, bx + 14, by + 42 + i*21));
-    }
-  } else { lookKey = null; lookHold = 0; }
-  newSeen = Math.max(0, newSeen - dt);
+  if (!best) { selected = null; return; }
+  selected = { ...best, until:clock + 8, isNew:!seen[best.key] };
+  if (!seen[best.key]) { seen[best.key] = today(); try { localStorage.setItem('denggul-seen', JSON.stringify(seen)); } catch (er) {} }
+}
+function drawObsOverlay(e, dt){
+  ctx.fillStyle = 'rgba(246,234,210,.4)';   // 누를 수 있는 것 위에 아주 작은 점
+  for (const t of lookTargets()) {
+    if (wdist(t.x, t.z, P.x, P.y) > 6) continue;
+    const s = toScreen(t.x, t.h + .35, t.z); if (s) { ctx.beginPath(); ctx.arc(s[0], s[1], 2.5, 0, Math.PI*2); ctx.fill(); }
+  }
+  if (!selected) return;
+  if (selected.until < clock || wdist(selected.x, selected.z, P.x, P.y) > 15) { selected = null; return; }
+  const a = Math.min(1, selected.until - clock), s = toScreen(selected.x, selected.h, selected.z);
+  ctx.globalAlpha = a;
+  if (s) { ctx.strokeStyle = 'rgba(242,169,59,.9)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(s[0], s[1], 24, 0, Math.PI*2); ctx.stroke(); }
+  const info = OBS_INFO[selected.key];
+  ctx.font = '19px "Nanum Pen Script", cursive';
+  const w = Math.min(330, vw - 24), lines = wrapText(info.text, w - 28), h = 50 + lines.length*21;
+  const bx = 12, by = (hudEl.getBoundingClientRect().bottom || 80) + 8;
+  ctx.fillStyle = '#f3e6c8'; ctx.fillRect(bx, by, w, h); ctx.strokeStyle = '#3a2410'; ctx.lineWidth = 3; ctx.strokeRect(bx, by, w, h);
+  ctx.fillStyle = '#4a2a16'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.font = '26px "Nanum Pen Script", cursive'; ctx.fillText(info.name, bx + 14, by + 9);
+  if (selected.isNew) { ctx.fillStyle = '#c96a12'; ctx.textAlign = 'right'; ctx.font = '17px "Nanum Pen Script", cursive'; ctx.fillText('관찰 기록에 남김', bx + w - 12, by + 14); ctx.textAlign = 'left'; ctx.fillStyle = '#4a2a16'; }
+  ctx.font = '19px "Nanum Pen Script", cursive'; lines.forEach((l, i) => ctx.fillText(l, bx + 14, by + 42 + i*21));
   ctx.globalAlpha = 1;
 }
 /* 그림첩 아래에 관찰 기록 */
@@ -1311,7 +1336,7 @@ $albumBtn.addEventListener('click', () => {
   const h = document.createElement('h3'); h.style.cssText = 'margin:8px 0 0;font:700 18px var(--display)'; h.textContent = `관찰 기록 ${n} / ${keys.length}`;
   const list = document.createElement('div'); list.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px 18px;font-size:21px';
   for (const k of keys) { const s = document.createElement('span'); s.textContent = seen[k] ? OBS_INFO[k].name : '???'; s.style.opacity = seen[k] ? 1 : .45; list.append(s); }
-  const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font:13px var(--body);color:var(--dim)'; tip.textContent = '가만히 서 있으면 숨어 있던 것들이 나와요. 화면 가운데에 두고 잠시 바라보면 기록돼요.';
+  const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font:13px var(--body);color:var(--dim)'; tip.textContent = '동물이나 물건을 누르면 이야기가 뜨고 기록돼요. 가만히 서 있으면 숨어 있던 동물들이 나와요.';
   seenBox.append(h, list, tip);
 });
 
@@ -1806,10 +1831,11 @@ function draw(dt = .016){
   // 낮과 밤
   const { dark, label } = dayState(), nt = Math.max(0, Math.min(1, (dark - .12)/.66));
   const dusk = Math.max(0, 1 - Math.abs(nt - .45)*2.6), st = stormLevel();
-  U.uTime.value = clock; U.uWind.value = .03 + .22*st;
+  U.uTime.value = clock; U.uWind.value = .05 + .22*st;
   tintCol.copy(DAY_TINT).lerp(NIGHT_TINT, nt).lerp(DUSK_TINT, dusk*.45).multiplyScalar(1 - .3*st); for (const m of tinted) m.color.copy(tintCol);
   scene.background.copy(DAY_SKY).lerp(NIGHT_SKY, nt).lerp(DUSK_SKY, dusk*.75).lerp(STORM_SKY, st*.65); hazeCol.copy(FAR_COL).multiply(tintCol); scene.fog.color.copy(scene.background).lerp(hazeCol, .6);
-  const view = (1 + elevP*.4)*(energy < 30 ? .55 + .45*energy/30 : 1)*(MOBILE ? .85 : 1);   // 바위 위에선 멀리, 지치면 가까이
+  openS += (Math.max(0, Math.min(1, (openness() - .35)/.5)) - openS)*Math.min(1, dt*1.2);   // 덤불이 적은 곳일수록
+  const view = (1 + elevP*.4)*(1 + openS*1.4)*(energy < 30 ? .55 + .45*energy/30 : 1)*(MOBILE ? .85 : 1);   // 바위 위에선 멀리, 지치면 가까이
   scene.fog.near = 2 - 1*nt; scene.fog.far = (17 - 6*nt - 5*st)*view; ringR = Math.max(9, scene.fog.far + 1); U.uCull.value = ringR;
   updateRings(camX, CAM_H + elevP, camZ, elevP);
   // 낮엔 옅은 해, 해질녘엔 크고 붉은 해(「해 질 녘의 처녀림」), 밤엔 큰 달(「뱀 부리는 여인」)
