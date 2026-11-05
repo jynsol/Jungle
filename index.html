@@ -209,9 +209,9 @@ let clock = 0, myColor = COLORS.me, myBubble = null, myId = null, oldmanT = 0;
 const others = new Map(), parts = [], sheets = [];
 let found = {};   // key -> { date, with:[이름] }
 
-const solid = t => t === TREE || t === WATER || t === RUIN;
+const solid = t => t === WATER || t === RUIN;   // 나무는 줄기 둘레만 따로 막음
 function blocked(x,y){
-  if (wdist(x, y, FIRE.x, FIRE.y) < .5) return true;
+  if (wdist(x, y, FIRE.x, FIRE.y) < .35) return true;
   for (const [ox,oy] of [[-P.r,-P.r],[P.r,-P.r],[-P.r,P.r],[P.r,P.r]]) {
     const tx = Math.floor(x+ox), ty = Math.floor(y+oy);
     if (solid(type[id(tx,ty)])) return true;
@@ -527,6 +527,7 @@ function step(dt){
     const sp = (tileAt(P.x,P.y) === BUSH ? BUSH_SPEED : SPEED) * dt * speedMul;
     const nx = P.x + wx*sp; if (!blocked(nx, P.y)) P.x = nx;
     const ny = P.y + wz*sp; if (!blocked(P.x, ny)) P.y = ny;
+    pushOutTrees(); pushOutTrees();
     P.x = wrapX(P.x); P.y = wrapY(P.y);
   }
   disturb(P.x, P.y, dt, P.moving);
@@ -997,6 +998,16 @@ for (let k = 0; k < W*H; k++) if (type[k] === TREE) {
 }
 const tcounts = TREES.map(() => 0); for (const b of TP) b.idx = tcounts[b.v]++;
 const treeMeshes = TREES.map((p, v) => { const m = new THREE.InstancedMesh(plane(p.w, p.h), billboard(mat(TREE_TEX[v])), Math.max(1, tcounts[v])); m.frustumCulled = false; scene.add(m); return m; });
+/* 나무는 줄기만 작은 원으로 막고, 부딪히면 둘레를 따라 미끄러짐(정면으로 부딪혀도 옆으로 비켜 감) */
+function pushOutTrees(){
+  { const dx = wd(P.x - FIRE.x, W), dz = wd(P.y - FIRE.y, H), d = Math.hypot(dx, dz), min = .55;   // 모닥불도 둘레로 미끄러짐
+    if (d < min) { const k = (min - d)/(d || 1); P.x += ((d ? dx : 1) - dz*.35)*k; P.y += ((d ? dz : 0) + dx*.35)*k; } }
+  for (let ty = (P.y|0) - 1; ty <= (P.y|0) + 1; ty++) for (let tx = (P.x|0) - 1; tx <= (P.x|0) + 1; tx++) {
+    const b = treeByTile.get(id(tx, ty)); if (!b) continue;
+    const dx = wd(P.x - b.x, W), dz = wd(P.y - b.z, H), d = Math.hypot(dx, dz), min = .2 + .1*b.s + P.r;
+    if (d < min) { const k = (min - d)/(d || 1); P.x += ((d ? dx : 1) - dz*.35)*k; P.y += ((d ? dz : 0) + dx*.35)*k; }
+  }
+}
 function placeTree(b){ dummy.position.set(b.x, 0, b.z); dummy.rotation.set(0, 0, 0); dummy.scale.set(b.s*b.m, b.s*b.f, 1); dummy.updateMatrix(); treeMeshes[b.v].setMatrixAt(b.idx, dummy.matrix); }
 TP.forEach(placeTree);
 
