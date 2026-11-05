@@ -1254,9 +1254,9 @@ function openness(){
   return Math.min(1, o/n);
 }
 function updateRings(camX, camY, camZ, elevP){
-  const lift = Math.max(Math.min(1, elevP/5.2), openS*.55);
+  const lift = Math.min(1, elevP/5.2);   // 배경판은 늘 같은 자리·같은 크기. 전망 바위에 올라설 때만 낮아짐
   for (const rg of RINGS) {
-    const R = ringR*rg.k, ang = (rg.ang*(1 - lift) + 4*lift)*Math.PI/180;
+    const R = 19.5*rg.k, ang = (rg.ang*(1 - lift) + 4*lift)*Math.PI/180;
     rg.me.position.set(camX, -1, camZ);
     rg.me.scale.set(R, camY + 1 + R*Math.tan(ang) - lift*3, R);
   }
