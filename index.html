@@ -810,7 +810,8 @@ function ctex(w, h, paint){
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.userData.canvas = c; return t;
 }
 function plane(w, h, base = true){ const g = new THREE.PlaneGeometry(w, h); if (base) g.translate(0, h/2, 0); return g; }
-function cutout(geo, m){ const me = new THREE.Mesh(geo, m); scene.add(me); return me; }
+const CUTOUTS = [];
+function cutout(geo, m){ const me = new THREE.Mesh(geo, m); scene.add(me); CUTOUTS.push(me); return me; }
 function swapTex(t, im){ t.dispose(); const c = t.userData.canvas; t.image = im; t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
   if (c && !t.userData.keep) { c.width = c.height = 1; t.userData.canvas = null; } }   // 새 그림이 오면 기본 그림판은 비워서 메모리를 돌려줌   // 한 번 올라간 그림판은 버리고 새 크기로 다시 올림
 function fitGeo(me, h, im, base = true){ const w = h*im.width/im.height; me.geometry = plane(w, h, base); return w; }   // 높이는 그대로, 너비는 그림 비율대로
@@ -4085,7 +4086,10 @@ function draw(dt = .016){
   }
   updateFire(dt, camX, camZ); updatePicks(camX, camZ); updateSmoke(dt, nt); updateWaterfall(dt, camX, camZ); updateLookout(camX, camZ); updateEnergy(dt); updateHints(dt, camX, camZ, nt); updateScenes(dt, camX, camZ, nt, st); updateMist(dt, camX, camZ, nt, elevP); updatePuzzles(dt, camX, camZ); updateCompass(); updateRibbons(camX, camZ); updateHammocks(dt, camX, camZ); updateLie(); updateAmbience(dt, nt);
   for (const o of scene.children) if (o.isMesh && !o.isInstancedMesh && o !== ground && o !== sky) { o.position.x = camX + wd(o.position.x - camX, W); o.position.z = camZ + wd(o.position.z - camZ, H); }
+  const hid = [];   // 카메라 코앞에 온 물건(우체통, 나비 등)은 화면을 덮지 않게 이번 장면만 숨김
+  for (const me of CUTOUTS) if (me.visible && me.parent === scene && !(me.userData.big ??= !(me.geometry.parameters && me.geometry.parameters.width <= 1.6 && me.geometry.parameters.height <= 1.8))) { const dx = me.position.x - camera.position.x, dz = me.position.z - camera.position.z; if (dx*dx + dz*dz < 1.69) { me.visible = false; hid.push(me); } }
   renderer.render(scene, camera);
+  for (const me of hid) me.visible = true;
 
   // 겹쳐 그리기
   ctx.clearRect(0, 0, vw, vh);
