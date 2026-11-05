@@ -77,6 +77,7 @@
 |---|---|
 | `mask_wood_front.png` · `mask_wood_side.png` · `mask_wood_back.png` | 처음부터 쓰는 소박한 나무 탈. 깎은 나뭇결, 아몬드 모양 눈구멍, 붉고 푸른 라틴아메리카 민속 무늬. 뒤는 탈 끈. |
 | `mask_ocelot_front.png` · `mask_ocelot_side.png` · `mask_ocelot_back.png` | 오셀롯 탈. 금빛 털에 검은 점무늬, 뾰족한 귀, 초록 눈. |
+| `mask_capybara_front.png` · `mask_capybara_side.png` · `mask_capybara_back.png` | 카피바라 탈. 네모난 큰 주둥이, 높이 붙은 작은 눈과 귀, 갈색 털. |
 | `mask_otter_front.png` · `mask_otter_side.png` · `mask_otter_back.png` | 수달 탈. 갈색 털, 동그란 작은 귀, 크림색 주둥이와 수염. |
 
 ## 두 번째 퍼즐: 물가의 둑과 개구리
@@ -87,3 +88,16 @@
 | `dam.png` | 1.6 : 1 | 640×400 | 나뭇가지와 진흙으로 쌓은 물막이 둑. |
 | `otter.png` | 1 : 1 | 256×256 | 둑 위에 서서 이쪽을 보는 수달 한 마리. |
 | `lilypad.png` | 1 : 1 | 256×256 | 위에서 본 연잎 한 장(사람이 밟고 건너는 징검다리). |
+
+## 세 번째 퍼즐: 폐허의 박쥐 신전
+
+| 파일 | 비율 | 예시 크기 | 내용 |
+|---|---|---|---|
+| `temple_wall.png` | 2.7 : 1 | 640×240 | 이끼 낀 돌 벽돌 벽(옆으로 이어 붙여짐), 소용돌이 새김. |
+| `temple_door.png` | 1.1 : 1 | 576×520 | 세 칸짜리 돌문. 왼쪽부터 **수달·오셀롯·원숭이 얼굴**이 새겨져 있음. |
+| `pillar.png` | 0.33 : 1 | 213×640 | 쓰러질 듯한 돌기둥. |
+| `bat.png` | 1.5 : 1 | 192×128 | 날개를 편 박쥐. |
+| `idol.png` · `idol_open.png` | 0.8 : 1 | 512×640 | 돌 우상. 닫힌 것은 입을 다묾, 열린 것은 눈이 빛나고 입이 벌어짐. |
+| `mirrors.png` | 1.5 : 1 | 480×320 | 받침대 위의 둥근 거울 세 개. |
+| `statue_headless.png` | 0.75 : 1 | 480×640 | 머리가 떨어져 나간 돌 원숭이상. |
+| `statue_head.png` | 1 : 1 | 256×256 | 돌 원숭이 머리(덤불 속에 굴러다님). |
