@@ -451,7 +451,7 @@ myColor = ME.color;
 
 /* ---- 함께 하기: Supabase Realtime으로 위치·말·나비를 주고받음 ---- */
 const safeColor = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c : '#9fc4e8';
-const stateObj = () => ({ id:ME.id, n:ME.name, c:ME.color, x:+P.x.toFixed(2), y:+P.y.toFixed(2), fx:+P.fx.toFixed(2), fy:+P.fy.toFixed(2), m:P.moving ? 1 : 0, s:P.sit ? 1 : 0, in:instrument || '', ia:instAt, bf:found.butterflies ? 1 : 0 });
+const stateObj = () => ({ id:ME.id, n:ME.name, c:ME.color, x:+P.x.toFixed(2), y:+P.y.toFixed(2), fx:+P.fx.toFixed(2), fy:+P.fy.toFixed(2), m:P.moving ? 1 : 0, s:P.sit ? 1 : 0, u:+(P.upH || 0).toFixed(2), in:instrument || '', ia:instAt, bf:found.butterflies ? 1 : 0 });
 let lastSent = 0, lastJson = '';
 function sendPresence(force){
   if (!chan) return;
@@ -467,7 +467,7 @@ function onState(s){
   let o = others.get(s.id);
   if (!o) { o = { rx:x, ry:y }; others.set(s.id, o);
     if (!knownIds.has(s.id)) { knownIds.add(s.id); try { localStorage.setItem('denggul-known', JSON.stringify([...knownIds].slice(-200))); } catch (e) {} } }   // 같이 있었던 사람
-  Object.assign(o, { x, y, fx:+s.fx || 0, fy:+s.fy || 0, m:!!s.m, sit:!!s.s, inst:typeof s.in === 'string' && Object.hasOwn(INSTRUMENTS, s.in) ? s.in : null, ia:+s.ia || 0, bf:!!s.bf, name:clean(s.n || '').slice(0, 12) || '탐험가', color:safeColor(s.c), seen:performance.now() });
+  Object.assign(o, { x, y, fx:+s.fx || 0, fy:+s.fy || 0, m:!!s.m, sit:!!s.s, upH:Math.max(0, Math.min(8, +s.u || 0)), inst:typeof s.in === 'string' && Object.hasOwn(INSTRUMENTS, s.in) ? s.in : null, ia:+s.ia || 0, bf:!!s.bf, name:clean(s.n || '').slice(0, 12) || '탐험가', color:safeColor(s.c), seen:performance.now() });
   return o;
 }
 function onSay(s){
@@ -626,8 +626,13 @@ function step(dt){
     if (joy) { const jx = joy.x-joy.sx, jy = joy.y-joy.sy, l = Math.hypot(jx,jy); if (l > 8) { dx = jx/Math.max(l,40); dy = jy/Math.max(l,40); } }
   }
   const len = Math.hypot(dx,dy); if (len > 1) { dx /= len; dy /= len; }
-  P.moving = len > .05;
-  if (P.moving) {
+  P.moving = len > .05 && !P.climb;
+  if (P.moving && P.onPlat) {   // 발판 위: 둥근 발판 안에서만 (줄기 둘레는 비켜 감)
+    const wx = Math.cos(yaw)*dx + Math.sin(yaw)*dy, wz = -Math.sin(yaw)*dx + Math.cos(yaw)*dy, pl = P.onPlat, sp = SPEED*dt*speedMul;
+    P.fx = wx; P.fy = wz; P.x += wx*sp; P.y += wz*sp;
+    const ox = wd(P.x - pl.x, W), oz = wd(P.y - pl.y, H), od = Math.hypot(ox, oz) || 1, cl = Math.max(pl.inner, Math.min(pl.r, od));
+    P.x = wrapX(pl.x + ox/od*cl); P.y = wrapY(pl.y + oz/od*cl);
+  } else if (P.moving) {
     // 화면 기준 입력(오른쪽 dx, 위쪽 -dy)을 숲 속 방향으로
     const wx = Math.cos(yaw)*dx + Math.sin(yaw)*dy, wz = -Math.sin(yaw)*dx + Math.cos(yaw)*dy;
     P.fx = wx; P.fy = wz;
@@ -637,7 +642,7 @@ function step(dt){
     pushOutTrees(); pushOutTrees();
     P.x = wrapX(P.x); P.y = wrapY(P.y);
   }
-  disturb(P.x, P.y, dt, P.moving);
+  if (!P.onPlat && !(P.upH > .5)) disturb(P.x, P.y, dt, P.moving);
   for (const o of others.values()) {
     const f = Math.min(1, dt*10); o.rx = wrapX(o.rx + wd(o.x-o.rx, W)*f); o.ry = wrapY(o.ry + wd(o.y-o.ry, H)*f);
     disturb(o.rx, o.ry, dt, o.m);
@@ -1240,7 +1245,7 @@ function treeline(col, light, seed){
     if (!light) { g.fillStyle = 'rgba(255,255,255,.06)'; for (let i = 0; i < 140; i++) blob(r()*w, h*.35 + r()*h*.6, 24 + r()*20, r()*Math.PI); }
   });
 }
-const FAR_COL = new THREE.Color('#8a9a84'), DEEP_COL = new THREE.Color('#1a3024'), hazeCol = new THREE.Color();
+const FAR_COL = new THREE.Color('#8a9a84'), DEEP_COL = new THREE.Color('#1a3024'), hazeCol = new THREE.Color(), deepTmp = new THREE.Color();
 const ringGeo = new THREE.CylinderGeometry(1, 1, 1, 56, 1, true); ringGeo.translate(0, .5, 0);
 const RINGS = [
   { tex:treeline('#7f927c', true, 31), k:1, ang:22, rep:3 },
@@ -2219,23 +2224,33 @@ const pzSfx = {
   chime(v){ [523.3, 659.3, 784, 1046.5].forEach((f, i) => setTimeout(() => pianoNote(f, v), i*140)); }
 };
 
-/* ---- 퍼즐 1. 높은 숲: 나무늘보와 바구니 ----
-   바구니에 먹이를 담고 → 덩굴을 당겨 나무늘보에게 올리면 → 바나나면 먹고 돛 두루마리를 대신 넣어 줌 → 덩굴을 당겨 내리고 → 두루마리를 꺼냄.
-   빈 바구니나 다른 열매를 올리면 들여다보고 고개를 젓고 도로 내려 보냄. 원숭이·나무 줄기·가지 위 꽃도 만지면 반응 */
+/* ---- 퍼즐 1. 높은 숲: 나무 위 오두막 ----
+   멀리서: 거대한 나무 위 오두막 발판(밤엔 등불). 줄사다리는 위에 말려 묶여 있음.
+   ① 잠든 나무늘보 — 원숭이가 던지는 오렌지가 내 머리에 맞고 튀어 오름. 나무늘보 바로 밑에 서 있으면 튄 오렌지가 나무늘보를 깨움
+   ② 깬 나무늘보는 바나나를 원함 → 바구니에 바나나를 담고 덩굴을 당겨 올리면 먹음
+   ③ 배부른 나무늘보가 발판 밑을 느릿느릿 기어가 사다리 매듭을 풂 → 줄사다리가 풀려 내려옴 (새 공간이 열림)
+   ④ 사다리로 올라가 발판 위를 걸음: 상자 속 돛 두루마리, 망원경(다음 갈 곳이 크게 보임), 오두막 */
+const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
 {
-  const hub = REGIONS[0].hub;
-  const TREE_T = ctex(300, 400, (g, w, h) => {
-    g.lineJoin = 'round';
-    g.fillStyle = '#4a3b2a'; g.strokeStyle = RG.line; g.lineWidth = 3;
-    g.beginPath(); g.moveTo(96, h); g.quadraticCurveTo(128, h - 30, 126, h - 90); g.lineTo(130, 70); g.lineTo(166, 70); g.lineTo(172, h - 90); g.quadraticCurveTo(176, h - 30, 210, h); g.closePath(); g.fill(); g.stroke();
-    g.strokeStyle = '#3a2e20'; g.lineWidth = 2; for (let i = 0; i < 9; i++) { g.beginPath(); g.moveTo(136 + (i % 3)*10, 90 + i*30); g.quadraticCurveTo(146, 104 + i*30, 140 + (i % 2)*12, 116 + i*30); g.stroke(); }
-    g.fillStyle = '#4a3b2a'; g.strokeStyle = RG.line; g.lineWidth = 3;
-    g.beginPath(); g.moveTo(160, 168); g.quadraticCurveTo(230, 160, 298, 168); g.lineTo(298, 182); g.quadraticCurveTo(230, 176, 162, 190); g.closePath(); g.fill(); g.stroke();
-    g.fillStyle = RG.moss; for (let i = 0; i < 7; i++) { g.beginPath(); g.ellipse(176 + i*18, 168, 10, 4, 0, 0, Math.PI*2); g.fill(); }
-    for (const x of [262]) { g.fillStyle = '#c23a4a'; for (let k = 0; k < 5; k++) { g.beginPath(); g.ellipse(x + (k - 2)*4, 160 - k % 2*5, 3, 9, (k - 2)*.4, 0, Math.PI*2); g.fill(); } }   // 가지 끝 브로멜리아드
-    for (let i = 0; i < 26; i++) ovate(g, 20 + (i*47) % 260, 10 + (i*29) % 90, 70 + (i % 3)*12, (i % 7)*.9 - 2.8, COLORS.leaves[i % 4], 20);
-    g.fillStyle = '#e8d24a'; g.strokeStyle = '#6b5a22'; g.lineWidth = 1.5;   // 뿌리 곁 바나나 껍질 (힌트)
-    for (const [x, y, r] of [[218, h - 10, .3], [84, h - 14, 2.4], [236, h - 22, 1.2]]) { g.save(); g.translate(x, y); g.rotate(r); for (const a of [-.7, 0, .7]) { g.beginPath(); g.ellipse(Math.sin(a)*6, -Math.cos(a)*6, 3, 8, a, 0, Math.PI*2); g.fill(); g.stroke(); } g.restore(); }
+  const hub = REGIONS[0].hub, DECK = 5.6;
+  const W_ = (dx, dz) => ({ x:wrapX(hub.x + dx), z:wrapY(hub.y + dz) });   // 나무 둘레의 고정된 자리 (모닥불 쪽이 +z)
+  const SPOT = { sloth:W_(1.4, 1.6), ladder:W_(-1.4, 1.6), vine:W_(.35, 2.05), monkey:W_(.7, .9), hut:W_(-.5, -1.25), chest:W_(1.05, -.85), spy:W_(1.75, -.1) };
+  const plat = { x:hub.x, y:hub.y, r:2.15, inner:.55, h:DECK }; PLATS.push(plat);
+  const TREE_T = ctex(320, 480, (g, w, h) => {
+    g.lineJoin = 'round'; g.fillStyle = '#4a3b2a'; g.strokeStyle = RG.line; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(100, h); g.quadraticCurveTo(138, h - 36, 140, h - 110); g.lineTo(146, 90); g.lineTo(176, 90); g.lineTo(182, h - 110); g.quadraticCurveTo(186, h - 36, 222, h); g.closePath(); g.fill(); g.stroke();
+    g.strokeStyle = '#3a2e20'; g.lineWidth = 2; for (let i = 0; i < 11; i++) { g.beginPath(); g.moveTo(150 + (i % 3)*9, 110 + i*30); g.quadraticCurveTo(160, 124 + i*30, 154 + (i % 2)*12, 136 + i*30); g.stroke(); }
+    g.fillStyle = '#2a1e14'; g.beginPath(); g.ellipse(160, h - 150, 9, 14, 0, 0, Math.PI*2); g.fill();   // 옹이 구멍
+    for (let i = 0; i < 34; i++) ovate(g, 14 + (i*47) % 292, 6 + (i*29) % 120, 72 + (i % 3)*12, (i % 7)*.9 - 2.8, COLORS.leaves[i % 4], 20);
+    g.fillStyle = '#e8d24a'; g.strokeStyle = '#6b5a22'; g.lineWidth = 1.5;   // 뿌리 곁 바나나 껍질
+    for (const [x, y, r] of [[236, h - 10, .3], [92, h - 14, 2.4], [252, h - 22, 1.2]]) { g.save(); g.translate(x, y); g.rotate(r); for (const a of [-.7, 0, .7]) { g.beginPath(); g.ellipse(Math.sin(a)*6, -Math.cos(a)*6, 3, 8, a, 0, Math.PI*2); g.fill(); g.stroke(); } g.restore(); }
+  });
+  const DECK_T = ctex(256, 256, (g, w, h) => {   // 둥근 나무 발판 (위에서 본 모습)
+    g.save(); g.beginPath(); g.arc(128, 128, 124, 0, Math.PI*2); g.clip();
+    for (let i = 0; i < 12; i++) { g.fillStyle = i % 2 ? '#8a6438' : '#7a5530'; g.fillRect(0, i*22, w, 22); g.strokeStyle = '#4a3220'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, i*22); g.lineTo(w, i*22); g.stroke(); }
+    g.fillStyle = '#4a3220'; for (let i = 0; i < 40; i++) g.fillRect((i*53) % w, (i*37) % h, 3, 3);
+    g.restore(); g.strokeStyle = '#3a2618'; g.lineWidth = 8; g.beginPath(); g.arc(128, 128, 120, 0, Math.PI*2); g.stroke();
+    g.fillStyle = 'rgba(0,0,0,0)'; g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.arc(128, 128, 30, 0, Math.PI*2); g.fill();   // 줄기가 지나가는 구멍
   });
   const slothPaint = mode => ctex(96, 128, (g) => {
     g.lineJoin = 'round'; g.strokeStyle = '#3a2e22'; g.lineWidth = 7; g.lineCap = 'round';
@@ -2252,12 +2267,12 @@ const pzSfx = {
     if (mode === 'eat') { g.fillStyle = '#f2d84a'; g.strokeStyle = '#6b5a22'; g.lineWidth = 1.5; g.save(); g.translate(60, 72); g.rotate(-.6); g.beginPath(); g.ellipse(0, 0, 5, 14, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.restore(); }
   });
   const ST = { idle:slothPaint('idle'), eat:slothPaint('eat'), sleep:slothPaint('sleep') };
-  const VINE_T = ctex(40, 256, (g, w, h) => {
+  const VINE_T = ctex(40, 320, (g, w, h) => {
     g.strokeStyle = '#4a6a34'; g.lineWidth = 4; g.lineCap = 'round'; g.beginPath(); g.moveTo(20, 0); g.quadraticCurveTo(28, h*.5, 18, h - 16); g.stroke();
     for (let y = 14; y < h - 20; y += 22) leafShape(g, 20 + Math.sin(y)*4, y, 16, Math.PI/2 + (y % 44 ? .9 : -.9), COLORS.leaves[(y/22 | 0) % 4], .34);
     g.strokeStyle = '#5a4a2a'; g.lineWidth = 3; g.beginPath(); g.ellipse(18, h - 10, 8, 9, 0, 0, Math.PI*2); g.stroke();
   });
-  const BASKET_T = ctex(96, 72, (g) => {   // 뚜껑 없는 엮은 바구니
+  const BASKET_T = ctex(96, 72, (g) => {
     g.fillStyle = '#b08848'; g.strokeStyle = '#5a3c1a'; g.lineWidth = 2.5;
     g.beginPath(); g.moveTo(8, 14); g.lineTo(88, 14); g.lineTo(78, 70); g.lineTo(18, 70); g.closePath(); g.fill(); g.stroke();
     g.strokeStyle = '#8a6430'; g.lineWidth = 2; for (let y = 24; y < 70; y += 9) { g.beginPath(); g.moveTo(10 + (y - 14)*.18, y); g.lineTo(86 - (y - 14)*.18, y); g.stroke(); }
@@ -2265,128 +2280,197 @@ const pzSfx = {
     g.fillStyle = '#9a7438'; g.strokeStyle = '#5a3c1a'; g.beginPath(); g.ellipse(48, 14, 40, 7, 0, 0, Math.PI*2); g.fill(); g.stroke();
     g.strokeStyle = '#5a3c1a'; g.lineWidth = 3; g.beginPath(); g.arc(48, 12, 14, Math.PI, 0); g.stroke();
   });
-  const ROLL_T = ctex(96, 48, (g) => {   // 돛 두루마리 (끈으로 묶음)
+  const ROLL_T = ctex(96, 48, (g) => {
     g.fillStyle = '#ece0bc'; g.strokeStyle = '#6b5236'; g.lineWidth = 2.5;
     g.beginPath(); g.ellipse(48, 24, 40, 14, -.15, 0, Math.PI*2); g.fill(); g.stroke();
     g.strokeStyle = '#c9b88e'; g.lineWidth = 1.5; for (const dx of [-20, -6, 8, 22]) { g.beginPath(); g.moveTo(48 + dx, 12); g.quadraticCurveTo(52 + dx, 24, 48 + dx, 36); g.stroke(); }
     g.strokeStyle = '#a0402a'; g.lineWidth = 3; g.beginPath(); g.moveTo(44, 10); g.lineTo(42, 38); g.stroke();
   });
+  const LADDER_T = ctex(64, 448, (g, w, h) => {
+    g.strokeStyle = '#7a5a32'; g.lineWidth = 4; g.beginPath(); g.moveTo(10, 0); g.lineTo(12, h); g.moveTo(54, 0); g.lineTo(52, h); g.stroke();
+    g.strokeStyle = '#8a6438'; g.lineWidth = 6; for (let y = 16; y < h; y += 34) { g.beginPath(); g.moveTo(10, y); g.lineTo(54, y + 2); g.stroke(); }
+  });
+  const ROLLED_T = ctex(96, 48, (g) => {   // 말려 묶인 줄사다리
+    g.fillStyle = '#8a6438'; g.strokeStyle = '#4a3220'; g.lineWidth = 2; g.beginPath(); g.ellipse(48, 26, 40, 16, 0, 0, Math.PI*2); g.fill(); g.stroke();
+    g.strokeStyle = '#6a4a28'; for (let i = 1; i < 4; i++) { g.beginPath(); g.ellipse(48, 26, 40 - i*9, 16 - i*3.5, 0, 0, Math.PI*2); g.stroke(); }
+    g.strokeStyle = '#c0402a'; g.lineWidth = 4; g.beginPath(); g.moveTo(40, 6); g.lineTo(44, 46); g.stroke();   // 매듭 끈
+  });
+  const HUT_T = ctex(160, 176, (g, w, h) => {
+    g.fillStyle = '#7a5a36'; g.strokeStyle = RG.line; g.lineWidth = 3; g.fillRect(24, 70, 112, 104); g.strokeRect(24, 70, 112, 104);
+    g.fillStyle = '#c8a860'; g.beginPath(); g.moveTo(6, 78); g.lineTo(80, 6); g.lineTo(154, 78); g.closePath(); g.fill(); g.stroke();
+    g.strokeStyle = '#a08040'; g.lineWidth = 2; for (let i = 0; i < 10; i++) { g.beginPath(); g.moveTo(14 + i*14, 74); g.lineTo(80, 10); g.stroke(); }
+    g.fillStyle = '#2a1c12'; g.fillRect(64, 112, 32, 62);
+    g.fillStyle = '#ffd87a'; g.fillRect(36, 98, 18, 16); g.strokeStyle = '#4a3220'; g.strokeRect(36, 98, 18, 16);
+  });
+  const chestPaint = open => ctex(96, 72, (g) => {
+    g.fillStyle = '#6b4a2a'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.fillRect(8, 30, 80, 40); g.strokeRect(8, 30, 80, 40);
+    g.fillStyle = '#c9a046'; g.fillRect(44, 38, 8, 10);
+    if (open) { g.fillStyle = '#5a3c22'; g.beginPath(); g.moveTo(8, 30); g.lineTo(18, 4); g.lineTo(96, 4); g.lineTo(88, 30); g.closePath(); g.fill(); g.stroke(); g.fillStyle = '#1a120a'; g.fillRect(12, 30, 72, 6); }
+    else { g.fillStyle = '#7a5530'; g.beginPath(); g.moveTo(8, 30); g.quadraticCurveTo(48, 10, 88, 30); g.closePath(); g.fill(); g.stroke(); }
+  });
+  const CH = { shut:chestPaint(false), open:chestPaint(true) };
+  const SPY_T = ctex(64, 96, (g) => {
+    g.strokeStyle = '#4a3220'; g.lineWidth = 3; g.beginPath(); g.moveTo(32, 46); g.lineTo(12, 94); g.moveTo(32, 46); g.lineTo(52, 94); g.moveTo(32, 46); g.lineTo(32, 94); g.stroke();
+    g.save(); g.translate(32, 40); g.rotate(-.35); g.fillStyle = '#b08a3a'; g.strokeStyle = '#4a3220'; g.lineWidth = 2; g.fillRect(-26, -7, 52, 14); g.strokeRect(-26, -7, 52, 14); g.fillStyle = '#d8b860'; g.fillRect(14, -9, 12, 18); g.restore();
+  });
   const ORANGE_T = ctex(32, 32, (g) => { g.fillStyle = '#f2992e'; g.strokeStyle = '#8a4a1a'; g.lineWidth = 2; g.beginPath(); g.arc(16, 17, 12, 0, Math.PI*2); g.fill(); g.stroke(); leafShape(g, 16, 6, 9, -.6, RG.mid, .35); });
-  const tree = cutout(plane(6, 8), mat(TREE_T));
+  const tree = cutout(plane(7, 10.5), mat(TREE_T));
+  const deck = cutout(new THREE.CircleGeometry(2.45, 40), mat(DECK_T, true, { alphaTest:.3 })); deck.rotation.x = -Math.PI/2;
   const sloth = cutout(plane(1.1, 1.45), mat(ST.idle));
-  const vine = cutout(plane(.38, 3.2), mat(VINE_T));
+  const vine = cutout(plane(.38, 4.3), mat(VINE_T));
   const basket = cutout(plane(.95, .72), mat(BASKET_T));
-  const inBasket = cutout(plane(.42, .42), mat(ITEMS.banana.tex));   // 바구니에 담긴 것 (열매나 두루마리)
+  const inBasket = cutout(plane(.42, .42), mat(ITEMS.banana.tex));
   const rope = cutout(plane(.04, 1), new THREE.MeshBasicMaterial({ color:'#7a5a32' }));
+  const ladderGeo = plane(.75, DECK, false); ladderGeo.translate(0, -DECK/2, 0);
+  const ladder = cutout(ladderGeo, mat(LADDER_T));
+  const rolled = cutout(plane(.8, .4), mat(ROLLED_T));
+  const hut = cutout(plane(1.9, 2.1), mat(HUT_T));
+  const chest = cutout(plane(.8, .6), mat(CH.shut));
+  const spy = cutout(plane(.55, .85), mat(SPY_T));
   const monkey = cutout(plane(.5, .62), mat(MONKEY_SIT_TEX));
   const orange = cutout(plane(.24, .24, false), mat(ORANGE_T)); orange.visible = false;
-  onArt('bigtree', im => { swapTex(TREE_T, im); fitGeo(tree, 8, im); });
+  const hutGlow = cutout(plane(2.2, 2.2, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.5 }));
+  onArt('bigtree', im => { swapTex(TREE_T, im); fitGeo(tree, 10.5, im); });
   for (const k of ['idle', 'eat', 'sleep']) onArt('sloth_' + k, im => { swapTex(ST[k], im); if (k === 'idle') fitGeo(sloth, 1.45, im); });
-  onArt('vine', im => { swapTex(VINE_T, im); fitGeo(vine, 3.2, im); });
+  onArt('vine', im => { swapTex(VINE_T, im); fitGeo(vine, 4.3, im); });
   onArt('basket', im => { swapTex(BASKET_T, im); fitGeo(basket, .72, im); });
   onArt('item_sail', im => swapTex(ROLL_T, im));
+  onArt('ladder', im => swapTex(LADDER_T, im)); onArt('ladder_rolled', im => swapTex(ROLLED_T, im)); onArt('treehut', im => { swapTex(HUT_T, im); fitGeo(hut, 2.1, im); });
+  onArt('chest', im => swapTex(CH.shut, im)); onArt('chest_open', im => swapTex(CH.open, im)); onArt('spyglass', im => swapTex(SPY_T, im)); onArt('deck', im => swapTex(DECK_T, im));
   window.SAIL_ROLL_T = ROLL_T;
-  const SL = { id:'sloth', x:hub.x, y:hub.y, done:7, t:0, last:-1, react:null, trial:null, wrong:null, orange:null,
-    thumb:() => ST.idle.image };
-  // 바구니 높이: 땅(0) ↔ 나무늘보 바로 아래(2.08)
-  const LOW = .02, HIGH = 2.08;
-  const pos = { sloth:[0, 0], vine:[0, 0], basket:[0, 0], monkey:[0, 0], flower:[0, 0], bh:LOW };
-  const near = (r = 14) => Math.max(0, 1 - wdist(P.x, P.y, hub.x, hub.y)/r);
-  const putIn = { x:0, z:0,
-    give(k){ if (pzStep(SL) !== 0 || SL.trial) return;
-      bag[k]--; saveBag(); paintBag(); paintFire(); pzSfx.thump(.08);
-      if (k === 'banana') setPzStep(SL, 1); else SL.wrong = k; },   // 다른 열매도 담기긴 함
-    want(){ wants.push({ x:pos.sloth[0], h:3.9, z:pos.sloth[1], key:'banana', until:clock + 3.5 }); pzSfx.hm(.06); } };
-  const pull = () => {   // 덩굴 당기기: 바구니가 올라가거나 내려옴
-    const st = pzStep(SL); SL.react = { kind:'vine', t:clock };
-    if (SL.trial) return;
-    if (st === 1) { setPzStep(SL, 2); return; }
-    if (st === 4) { setPzStep(SL, 5); return; }
-    if (st === 0) { SL.trial = { kind:SL.wrong ? 'wrong' : 'empty', t:clock }; pzSfx.rope(.08*near()); }
+  // 단계: 0 잠듦, 1 깨어남, 2 바나나 바구니 올라감(먹음), 3 기어가서 매듭 풂, 4 사다리 풀려 내려옴, 5 사다리 내려와 있음, 6 상자에서 두루마리 꺼냄
+  const SL = { id:'sloth', x:hub.x, y:hub.y, done:6, t:0, last:-1, react:null, trial:null, bi:null, orange:null, throwT:3, snd:false, thumb:() => ST.idle.image };
+  const LOW = .02, HIGH = 3.3, near = (r = 14) => Math.max(0, 1 - wdist(P.x, P.y, hub.x, hub.y)/r);
+  let bh = LOW, slothAt = { ...SPOT.sloth }, stars = null, spyOn = null;
+  const onGround = () => !P.onPlat && !P.climb;
+  const putIn = { x:SPOT.basket, z:0,
+    give(k){ if (SL.trial || pzStep(SL) >= 2) return; bag[k]--; saveBag(); paintBag(); paintFire(); pzSfx.thump(.08); SL.bi = k; },
+    want(){ wants.push({ x:slothAt.x, h:5, z:slothAt.z, key:'banana', until:clock + 3.5 }); pzSfx.hm(.06); } };
+  const pull = () => {
+    SL.react = { kind:'vine', t:clock }; const st = pzStep(SL);
+    if (SL.trial || st >= 2) return;
+    if (st === 1 && SL.bi === 'banana') { SL.bi = null; setPzStep(SL, 2); return; }
+    SL.trial = { kind:st === 0 ? 'sleep' : SL.bi ? 'wrong' : 'empty', t:clock }; pzSfx.rope(.08*near());
   };
+  const climb = up => { if (P.climb) return; const lx = SPOT.ladder.x, lz = SPOT.ladder.z, ix = wd(hub.x - lx, W), iz = wd(hub.y - lz, H), il = Math.hypot(ix, iz);
+    P.climb = { up, t0:clock, x0:P.x, y0:P.y, bx:lx, bz:lz, tx:wrapX(lx + ix/il*.6), tz:wrapY(lz + iz/il*.6) }; P.sit = false; pzSfx.rope(.06); };
+  function throwOrange(){   // 원숭이가 내 머리를 겨냥해 오렌지를 던짐
+    if (SL.orange) return; POKE_SND.jesters(.8*near());
+    const under = wdist(P.x, P.y, SPOT.sloth.x, SPOT.sloth.z) < .85;
+    SL.orange = { t:clock, x0:SPOT.monkey.x, z0:SPOT.monkey.z, x1:P.x, z1:P.y, under, wakes:under && pzStep(SL) === 0 };
+  }
   SL.targets = () => {
-    const st = pzStep(SL), L = [];
+    const st = pzStep(SL), L = [], up = !!P.onPlat;
     L.push({ key:'pz-tree', noSeen:true, x:hub.x, h:1.4, z:hub.y, reach:4, me:tree,
-      act:() => { [0, .16].forEach(d => setTimeout(() => tick(170, .12, .14, 'triangle'), d*1000));   // 똑똑 두드리면 잎이 떨어짐
-        for (let i = 0; i < 6; i++) { const a = Math.random()*6.28; parts.push({ x:hub.x + Math.cos(a)*1.5, y:hub.y + Math.sin(a)*1.5, vx:(Math.random() - .5)*.3, vy:(Math.random() - .5)*.3, life:3.2, rot:a, h:6 + Math.random(), vh:-.2 }); } } });
-    L.push({ key:'sloth', noSeen:true, x:pos.sloth[0], h:3.7, z:pos.sloth[1], reach:5, me:sloth,
-      act:() => { if (st === 0 && !SL.wrong) putIn.want(); else { SL.react = { kind:'blink', t:clock }; pzSfx.hm(.05); } } });
-    L.push({ key:'pz-vine', noSeen:true, x:pos.vine[0], h:1.6, z:pos.vine[1], reach:4, act:pull });
-    L.push({ key:'pz-basket', noSeen:true, x:pos.basket[0], h:pos.bh + .4, z:pos.basket[1], reach:4, me:basket,
-      act:() => {
-        if (SL.trial || pos.bh > .3) return;
-        if (st === 0 && SL.wrong) { bag[SL.wrong] = (bag[SL.wrong] || 0) + 1; saveBag(); paintBag(); pickFx.push({ key:SL.wrong, x:pos.basket[0], z:pos.basket[1], t:clock }); SL.wrong = null; pickChime(); return; }   // 도로 꺼냄
-        if (st === 0) { putIn.x = pos.basket[0]; putIn.z = pos.basket[1]; openFeed(putIn); return; }
-        if (st === 6) { pzSave.carry = (pzSave.carry || 0) + 1; savePz(); paintBag(); pickFx.push({ img:ROLL_T.image, x:pos.basket[0], z:pos.basket[1], t:clock }); pickChime(); setPzStep(SL, 7); }
-      } });
-    L.push({ key:'orangemonkey', noSeen:true, x:pos.monkey[0], h:6.3, z:pos.monkey[1], reach:7, me:monkey,
-      act:() => { POKE_SND.jesters(1); if (!SL.orange) SL.orange = { t:clock, x:pos.monkey[0], z:pos.monkey[1] }; } });
-    L.push({ key:'pz-flower', noSeen:true, x:pos.flower[0], h:4.75, z:pos.flower[1], reach:5,
-      act:() => { pollen.push({ x:pos.flower[0], h:4.75, z:pos.flower[1], t:clock }); [1568, 1760, 2093].forEach((f, i) => setTimeout(() => tick(f, .3, .04), i*90)); } });
+      act:() => { [0, .16].forEach(d => setTimeout(() => tick(170, .12, .14, 'triangle'), d*1000));
+        for (let i = 0; i < 6; i++) { const a = Math.random()*6.28; parts.push({ x:hub.x + Math.cos(a)*1.8, y:hub.y + Math.sin(a)*1.8, vx:(Math.random() - .5)*.3, vy:(Math.random() - .5)*.3, life:3.4, rot:a, h:7.5 + Math.random(), vh:-.2 }); } } });
+    L.push({ key:'sloth', noSeen:true, x:slothAt.x, h:4.8, z:slothAt.z, reach:5.5, me:sloth,
+      act:() => { const s = pzStep(SL); if (s === 0) { pzSfx.hm(.05); sfx((ac, t) => { const src = ac.createBufferSource(), lp = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = noiseBuf(ac, 1.2); lp.type = 'lowpass'; lp.frequency.value = 300; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.08, t + .5); g.gain.exponentialRampToValueAtTime(.0001, t + 1.1); src.connect(lp).connect(g).connect(ac.destination); src.start(t); src.stop(t + 1.2); }); }
+        else if (s === 1) putIn.want(); else { SL.react = { kind:'blink', t:clock }; pzSfx.hm(.05); } } });
+    if (!up) {
+      L.push({ key:'pz-vine', noSeen:true, x:SPOT.vine.x, h:1.8, z:SPOT.vine.z, reach:4, act:pull });
+      L.push({ key:'pz-basket', noSeen:true, x:SPOT.sloth.x, h:bh + .4, z:SPOT.sloth.z, reach:4, me:basket,
+        act:() => { if (SL.trial || bh > .3 || pzStep(SL) >= 2) return;
+          if (SL.bi) { bag[SL.bi] = (bag[SL.bi] || 0) + 1; saveBag(); paintBag(); pickFx.push({ key:SL.bi, x:SPOT.sloth.x, z:SPOT.sloth.z, t:clock }); SL.bi = null; pickChime(); return; }
+          putIn.x = SPOT.sloth.x; putIn.z = SPOT.sloth.z; openFeed(putIn); } });
+      L.push({ key:'orangemonkey', noSeen:true, x:SPOT.monkey.x, h:8.1, z:SPOT.monkey.z, reach:8, me:monkey, act:throwOrange });
+    }
+    if (st >= 5) L.push({ key:'pz-ladder', noSeen:true, x:SPOT.ladder.x, h:up ? DECK + .4 : 1.6, z:SPOT.ladder.z, reach:up ? 2.4 : 3.2, act:() => climb(!up) });
+    else L.push({ key:'pz-rolled', noSeen:true, x:SPOT.ladder.x, h:DECK + .2, z:SPOT.ladder.z, me:rolled });
+    if (up) {
+      L.push({ key:'pz-chest', noSeen:true, x:SPOT.chest.x, h:DECK + .3, z:SPOT.chest.z, reach:2.4, me:chest,
+        act:() => { if (pzStep(SL) !== 5) { tick(220, .15, .08, 'triangle'); return; }
+          pzSave.carry = (pzSave.carry || 0) + 1; savePz(); paintBag(); pickFx.push({ img:ROLL_T.userData.canvas, x:SPOT.chest.x, z:SPOT.chest.z, t:clock }); pzSfx.chime(.1); setPzStep(SL, 6); } });
+      L.push({ key:'pz-spy', noSeen:true, x:SPOT.spy.x, h:DECK + .5, z:SPOT.spy.z, reach:2.4, me:spy, act:() => { spyOn = { t:clock, x:P.x, y:P.y }; tick(880, .2, .05); } });
+      L.push({ key:'pz-hut', noSeen:true, x:SPOT.hut.x, h:DECK + 1, z:SPOT.hut.z, me:hut });
+    }
     return L;
   };
-  const pollen = [];
   SL.update = (dt, camX, camZ) => {
     const st = pzStep(SL); if (st !== SL.last) { SL.t = clock; SL.last = st; SL.snd = false; }
     const el = clock - SL.t, d = wdist(P.x, P.y, hub.x, hub.y);
-    const [hx, hz] = wrapNear(hub.x, hub.y, camX, camZ), ang = Math.atan2(camX - hx, camZ - hz), rx = Math.cos(ang), rz = -Math.sin(ang), fx = Math.sin(ang), fz = Math.cos(ang);
-    const at = (r, f) => [hx + rx*r + fx*f, hz + rz*r + fz*f];
-    tree.position.set(hx, 0, hz); tree.rotation.y = ang;
-    pos.sloth = at(1.8, .12); pos.basket = at(1.8, .3); pos.vine = at(.62, .15); pos.monkey = at(-1.3, .1); pos.flower = at(2.62, .1);
+    const at = p => wrapNear(p.x, p.z, camX, camZ), face = (me, x, z) => { me.rotation.y = Math.atan2(camX - x, camZ - z); };
+    const [hx, hz] = at({ x:hub.x, z:hub.y }); tree.position.set(hx, 0, hz); face(tree, hx, hz);
+    deck.position.set(hx, DECK, hz);
+    // 오두막·상자·망원경 (발판 위)
+    { const [x, z] = at(SPOT.hut); hut.position.set(x, DECK, z); face(hut, x, z); const on = dayState().dark > .45; hutGlow.visible = on; if (on) { hutGlow.position.set(x, DECK + .9, z); hutGlow.lookAt(camera.position); } }
+    { const [x, z] = at(SPOT.chest); chest.position.set(x, DECK, z); face(chest, x, z); chest.material.map = st >= 6 ? CH.open : CH.shut; }
+    { const [x, z] = at(SPOT.spy); spy.position.set(x, DECK, z); face(spy, x, z); }
     // 바구니 높이
     const ease = k => { k = Math.max(0, Math.min(1, k)); return k*k*(3 - 2*k); };
-    let bh = LOW;
-    if (st === 2 || st === 3 || st === 4) bh = LOW + (HIGH - LOW)*(st === 2 ? ease(el/4) : 1);
-    if (st === 5) bh = HIGH + (LOW - HIGH)*ease(el/4);
+    bh = st === 2 ? LOW + (HIGH - LOW)*ease(el/4) : st >= 3 ? LOW : LOW;
+    if (st === 2 && el > 8.6) bh = HIGH + (LOW - HIGH)*ease((el - 8.6)/3);
     const tr = SL.trial;
     if (tr) { const te = clock - tr.t; bh = te < 4 ? LOW + (HIGH - LOW)*ease(te/4) : te < 6.5 ? HIGH : LOW + (HIGH - LOW)*(1 - ease((te - 6.5)/4));
-      if (te > 4 && !tr.seen) { tr.seen = true; SL.react = { kind:'no', t:clock }; pzSfx.hm(.08*near()); if (tr.kind === 'wrong') wants.push({ x:pos.sloth[0], h:3.9, z:pos.sloth[1], key:'banana', until:clock + 3 }); }
+      if (te > 4 && !tr.seen) { tr.seen = true; if (tr.kind === 'sleep') { SL.react = { kind:'snore', t:clock }; } else { SL.react = { kind:'no', t:clock }; pzSfx.hm(.08*near()); wants.push({ x:slothAt.x, h:5, z:slothAt.z, key:'banana', until:clock + 3 }); } }
       if (te > 6.5 && !tr.down) { tr.down = true; pzSfx.rope(.06*near()); }
       if (te > 10.5) SL.trial = null; }
-    pos.bh = bh;
-    basket.position.set(pos.basket[0], bh, pos.basket[1]); basket.rotation.set(0, ang, (bh > LOW + .05 && bh < HIGH - .05) ? Math.sin(clock*3)*.07 : 0);
-    rope.position.set(pos.basket[0], bh + .62, pos.basket[1]); rope.scale.set(1, Math.max(.01, 4.5 - (bh + .62)), 1); rope.rotation.y = ang;
-    // 바구니 속: 담은 열매 / 두루마리
-    const item = st === 1 || st === 2 ? 'banana' : (st === 0 && SL.wrong) ? SL.wrong : null, roll = st >= 4 && st <= 6;
-    inBasket.visible = !!item || roll;
-    if (inBasket.visible) { const m = roll ? ROLL_T : ITEMS[item].tex; if (inBasket.material.map !== m) { inBasket.material.map = m; inBasket.material.needsUpdate = true; }
-      inBasket.position.set(pos.basket[0] + fx*.04, bh + .5, pos.basket[1] + fz*.04); inBasket.rotation.y = ang; }
-    // 나무늘보: 먹고(2→3), 두루마리를 넣고(3→4), 다 끝나면 잠듦
+    { const [x, z] = at(SPOT.sloth); basket.position.set(x, bh, z); face(basket, x, z); basket.rotation.z = (bh > LOW + .05 && bh < HIGH - .05) ? Math.sin(clock*3)*.07 : 0;
+      rope.position.set(x, bh + .62, z); rope.scale.set(1, Math.max(.01, DECK - (bh + .62)), 1); face(rope, x, z);
+      const item = st === 2 && el < 4.6 ? 'banana' : st < 2 ? SL.bi : null; inBasket.visible = !!item;
+      if (item) { if (inBasket.material.map !== ITEMS[item].tex) { inBasket.material.map = ITEMS[item].tex; inBasket.material.needsUpdate = true; } inBasket.position.set(x, bh + .5, z); face(inBasket, x, z); } }
+    // 나무늘보: 자다가 → 깨어 → 먹고 → 발판 밑을 기어 사다리 매듭으로
+    const crawl = st === 3 ? ease(el/7) : st >= 4 ? 1 : 0;
+    slothAt = { x:wrapX(SPOT.sloth.x + wd(SPOT.ladder.x + .5 - SPOT.sloth.x, W)*crawl), z:wrapY(SPOT.sloth.z + wd(SPOT.ladder.z - SPOT.sloth.z, H)*crawl) };
     const r = SL.react, re = r ? clock - r.t : 9;
-    let tilt = Math.sin(clock*.6)*.04;
+    let tilt = Math.sin(clock*(st === 0 ? .35 : .6))*.04;
     if (r && r.kind === 'no' && re < 1.8) tilt += Math.sin(re*8)*.2*(1 - re/1.8);
-    if (r && r.kind === 'blink' && re < 1) tilt += .1*Math.sin(re*Math.PI);
-    const eating = st === 3 || (st === 2 && el > 4);
-    sloth.material.map = eating ? ST.eat : st >= 5 ? ST.sleep : ST.idle;
-    sloth.position.set(pos.sloth[0], 3.02 - (eating ? .08 : 0), pos.sloth[1]); sloth.rotation.set(0, ang, tilt);
-    if (st === 2 && el > 4.4) setPzStep(SL, 3, { auto:true });
-    if (st === 3 && el > 4.2) setPzStep(SL, 4, { auto:true });
-    if (st === 5 && el > 4.4) { pzSfx.thump(.2*near()); setPzStep(SL, 6, { auto:true }); }
+    if (r && (r.kind === 'blink' || r.kind === 'wake') && re < 1.2) tilt += .14*Math.sin(re*Math.PI/1.2);
+    const eating = st === 2 && el > 4 && el < 8.6;
+    sloth.material.map = eating ? ST.eat : (st === 0 || st >= 5) ? ST.sleep : ST.idle;
+    { const [x, z] = at(slothAt); sloth.position.set(x, DECK - 1.5 - (eating ? .06 : 0), z); face(sloth, x, z); sloth.rotation.z = tilt + (st === 3 ? Math.sin(clock*2)*.06 : 0); }
+    // 사다리: 말려 있다가 → 풀려 내려옴
+    { const [x, z] = at(SPOT.ladder); rolled.visible = st < 4; rolled.position.set(x, DECK - .05, z); face(rolled, x, z); rolled.rotation.z = st === 3 && el > 6 ? Math.sin(clock*14)*.1 : 0;
+      ladder.visible = st >= 4; const k = st === 4 ? ease(el/2.2) : 1; ladder.scale.set(1, Math.max(.02, k), 1); ladder.position.set(x, DECK, z); face(ladder, x, z); ladder.rotation.z = st === 4 ? Math.sin(el*6)*.06*(1 - k) : 0; }
+    if (st === 2 && el > 11.6) setPzStep(SL, 3, { auto:true });
+    if (st === 3 && el > 7.4) setPzStep(SL, 4, { auto:true });
+    if (st === 4 && el > 2.4) setPzStep(SL, 5, { auto:true });
     if (!SL.snd) { SL.snd = true; const v = near();
-      if (st === 2 && el < .3) pzSfx.rope(.09*v); if (st === 3 && el < .3) pzSfx.munch(.12*v); if (st === 4 && el < .3) pzSfx.chime(.06*v); if (st === 5 && el < .3) pzSfx.rope(.09*v); }
-    // 덩굴: 당기면 끝이 내려갔다 올라옴
+      if (st === 1 && el < .3) { SL.react = { kind:'wake', t:clock }; pzSfx.hm(.1*v); }
+      if (st === 2 && el < .3) { pzSfx.rope(.09*v); setTimeout(() => pzSfx.munch(.12*near()), 4200); }
+      if (st === 4 && el < .3) { pzSfx.rope(.12*v); setTimeout(() => pzSfx.thump(.2*near()), 2000); setTimeout(() => pzSfx.chime(.08*near()), 2300); } }
+    // 덩굴(도르래 줄)
     let vw = Math.sin(clock*.9)*.03, vy = 1.3;
     if (r && r.kind === 'vine' && re < 1.4) { vw += Math.sin(re*12)*.08*(1 - re/1.4); vy -= Math.sin(Math.min(1, re/.5)*Math.PI)*.35; }
-    vine.position.set(pos.vine[0], vy, pos.vine[1]); vine.rotation.set(0, ang, vw);
-    // 원숭이와 떨어지는 오렌지
-    monkey.position.set(pos.monkey[0], 6.0 + Math.abs(Math.sin(clock*1.3))*.03, pos.monkey[1]); monkey.rotation.set(0, ang, Math.sin(clock*.7)*.05);
+    { const [x, z] = at(SPOT.vine); vine.position.set(x, vy, z); face(vine, x, z); vine.rotation.z = vw; }
+    // 원숭이: 나무 아래로 오면 오렌지를 던짐 (나무늘보가 깨면 그만)
+    { const [x, z] = at(SPOT.monkey); monkey.position.set(x, 7.75 + Math.abs(Math.sin(clock*1.3))*.03, z); face(monkey, x, z); monkey.rotation.z = Math.sin(clock*.7)*.05; }
+    if (st === 0 && onGround() && d < 4.5 && !SL.orange && (SL.throwT -= dt) <= 0) { SL.throwT = 3.5 + Math.random()*2.5; throwOrange(); }
     const o = SL.orange;
-    if (o) { const k = clock - o.t; orange.visible = k < 4;
-      const y = k < .9 ? 6.1 - 6.1*(k/.9)**2 : Math.abs(Math.sin((k - .9)*5))*.6*Math.max(0, 1 - (k - .9)/1.2);
-      orange.position.set(o.x + fx*.6 + rx*k*.3, Math.max(.12, y + .12), o.z + fz*.6 + rz*k*.3); orange.lookAt(camera.position);
-      if (k > .9 && !o.bonk) { o.bonk = true; tick(520, .1, .1*near(), 'triangle'); }
-      if (k > 4) SL.orange = null; }
+    if (o) { const k = clock - o.t; orange.visible = true; let px, pz, py;
+      if (k < .9) { const u = k/.9; px = o.x0 + wd(o.x1 - o.x0, W)*u; pz = o.z0 + wd(o.z1 - o.z0, H)*u; py = 7.7 + (1.5 - 7.7)*u + Math.sin(u*Math.PI)*1.2; }
+      else if (o.under) { const u = Math.min(1, (k - .9)/.6); px = o.x1; pz = o.z1; py = 1.5 + (DECK - 1.6 - 1.5)*Math.sin(u*Math.PI/2);   // 머리에서 튀어 올라 나무늘보에게
+        if (u >= 1 && !o.hit2) { o.hit2 = true; tick(520, .1, .1, 'triangle'); if (o.wakes) setPzStep(SL, 1); else SL.react = { kind:'blink', t:clock }; }
+        if (k > 1.5) { const u2 = Math.min(1, (k - 1.5)/.7); py = DECK - 1.6 - (DECK - 1.8)*u2*u2; } }
+      else { const u = Math.min(1, (k - .9)/.9); px = o.x1 + .8*u; pz = o.z1; py = Math.max(.12, 1.5 + Math.sin(u*Math.PI)*.8 - 1.4*u); }
+      if (k > .9 && !o.hit) { o.hit = true; tick(560, .1, .12, 'triangle'); if (wdist(P.x, P.y, o.x1, o.z1) < 1.2) stars = { t:clock }; }
+      const [ox, oz] = wrapNear(px, pz, camX, camZ); orange.position.set(ox, py, oz); orange.lookAt(camera.position);
+      if (k > 3) { SL.orange = null; orange.visible = false; } }
+    // 망원경: 다음 갈 곳 쪽을 크게 (움직이면 끝)
+    if (spyOn) { if (P.moving || clock - spyOn.t > 7) { spyOn = null; fitRenderer(); }
+      else { const tgt = parrotHint(true) || { x:FIRE.x, y:FIRE.y }; const ty = Math.atan2(-wd(tgt.x - P.x, W), -wd(tgt.y - P.y, H)); yaw += wd(ty - yaw, Math.PI*2)*Math.min(1, dt*3); camera.fov = 16; camera.updateProjectionMatrix(); myMesh.visible = false; } }
   };
   SL.overlay = () => {
-    for (let i = pollen.length - 1; i >= 0; i--) { const p = pollen[i], k = (clock - p.t)/1.6; if (k >= 1) { pollen.splice(i, 1); continue; }
-      const s = toScreen(p.x, p.h, p.z); if (!s) continue; ctx.fillStyle = `rgba(255,236,140,${1 - k})`;
-      for (let j = 0; j < 12; j++) { const a = j*.52 + p.t, rr = 4 + k*30; ctx.beginPath(); ctx.arc(s[0] + Math.cos(a)*rr, s[1] + Math.sin(a)*rr*.7 + k*12, 1.8, 0, Math.PI*2); ctx.fill(); } }
-    const st = pzStep(SL); if (st !== 6) return;   // 내려온 두루마리가 반짝임
-    const s = toScreen(pos.basket[0], pos.bh + .9, pos.basket[1]); if (!s) return;
-    const tw = Math.sin(clock*3); if (tw < .3) return;
-    ctx.globalAlpha = (tw - .3)*1.4; ctx.fillStyle = '#fff6c8'; ctx.font = '16px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✦', s[0] + 12, s[1]); ctx.globalAlpha = 1;
+    if (stars) { const k = (clock - stars.t)/1.3; if (k >= 1) stars = null; else { const s = toScreen(P.x, 1.6 + (P.upH || 0), P.y); if (s) { ctx.fillStyle = `rgba(255,236,140,${1 - k})`; ctx.font = '14px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; for (let j = 0; j < 4; j++) { const a = clock*5 + j*1.57; ctx.fillText('✦', s[0] + Math.cos(a)*18, s[1] + Math.sin(a)*6); } } } }
+    if (spyOn) { ctx.save(); ctx.fillStyle = 'rgba(8,6,4,.92)'; ctx.beginPath(); ctx.rect(0, 0, vw, vh); ctx.arc(vw/2, vh/2, Math.min(vw, vh)*.38, 0, Math.PI*2, true); ctx.fill('evenodd'); ctx.strokeStyle = '#8a6a2a'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(vw/2, vh/2, Math.min(vw, vh)*.38, 0, Math.PI*2); ctx.stroke(); ctx.restore(); }
   };
   PUZZLES.push(SL);
+}
+// 사다리 오르내리기와 발판 위 걷기
+function updateClimb(){
+  const c = P.climb; if (!c) return;
+  const k = (clock - c.t0)/2.4, H_ = PLATS[0] ? PLATS[0].h : 5.6, e = x => x*x*(3 - 2*x);
+  if (c.up) {
+    if (k < .2) { const u = e(k/.2); P.x = wrapX(c.x0 + wd(c.bx - c.x0, W)*u); P.y = wrapY(c.y0 + wd(c.bz - c.y0, H)*u); P.upH = 0; }
+    else if (k < .85) { P.x = c.bx; P.y = c.bz; P.upH = H_*e((k - .2)/.65); }
+    else { const u = e(Math.min(1, (k - .85)/.15)); P.upH = H_; P.x = wrapX(c.bx + wd(c.tx - c.bx, W)*u); P.y = wrapY(c.bz + wd(c.tz - c.bz, H)*u); }
+    if (k >= 1) { P.climb = null; P.onPlat = PLATS[0]; P.upH = H_; }
+  } else {
+    if (k < .15) { const u = e(k/.15); P.x = wrapX(c.x0 + wd(c.bx - c.x0, W)*u); P.y = wrapY(c.y0 + wd(c.bz - c.y0, H)*u); P.onPlat = null; P.upH = H_; }
+    else if (k < .85) { P.x = c.bx; P.y = c.bz; P.upH = H_*(1 - e((k - .15)/.7)); }
+    else { const u = e(Math.min(1, (k - .85)/.15)), ox = wd(c.bx - c.tx, W), oz = wd(c.bz - c.tz, H); P.upH = 0; P.x = wrapX(c.bx + ox*u); P.y = wrapY(c.bz + oz*u); }
+    if (k >= 1) { P.climb = null; P.onPlat = null; P.upH = 0; }
+  }
 }
 
 /* ---- 범선에 돛 걸기: 두루마리를 들고 범선을 누르면 돛이 펼쳐져 올라감 ---- */
@@ -2418,6 +2502,7 @@ regionTag.style.cssText = 'position:fixed;left:50%;top:calc(env(safe-area-inset-
 document.body.append(regionTag);
 let lastRegion = -1, regionTimer = 0;
 function updatePuzzles(dt, camX, camZ){
+  updateClimb();
   for (const pz of PUZZLES) pz.update(dt, camX, camZ);
   updateSails();
   updateFeedBar();
@@ -2474,7 +2559,7 @@ function updateEnergy(dt){
   if (faint > 0) {
     faint += dt;
     if (faint > 1.6 && !fainted) {   // 모닥불 곁에서 눈을 뜸
-      fainted = true;
+      fainted = true; P.onPlat = null; P.climb = null; P.upH = 0;
       const a = Math.random()*Math.PI*2; P.x = wrapX(FIRE.x + Math.sin(a)*1.35); P.y = wrapY(FIRE.y + Math.cos(a)*1.35); P.sit = true; yaw = a; energy = 45;
       const have = ITEM_KEYS.filter(k => bag[k] > 0), lost = have.length ? have[Math.random()*have.length | 0] : null;
       if (lost) { bag[lost]--; saveBag(); paintBag(); }
@@ -2941,10 +3026,10 @@ function updateChair(dt){
 function draw(dt = .016){
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
   updateObs(dt); const e = 0;   // 시점은 늘 같음. 멈춰 있으면 동물만 나옴
-  const camX = P.x - fx*CAM_D, camZ = P.y - fz*CAM_D, elevP = elevAt(P.x, P.y);
+  const camX = P.x - fx*CAM_D, camZ = P.y - fz*CAM_D, elevP = elevAt(P.x, P.y) + (P.upH || 0);
   camera.position.set(camX, CAM_H + elevP, camZ);
   camera.lookAt(P.x + fx*3, 1.05 + elevP + Math.sin(pitch)*2.5, P.y + fz*3);
-  const actors = [{ x:P.x, y:P.y, w:1 - e }]; for (const o of others.values()) actors.push({ x:o.rx, y:o.ry });
+  const actors = (P.upH || 0) > .5 ? [] : [{ x:P.x, y:P.y, w:1 - e }]; for (const o of others.values()) actors.push({ x:o.rx, y:o.ry });
   updateBushes(actors, dt, camX, camZ);
   updateTrees(dt, camX, camZ);
   // 낮과 밤
@@ -2952,10 +3037,10 @@ function draw(dt = .016){
   const dusk = Math.max(0, 1 - Math.abs(nt - .45)*2.6), st = stormLevel();
   U.uTime.value = clock; U.uWind.value = .05 + .22*st;
   tintCol.copy(DAY_TINT).lerp(NIGHT_TINT, nt).lerp(DUSK_TINT, dusk*.45).multiplyScalar(1 - .3*st); for (const m of tinted) m.color.copy(tintCol);
-  scene.background.copy(DAY_SKY).lerp(NIGHT_SKY, nt).lerp(DUSK_SKY, dusk*.75).lerp(STORM_SKY, st*.65); hazeCol.copy(DEEP_COL).multiply(tintCol); scene.fog.color.copy(hazeCol).lerp(scene.background, .12);   // 멀어질수록 흐려지는 대신 숲 그늘처럼 어두워짐
+  scene.background.copy(DAY_SKY).lerp(NIGHT_SKY, nt).lerp(DUSK_SKY, dusk*.75).lerp(STORM_SKY, st*.65); hazeCol.copy(FAR_COL).multiply(tintCol); scene.fog.color.copy(scene.background).lerp(hazeCol, .6).lerp(deepTmp.copy(DEEP_COL).multiply(tintCol), .45);   // 멀수록 흐려지되, 숲 그늘 쪽으로 조금 가라앉은 안개
   openS += (Math.max(0, Math.min(1, (openness() - .35)/.5)) - openS)*Math.min(1, dt*1.2);   // 덤불이 적은 곳일수록
   const view = (1 + elevP*.4)*(1 + openS*1.4)*(energy < 30 ? .55 + .45*energy/30 : 1)*(MOBILE ? .85 : 1);   // 바위 위에선 멀리, 지치면 가까이
-  scene.fog.near = 6 - 2*nt; scene.fog.far = Math.min(50, (46 - 12*nt - 10*st)*view); ringR = Math.max(10, Math.min(27, scene.fog.far)); U.uCull.value = ringR;   // 더 멀리까지 보이게 (안개는 천천히)
+  scene.fog.near = 6 - 2*nt; scene.fog.far = Math.min(44, (38 - 10*nt - 9*st)*view); ringR = Math.max(10, Math.min(27, scene.fog.far)); U.uCull.value = ringR;   // 더 멀리까지 보이게 (안개는 천천히)
   updateRings(camX, CAM_H + elevP, camZ, elevP);
   // 낮엔 옅은 해, 해질녘엔 크고 붉은 해(「해 질 녘의 처녀림」), 밤엔 큰 달(「뱀 부리는 여인」)
   sky.material.map = nt > .55 ? MOON_TEX : dusk > .35 ? RED_SUN_TEX : SUN_TEX;
@@ -2971,7 +3056,7 @@ function draw(dt = .016){
   for (const [key, o] of others) {
     let me = peopleMeshes.get(key);
     if (!me || me.userData.color !== o.color) { if (me) scene.remove(me); me = cutout(personGeo, mat(personTex(o.color))); me.userData.color = o.color; peopleMeshes.set(key, me); }
-    me.position.set(o.rx, elevAt(o.rx, o.ry), o.ry); me.rotation.y = yaw;
+    me.position.set(o.rx, elevAt(o.rx, o.ry) + (o.upH || 0), o.ry); me.rotation.y = yaw;
     animatePerson(me, o, o.m, dt);
   }
   for (const [key, me] of peopleMeshes) if (!others.has(key)) { scene.remove(me); peopleMeshes.delete(key); }
@@ -3034,14 +3119,14 @@ function draw(dt = .016){
   ctx.textBaseline = 'top';
   for (const o of others.values()) {
     if (wdist(o.rx, o.ry, P.x, P.y) > 18) continue;
-    const s = toScreen(o.rx, 1.22 + elevAt(o.rx, o.ry), o.ry); if (!s) continue;
+    const s = toScreen(o.rx, 1.22 + elevAt(o.rx, o.ry) + (o.upH || 0), o.ry); if (!s) continue;
     ctx.fillStyle = 'rgba(30,24,64,.75)'; const w = ctx.measureText(o.name).width + 10; ctx.fillRect(s[0] - w/2, s[1] - 16, w, 15);
     ctx.fillStyle = '#f6ead2'; ctx.textAlign = 'center'; ctx.fillText(o.name, s[0], s[1] - 14);
   }
   const say = (x, h, z, b, kind) => { if (!b || b.until <= clock || wdist(x, z, P.x, P.y) > 14) return; const s = toScreen(x, h, z); if (s) drawBubble(s[0], s[1], b.text, kind); };
   PARROTS.forEach(p => say(p.x, .9, p.y, p.bubble, 'parrot'));
   say(oldman.position.x, 1.2, oldman.position.z, SITE.oldman.bubble, 'old');
-  for (const o of others.values()) say(o.rx, 1.25 + elevAt(o.rx, o.ry), o.ry, o.bubble);
+  for (const o of others.values()) say(o.rx, 1.25 + elevAt(o.rx, o.ry) + (o.upH || 0), o.ry, o.bubble);
   say(P.x, 1.25 + elevP, P.y, myBubble);
   if (joy) { ctx.strokeStyle = 'rgba(246,234,210,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(joy.sx, joy.sy, 40, 0, Math.PI*2); ctx.stroke(); }
   const n = others.size;
@@ -3068,6 +3153,7 @@ const $reset = document.getElementById('reset'); let armed = 0; $reset.innerHTML
 $reset.addEventListener('click', () => {
   if (!armed) { armed = setTimeout(() => { armed = 0; $reset.innerHTML = ICON(IC.reset) + '<span class="lb">처음부터</span>'; }, 3000); $reset.innerHTML = ICON(IC.reset, '#e8402f') + '<span class="lb">한 번 더 누르면 처음부터</span>'; return; }   // 빨개진 걸 한 번 더 누르면 처음부터
   clearTimeout(armed); armed = 0; $reset.innerHTML = ICON(IC.reset) + '<span class="lb">처음부터</span>';
+  P.onPlat = null; P.climb = null; P.upH = 0;
   P.x = SX + .5; P.y = SY + 2.4; found = {}; clock = 0; save(); paintAlbumBtn(); sendPresence(true); cv.focus();
 });
 
