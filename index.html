@@ -108,7 +108,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
    모두 정면에서 본 모습, 투명 배경, 아래가 땅에 닿게. */
 const ASSET_NAMES = ['agave','grass','broadleaf','fern','lily','whitespike','heartleaf','banana','sansevieria','palm','tree','orangetree','lotus','flamingo','tiger','monkey','ruin','player','parrot','leaf','player_walk','butterfly','fire','log','cliff','waterfall_flow'];
 // 아직 기본 그림인 것들: 파일을 넣으면 바로 바뀜 (목록과 크기는 ART_LIST.md)
-ASSET_NAMES.push('galleon', 'galleon_front', 'piano', 'clock', 'gramophone', 'bicycle', 'mailbox', 'swing', 'chair', 'monkeys', 'whitebird', 'toucan', 'oldman', 'rock', 'fruit_banana', 'fruit_mango', 'fruit_cacao', 'bigtree', 'sloth_idle', 'sloth_eat', 'sloth_sleep', 'basket', 'vine', 'item_sail', 'sail_full', 'ladder', 'ladder_rolled', 'treehut', 'chest', 'chest_open', 'spyglass', 'deck', 'lens', 'treehut_peek', 'frog', 'dam', 'otter', 'lilypad', 'mask_ocelot_front', 'mask_ocelot_side', 'mask_ocelot_back', 'mask_otter_front', 'mask_otter_side', 'mask_otter_back');
+ASSET_NAMES.push('galleon', 'galleon_front', 'piano', 'clock', 'gramophone', 'bicycle', 'mailbox', 'swing', 'chair', 'monkeys', 'whitebird', 'toucan', 'oldman', 'rock', 'fruit_banana', 'fruit_mango', 'fruit_cacao', 'bigtree', 'sloth_idle', 'sloth_eat', 'sloth_sleep', 'basket', 'vine', 'item_sail', 'sail_full', 'ladder', 'ladder_rolled', 'treehut', 'chest', 'chest_open', 'spyglass', 'deck', 'lens', 'treehut_peek', 'frog', 'dam', 'otter', 'lilypad', 'mask_ocelot_front', 'mask_ocelot_side', 'mask_ocelot_back', 'mask_otter_front', 'mask_otter_side', 'mask_otter_back', 'mask_wood_front', 'mask_wood_side', 'mask_wood_back');
 const ASSETS = Object.fromEntries(ASSET_NAMES.map(n => [n, 'assets/' + n + '.png']));
 const ART = {};   // 그림 이름 → 그림이 오면 할 일 (그림판 바꾸고 비율 맞추기)
 const onArt = (k, fn) => (ART[k] || (ART[k] = [])).push(fn);
@@ -2559,9 +2559,21 @@ function updateClimb(){
 /* ================= 탈과 노래 =================
    처음에 오셀롯 탈과 수달 탈 중 하나를 고름. 나머지 하나는 오두막 상자에서. 탈은 얼굴을 덮고 걸을 때 같이 돌아감(앞·옆·뒤).
    노래: 다섯 음(1~5 키, 또는 오른쪽 아래 ♪). 탈마다 목소리가 다르고 같은 음계라 같이 부르면 어울림 */
-const MASKS = { ocelot:{ name:'오셀롯' }, otter:{ name:'수달' } };
+const MASKS = { wood:{ name:'나무' }, ocelot:{ name:'오셀롯' }, otter:{ name:'수달' } };   // 나무 탈은 처음부터 씀 (얼굴을 늘 덮음)
 const SING_SCALE = [0, 2, 4, 7, 9];   // 다섯 음 (도 레 미 솔 라)
 function maskPaint(kind, view){   // view: 0 뒤, 1 앞, 2 옆(오른쪽을 봄) — 걷기 그림의 줄과 같음
+  if (kind === 'wood') return ctex(96, 96, (g) => {   // 깎아 만든 소박한 나무 탈, 붉고 푸른 무늬
+    g.lineJoin = 'round'; g.strokeStyle = RG.line; g.lineWidth = 2.5;
+    if (view === 0) { g.fillStyle = '#8a6438'; g.beginPath(); g.ellipse(48, 52, 26, 32, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.strokeStyle = '#5a3c1a'; g.lineWidth = 4; g.beginPath(); g.moveTo(20, 46); g.lineTo(76, 46); g.stroke(); return; }   // 뒤: 탈 끈
+    if (view === 2) { g.fillStyle = '#c9965a'; g.beginPath(); g.moveTo(40, 18); g.quadraticCurveTo(70, 18, 72, 44); g.lineTo(80, 54); g.lineTo(72, 58); g.quadraticCurveTo(70, 84, 44, 86); g.quadraticCurveTo(30, 52, 40, 18); g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = '#1a120a'; g.beginPath(); g.ellipse(62, 44, 5, 3, 0, 0, Math.PI*2); g.fill(); g.fillStyle = '#c0402a'; g.fillRect(48, 64, 18, 4); g.fillStyle = '#2a7a7a'; g.fillRect(50, 28, 14, 3); return; }
+    g.fillStyle = '#c9965a'; g.beginPath(); g.ellipse(48, 52, 28, 34, 0, 0, Math.PI*2); g.fill(); g.stroke();
+    g.strokeStyle = 'rgba(90,60,26,.4)'; g.lineWidth = 1.2; for (const x of [30, 42, 54, 66]) { g.beginPath(); g.moveTo(x, 22); g.quadraticCurveTo(x + 3, 52, x - 1, 84); g.stroke(); }   // 나뭇결
+    g.fillStyle = '#1a120a'; for (const x of [36, 60]) { g.beginPath(); g.ellipse(x, 46, 7, 4, 0, 0, Math.PI*2); g.fill(); }
+    g.fillStyle = '#c0402a'; for (const x of [28, 68]) { g.beginPath(); g.arc(x, 60, 4, 0, Math.PI*2); g.fill(); }
+    g.fillStyle = '#2a7a7a'; for (let i = 0; i < 5; i++) { g.beginPath(); g.moveTo(32 + i*8, 30); g.lineTo(36 + i*8, 24); g.lineTo(40 + i*8, 30); g.closePath(); g.fill(); }
+    g.strokeStyle = '#5a3c1a'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(40, 70); g.quadraticCurveTo(48, 74, 56, 70); g.stroke();
+  });
   return ctex(96, 96, (g) => {
     const oc = kind === 'ocelot', fur = oc ? '#e0a347' : '#7a5634', dark = oc ? '#3a2410' : '#3a2616', light = oc ? '#f6e6c2' : '#e8d8b8';
     g.lineJoin = 'round'; g.strokeStyle = RG.line; g.lineWidth = 2.5;
@@ -2615,11 +2627,13 @@ for (const k of Object.keys(MASKS)) {
 // 탈은 고르지 않음: 퍼즐을 풀면 얻음 (오두막 → 수달, 물가 → 오셀롯)
 // 메뉴: 가진 탈을 돌려 가며 쓰기 (탈 벗기 포함)
 const $maskBtn = document.createElement('button'); $maskBtn.type = 'button'; $maskBtn.className = 'ic';
-function paintMaskBtn(){ const k = pzSave.mask; $maskBtn.style.display = pzSave.masks && pzSave.masks.length ? '' : 'none'; $maskBtn.replaceChildren(); const c = document.createElement('canvas'); c.width = c.height = 96; c.style.cssText = 'width:24px;height:24px';
+function paintMaskBtn(){ const k = pzSave.mask; $maskBtn.style.display = (pzSave.masks || []).length > 1 ? '' : 'none';   // 탈이 둘 이상일 때만 $maskBtn.replaceChildren(); const c = document.createElement('canvas'); c.width = c.height = 96; c.style.cssText = 'width:24px;height:24px';
   if (k && MASK_TEX[k]) c.getContext('2d').drawImage(MASK_TEX[k][1].userData.canvas, 0, 0); else { const g = c.getContext('2d'); g.strokeStyle = '#f3e6c8'; g.lineWidth = 6; g.beginPath(); g.arc(48, 48, 32, 0, Math.PI*2); g.stroke(); }
   const lb = document.createElement('span'); lb.className = 'lb'; lb.textContent = k ? MASKS[k].name + ' 탈' : '탈'; $maskBtn.append(c, lb); $maskBtn.setAttribute('aria-label', '탈 바꾸기'); }
-$maskBtn.addEventListener('click', () => { const own = [...(pzSave.masks || []), null], i = own.indexOf(pzSave.mask ?? null); pzSave.mask = own[(i + 1) % own.length]; savePz(); paintMaskBtn(); sendPresence(true); if (pzSave.mask) singChime(pzSave.mask); });
+$maskBtn.addEventListener('click', () => { const own = pzSave.masks || ['wood'], i = own.indexOf(pzSave.mask); pzSave.mask = own[(i + 1) % own.length]; savePz(); paintMaskBtn(); sendPresence(true); if (pzSave.mask) singChime(pzSave.mask); });
 document.querySelector('.tools').prepend($maskBtn); paintMaskBtn();
+if (!pzSave.masks) { pzSave.masks = ['wood']; pzSave.mask = 'wood'; savePz(); }   // 처음엔 나무 탈
+if (!pzSave.mask) { pzSave.mask = pzSave.masks[0]; savePz(); } paintMaskBtn();
 function giveMask(k){ if (!MASKS[k]) return; pzSave.masks = [...new Set([...(pzSave.masks || []), k])]; pzSave.mask = k; savePz(); paintMaskBtn(); sendPresence(true); }
 // 노래
 const singFx = [];   // 머리 위로 떠오르는 음표 { x, z, h, t, n }

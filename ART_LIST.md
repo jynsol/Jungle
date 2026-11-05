@@ -75,6 +75,7 @@
 
 | 파일 | 내용 |
 |---|---|
+| `mask_wood_front.png` · `mask_wood_side.png` · `mask_wood_back.png` | 처음부터 쓰는 소박한 나무 탈. 깎은 나뭇결, 아몬드 모양 눈구멍, 붉고 푸른 라틴아메리카 민속 무늬. 뒤는 탈 끈. |
 | `mask_ocelot_front.png` · `mask_ocelot_side.png` · `mask_ocelot_back.png` | 오셀롯 탈. 금빛 털에 검은 점무늬, 뾰족한 귀, 초록 눈. |
 | `mask_otter_front.png` · `mask_otter_side.png` · `mask_otter_back.png` | 수달 탈. 갈색 털, 동그란 작은 귀, 크림색 주둥이와 수염. |
 
