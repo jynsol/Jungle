@@ -1944,6 +1944,7 @@ function collectPick(p){   // 걸어서 지나가거나, 눌러서 주움
 }
 // 주운 열매: 천천히 떠올라 돌다가 빛 알갱이로 흩어짐
 const pickFx = [], popFx = [];
+function sparkleWhile(x, z, cond){ if (cond() && !popFx.some(f => f.keep === cond || (f.x === x && f.z === z))) popFx.push({ x, z, h:.3, t:clock - 1.5, keep:cond }); }   // 다시 들어와도 떨어진 물건은 반짝
 function popAt(x, z, h = .3, keep = null){ popFx.push({ x, z, h, t:clock, keep }); sfx((ac, t) => { const out = ac.createGain(); out.gain.value = .06; out.connect(ac.destination); out.connect(reverb(ac));   // 무언가 나왔다! (반짝 고리 + 올라가는 세 음)
   [[784, 0], [1046.5, .1], [1568, .2]].forEach(([f, d]) => { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'triangle'; o.frequency.value = f; g.gain.setValueAtTime(.0001, t + d); g.gain.exponentialRampToValueAtTime(1, t + d + .02); g.gain.exponentialRampToValueAtTime(.0001, t + d + .9); o.connect(g).connect(out); o.start(t + d); o.stop(t + d + 1); }); }); }
 function pickChime(){ sfx((ac, t) => { const out = ac.createGain(); out.gain.value = .05; out.connect(ac.destination); out.connect(reverb(ac));
@@ -2613,6 +2614,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     { const [x, z] = at(SPOT.hut); hut.position.set(x, DECK, z); face(hut, x, z); const on = dayState().dark > .45; hutGlow.visible = on; if (on) { hutGlow.position.set(x, DECK + .9, z); hutGlow.lookAt(camera.position); } }
     { const dk = clock - doorT; hut.material.map = dk > .5 && dk < 1.6 ? HUT_PEEK_T : HUT_T; if (dk > 1.6 && dk < 1.7 && !SL.slam) { SL.slam = true; pzSfx.thump(.25); pokes.push({ me:hut, t:clock }); } if (dk < 1) SL.slam = false; }   // 두드리면 문틈으로 눈이 내다보다가 쾅
     { const bk = clock - birdT; birdM.visible = bk < 1.8; if (birdM.visible) { const [x, z] = at({ x:hub.x, z:hub.y }), ang = Math.atan2(camX - x, camZ - z), pop = Math.sin(Math.min(1, bk/1.8)*Math.PI); birdM.position.set(x + Math.sin(ang)*.35, 4.25 + pop*.12, z + Math.cos(ang)*.35); birdM.scale.setScalar(Math.max(.05, pop)); face(birdM, x, z); } }
+    if (pzSave.monkeyFed && !pzSave.lens) sparkleWhile(LENS_DROP.x, LENS_DROP.z, SL.onL ??= () => !pzSave.lens);
     { const lens = !pzSave.monkeyFed ? SPOT.monkey : !pzSave.lens ? LENS_DROP : null; lensM.visible = !!lens;   // 원숭이 손의 반짝이는 렌즈 → 떨어진 렌즈
       if (lens) { const [x, z] = at(lens); lensM.position.set(x + .2, pzSave.monkeyFed ? .08 : MY + .2, z); lensM.lookAt(camera.position); } }
     if (toss) { const k = (clock - toss.t)/(toss.back ? .7 : .8);
@@ -2945,7 +2947,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     { const [x, z] = at(C); mud.position.set(x, .025, z); const rise = st >= 2 ? 1 : st === 1 ? Math.min(1, el/5) : 0; mud.material.opacity = 1 - rise*.95;
       pads.forEach(p => { const [px, pz] = at(p); p.m.position.set(px, -.2 + rise*.24, pz); p.m.visible = rise > .05; });   // 물이 차오르기 전엔 연잎이 하나도 안 보임
       bowl.position.set(x, 0, z); face(bowl, x, z); ember.visible = emberGlow.visible = st >= 2; ember.position.set(x, .18, z); face(ember, x, z); ember.scale.set(1 + Math.sin(clock*9)*.06, 1 + Math.sin(clock*13)*.08, 1); emberGlow.position.set(x, .5, z); emberGlow.lookAt(camera.position); }
-    branches.visible = st >= 1 && pzSave.stick !== 1; if (branches.visible) { const [bx, bz] = at(BRANCH_AT); branches.position.set(bx, 0, bz); face(branches, bx, bz); }
+    branches.visible = st >= 1 && pzSave.stick !== 1; if (branches.visible) sparkleWhile(BRANCH_AT.x, BRANCH_AT.z, WP.onB ??= () => pzSave.stick !== 1); if (branches.visible) { const [bx, bz] = at(BRANCH_AT); branches.position.set(bx, 0, bz); face(branches, bx, bz); }
     if (st === 2 && wdist(P.x, P.y, C.x, C.z) < 1.3) { setPzStep(WP, 3); pzSfx.chime(.08); }   // 섬에 닿으면 2장의 첫 고비를 넘음
     if (st === 1 && el > 5.2) { setPath(true); setPzStep(WP, 2, { auto:true }); }
     if (st >= 2 && type[id(rg.stones[0].tx, rg.stones[0].ty)] !== FLOOR) setPath(true);
@@ -3219,7 +3221,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     TC.update = (dt, camX, camZ) => { const st = pzStep(TC), g = clock - TC.gotT;
       place(nest, NEST, DECK + .7, camX, camZ); { const [x, z] = wrapNear(NEST.x + .9, NEST.z, camX, camZ); branch.position.set(x, DECK + .72, z); face(branch, x, z, camX, camZ); }
       place(bird, NEST, DECK + .95 + (g < 1 ? Math.sin(g*Math.PI)*.25 : 0), camX, camZ); bird.rotation.z = g < 1.5 ? Math.sin(g*12)*.15 : Math.sin(clock*.7)*.05;
-      crank.visible = st === 1; if (crank.visible) { const f = Math.min(1, (clock - (TC.dropT || (TC.dropT = clock)))/.9); const [x, z] = wrapNear(NEST.x + (DROP.x - NEST.x)*f, NEST.z + (DROP.z - NEST.z)*f, camX, camZ); crank.position.set(x, (DECK + .7)*(1 - f*f) + .02, z); face(crank, x, z, camX, camZ); if (f >= 1 && !TC.thud) { TC.thud = true; pzSfx.thump(.12); popAt(DROP.x, DROP.z, .3, () => pzStep(TC) === 1); } } };
+      crank.visible = st === 1; if (crank.visible) { const f = Math.min(1, (clock - (TC.dropT || (TC.dropT = clock)))/.9); const [x, z] = wrapNear(NEST.x + (DROP.x - NEST.x)*f, NEST.z + (DROP.z - NEST.z)*f, camX, camZ); crank.position.set(x, (DECK + .7)*(1 - f*f) + .02, z); face(crank, x, z, camX, camZ); if (f >= 1 && !TC.thud) { TC.thud = true; pzSfx.thump(.12); popAt(DROP.x, DROP.z, .3, TC.on ??= () => pzStep(TC) === 1); } if (f >= 1) sparkleWhile(DROP.x, DROP.z, TC.on ??= () => pzStep(TC) === 1); } };
     PUZZLES.push(TC); }
 
   /* 4. 축음기: 태엽 손잡이를 끼우고 돌리면 개구리 노래를 천천히 틀어 줌. 나팔 아래 서랍에서 새우 그물 */
@@ -3233,7 +3235,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
       return L; };
     GR.update = (dt, camX, camZ) => { const st = pzStep(GR), gd = wdist(P.x, P.y, at.x, at.z);
       if (st === 0 && gd < 11 && (GR.hissT = (GR.hissT ?? 0) - dt) <= 0) { GR.hissT = 1.6; const v = .035*(1 - gd/11); for (let i = 0; i < 5; i++) setTimeout(() => tick(2600 + Math.random()*1800, .02, v, 'square'), i*260 + Math.random()*120); }   // 바늘이 판을 긁는 소리: 다가가면 들림
-      netM.visible = st === 1; if (netM.visible) { const f = Math.min(1, (clock - (GR.netT || (GR.netT = clock)))/.8), [x, z] = wrapNear(at.x + (NETP.x - at.x)*f, at.z + (NETP.z - at.z)*f, camX, camZ); netM.position.set(x, 1 + f*.6 - f*f*1.6 + .02, z); face(netM, x, z, camX, camZ); if (f >= 1 && !GR.landed) { GR.landed = true; pzSfx.thump(.1); popAt(NETP.x, NETP.z, .3, () => pzStep(GR) === 1); } }   // 나팔에서 그물이 툭 튀어나와 땅에 떨어짐
+      netM.visible = st === 1; if (netM.visible) { const f = Math.min(1, (clock - (GR.netT || (GR.netT = clock)))/.8), [x, z] = wrapNear(at.x + (NETP.x - at.x)*f, at.z + (NETP.z - at.z)*f, camX, camZ); netM.position.set(x, 1 + f*.6 - f*f*1.6 + .02, z); face(netM, x, z, camX, camZ); if (f >= 1 && !GR.landed) { GR.landed = true; pzSfx.thump(.1); popAt(NETP.x, NETP.z, .3, GR.on ??= () => pzStep(GR) === 1); } if (f >= 1) sparkleWhile(NETP.x, NETP.z, GR.on ??= () => pzStep(GR) === 1); }   // 나팔에서 그물이 툭 튀어나와 땅에 떨어짐
       handle.visible = st >= 1 || pzSave.crank === 2; if (handle.visible) { const [x, z] = wrapNear(at.x + .35, at.z, camX, camZ); handle.position.set(x, .55, z); face(handle, x, z, camX, camZ); handle.rotation.z = clock - GR.playT < 6 ? clock*4 : 0; } };
     PUZZLES.push(GR); }
 
