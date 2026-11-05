@@ -694,7 +694,7 @@ function mat(tex, tint = true, extra = {}){
   if (tint) tinted.push(m); return m;
 }
 /* 판이 늘 카메라 쪽으로 몸을 돌림(360도 회전 가능) + 바람에 윗부분이 흔들림. 그래픽 카드에서 계산 */
-const U = { uTime:{ value:0 }, uWind:{ value:.03 }, uCurve:{ value:.006 }, uSize:{ value:new THREE.Vector2(W, H) }, uCull:{ value:20 } };
+const U = { uTime:{ value:0 }, uWind:{ value:.03 }, uCurve:{ value:.003 }, uSize:{ value:new THREE.Vector2(W, H) }, uCull:{ value:20 } };
 function billboard(m){
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, U);
@@ -1223,7 +1223,7 @@ const FAR_COL = new THREE.Color('#8a9a84'), hazeCol = new THREE.Color();
 const ringGeo = new THREE.CylinderGeometry(1, 1, 1, 56, 1, true); ringGeo.translate(0, .5, 0);
 const RINGS = [
   { tex:treeline('#7f927c', true, 31), k:1, ang:22, rep:3 },
-  { tex:treeline('#45624a', false, 57), k:.82, ang:14, rep:4 }
+  { tex:treeline('#45624a', false, 57), k:.93, ang:14, rep:4 }
 ].map((rg, i) => {
   rg.tex.wrapS = THREE.RepeatWrapping; rg.tex.repeat.set(rg.rep, 1);
   const m = mat(rg.tex, true, { side:THREE.BackSide, fog:false }); m.onBeforeCompile = () => {};
@@ -1256,7 +1256,7 @@ function openness(){
 function updateRings(camX, camY, camZ, elevP){
   const lift = Math.min(1, elevP/5.2);   // 배경판은 늘 같은 자리·같은 크기. 전망 바위에 올라설 때만 낮아짐
   for (const rg of RINGS) {
-    const R = 19.5*rg.k, ang = (rg.ang*(1 - lift) + 4*lift)*Math.PI/180;
+    const R = 30*rg.k, ang = (rg.ang*(1 - lift) + 4*lift)*Math.PI/180;
     rg.me.position.set(camX, -1, camZ);
     rg.me.scale.set(R, camY + 1 + R*Math.tan(ang) - lift*3, R);
   }
@@ -2861,7 +2861,7 @@ function draw(dt = .016){
   scene.background.copy(DAY_SKY).lerp(NIGHT_SKY, nt).lerp(DUSK_SKY, dusk*.75).lerp(STORM_SKY, st*.65); hazeCol.copy(FAR_COL).multiply(tintCol); scene.fog.color.copy(scene.background).lerp(hazeCol, .6);
   openS += (Math.max(0, Math.min(1, (openness() - .35)/.5)) - openS)*Math.min(1, dt*1.2);   // 덤불이 적은 곳일수록
   const view = (1 + elevP*.4)*(1 + openS*1.4)*(energy < 30 ? .55 + .45*energy/30 : 1)*(MOBILE ? .85 : 1);   // 바위 위에선 멀리, 지치면 가까이
-  scene.fog.near = 2 - 1*nt; scene.fog.far = (17 - 6*nt - 5*st)*view; ringR = Math.max(9, scene.fog.far + 1); U.uCull.value = ringR;
+  scene.fog.near = 5 - 2*nt; scene.fog.far = Math.min(30, (28 - 7*nt - 7*st)*view); ringR = Math.max(10, Math.min(27, scene.fog.far + 1)); U.uCull.value = ringR;   // 더 멀리까지 보이게 (안개는 천천히)
   updateRings(camX, CAM_H + elevP, camZ, elevP);
   // 낮엔 옅은 해, 해질녘엔 크고 붉은 해(「해 질 녘의 처녀림」), 밤엔 큰 달(「뱀 부리는 여인」)
   sky.material.map = nt > .55 ? MOON_TEX : dusk > .35 ? RED_SUN_TEX : SUN_TEX;
