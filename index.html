@@ -330,7 +330,8 @@ function parrotTalk(p, i, dt){
   p.cool -= dt;
   if (p.cool > 0 || wdist(p.x, p.y, P.x, P.y) > 3.2) return;
   const pool = [...(shared[i] || []), ...p.heard];
-  const t = pool.length && Math.random() < .8 ? pool[Math.random()*pool.length | 0] : PARROT_SEED[Math.random()*PARROT_SEED.length | 0];
+  const hint = Math.random() < .4 ? parrotHint() : null;
+  const t = hint || pool.length && Math.random() < .8 ? pool[Math.random()*pool.length | 0] : PARROT_SEED[Math.random()*PARROT_SEED.length | 0];
   p.bubble = { text:t, until:clock + 5 }; p.cool = 16 + Math.random()*14; squawk();
 }
 
@@ -544,8 +545,8 @@ function step(dt){
     p.x += p.vx*dt; p.y += p.vy*dt; p.vh = (p.vh ?? 1) - dt*2.2; p.h = Math.max(.02, (p.h ?? .7) + p.vh*dt); p.vx *= .92; p.vy *= .92; p.rot += dt*6;
   }
   // 하늘로 올라가는 이불
-  if (Math.random() < dt*.35 && sheets.length < 8) sheets.push({ x:SITE.rising.cx + (Math.random()-.5), z:SITE.rising.cy + 1.2, h:1, life:10 });
-  for (let i = sheets.length-1; i >= 0; i--) { const s = sheets[i]; s.life -= dt; s.h += dt*.7; if (s.life <= 0) sheets.splice(i,1); }
+  if (Math.random() < dt*.6 && sheets.length < 14) sheets.push({ x:SITE.rising.cx + (Math.random()-.5), z:SITE.rising.cy + 1.2, h:1, life:22 });
+  for (let i = sheets.length-1; i >= 0; i--) { const s = sheets[i]; s.life -= dt; s.h += dt*.85; if (s.life <= 0) sheets.splice(i,1); }
   PARROTS.forEach((p,i) => parrotTalk(p, i, dt));
   const om = SITE.oldman;
   if (wdist(P.x, P.y, om.cx + 1.6, om.cy) < 3) { if ((oldmanT -= dt) <= 0) { om.bubble = { text:OLDMAN_LINES[Math.random()*OLDMAN_LINES.length | 0], until:clock + 6 }; oldmanT = 8; } }
@@ -968,7 +969,8 @@ const pickSpecies = u => { let acc = 0; for (let i = 0; i < SPECIES.length; i++)
 const GRASS = SPECIES.findIndex(p => p.key === 'grass'), AGAVE = SPECIES.findIndex(p => p.key === 'agave'), FERN = SPECIES.findIndex(p => p.key === 'fern');
 const BP = [], bushByTile = new Map();
 function addFlat(k, sp, x, z, j){
-  const b = { k, sp, x, z, s:.95 + hash(k*9 + j)*.55, m:hash(k*29 + j) < .5 ? -1 : 1, f:1, ft:1 };
+  const md = wdist(x, z, SITE.mirror.cx, SITE.mirror.cy);
+  const b = { k, sp, x, z, s:.95 + hash(k*9 + j)*.55, m:hash(k*29 + j) < .5 ? -1 : 1, f:1, ft:1, flip:md < 9 && hash(k*233 + j) < (1 - md/9)*.55 };
   BP.push(b); if (!bushByTile.has(k)) bushByTile.set(k, []); bushByTile.get(k).push(b);
 }
 for (let k = 0; k < W*H; k++) {
@@ -985,7 +987,8 @@ for (let k = 0; k < W*H; k++) {
 const counts = SPECIES.map(() => 0); for (const b of BP) b.idx = counts[b.sp]++;
 const bushMeshes = SPECIES.map((p, i) => { const m = new THREE.InstancedMesh(plane(p.w, p.h), billboard(mat(SP_TEX[i])), Math.max(1, counts[i])); m.frustumCulled = false; scene.add(m); return m; });
 function placeBush(b, lean = 0, squash = 1){
-  dummy.position.set(b.x, 0, b.z); dummy.rotation.set(0, 0, lean); dummy.scale.set(b.s*b.m, b.s*squash*b.f, 1); dummy.updateMatrix();
+  const hy = b.s*squash*b.f;
+  dummy.position.set(b.x, b.flip ? SPECIES[b.sp].h*hy : 0, b.z); dummy.rotation.set(0, 0, lean); dummy.scale.set(b.s*b.m, b.flip ? -hy : hy, 1); dummy.updateMatrix();
   bushMeshes[b.sp].setMatrixAt(b.idx, dummy.matrix);
 }
 BP.forEach(b => placeBush(b));
@@ -1044,7 +1047,7 @@ const oldman = cutout(personGeo, mat(OLDMAN_TEX)); oldman.position.set(SITE.oldm
 const parrotGeo = plane(.42, .84);
 PARROTS.forEach(p => { p.mesh = cutout(parrotGeo, mat(PARROT_TEX[p.col])); p.mesh.position.set(p.x, 0, p.y); });
 const pool = (n, geo, m) => Array.from({ length:n }, () => { const me = cutout(geo, m); me.visible = false; return me; });
-const sheetMeshes = pool(8, plane(.7, .5, false), mat(SHEET_TEX));
+const sheetMeshes = Array.from({ length:14 }, () => { const me = cutout(plane(.9, .65, false), mat(SHEET_TEX)); me.visible = false; me.renderOrder = 7; return me; });
 const bflyMeshes = pool(40, plane(.24, .18, false), mat(BFLY_TEX));
 const leafMeshes = pool(60, plane(.22, .11, false), mat(LEAF_TEX));
 const fireflies = pool(30, plane(.07, .07, false), mat(FIREFLY_TEX, false, { fog:false })).map(me => ({ me, ox:(Math.random()-.5)*14, oz:(Math.random()-.5)*14, ph:Math.random()*9 }));
@@ -1293,6 +1296,8 @@ function lookTargets(){
   L.push({ key:'oldman', x:oldman.position.x, h:.7, z:oldman.position.z });
   for (const st of STORIES) L.push({ key:st.key, x:st.x, h:st.h, z:st.y });
   L.push({ key:'waterfall', x:WATERFALL.x, h:2.6, z:WATERFALL.y - 3.1 }, { key:'lookout', x:LOOKOUT.x, h:elevAt(LOOKOUT.x, LOOKOUT.y) + .6, z:LOOKOUT.y });
+  for (const r of ribbons) L.push({ key:'ribbon', x:r.me.position.x, h:1.2, z:r.me.position.z, noSeen:true,
+    info:{ name:r.mine ? '내 리본' : `${r.name || '누군가'}의 리본`, text:'여기까지 왔었다는 표시예요. 리본을 따라가면 그 사람이 걸은 길이에요.' } });
   return L;
 }
 function wrapText(text, max){ const lines = []; let cur = ''; for (const ch of text) { if (ctx.measureText(cur + ch).width > max) { lines.push(cur); cur = ch; } else cur += ch; } lines.push(cur); return lines; }
@@ -1312,8 +1317,8 @@ function handleTap(x, y){
     const d = (s[0] - x)**2 + (s[1] - y)**2; if (d < bd) { bd = d; best = t; }
   }
   if (!best) { selected = null; return; }
-  selected = { ...best, until:clock + 8, isNew:!seen[best.key] };
-  if (!seen[best.key]) { seen[best.key] = today(); try { localStorage.setItem('denggul-seen', JSON.stringify(seen)); } catch (er) {} }
+  selected = { ...best, until:clock + 8, isNew:!best.noSeen && !seen[best.key] };
+  if (!best.noSeen && !seen[best.key]) { seen[best.key] = today(); try { localStorage.setItem('denggul-seen', JSON.stringify(seen)); } catch (er) {} }
 }
 function drawObsOverlay(e, dt){
   ctx.fillStyle = 'rgba(246,234,210,.4)';   // 누를 수 있는 것 위에 아주 작은 점
@@ -1326,7 +1331,7 @@ function drawObsOverlay(e, dt){
   const a = Math.min(1, selected.until - clock), s = toScreen(selected.x, selected.h, selected.z);
   ctx.globalAlpha = a;
   if (s) { ctx.strokeStyle = 'rgba(242,169,59,.9)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(s[0], s[1], 24, 0, Math.PI*2); ctx.stroke(); }
-  const info = OBS_INFO[selected.key];
+  const info = selected.info || OBS_INFO[selected.key];
   ctx.font = '19px "Nanum Pen Script", cursive';
   const w = Math.min(330, vw - 24), lines = wrapText(info.text, w - 28), h = 50 + lines.length*21;
   const bx = 12, by = (hudEl.getBoundingClientRect().bottom || 80) + 8;
@@ -1646,7 +1651,7 @@ const STORY_INFO = {
 };
 Object.assign(OBS_INFO, STORY_INFO);
 const ST_PAINT = {
-  galleon:[3.6, 3.2, 288, 256, (g, w, h) => {
+  galleon:[5.4, 4.8, 288, 256, (g, w, h) => {
     g.strokeStyle = RG.line; g.lineWidth = 3;
     g.fillStyle = '#6b4a2a'; g.beginPath(); g.moveTo(20, 170); g.quadraticCurveTo(144, 250, 268, 170); g.lineTo(250, 150); g.lineTo(38, 150); g.closePath(); g.fill(); g.stroke();
     g.fillStyle = '#8a6438'; g.fillRect(40, 150, 210, 14); g.strokeRect(40, 150, 210, 14);
@@ -1858,6 +1863,214 @@ function drawFireArrow(){
   ctx.fillText(`모닥불 ${Math.round(dist)}걸음`, x, y + 12); ctx.globalAlpha = 1;
 }
 
+/* ---- 가까워질수록 숲이 조금씩 변하는 힌트 ---- */
+const nearness = (x, y, R = 15) => Math.max(0, 1 - wdist(P.x, P.y, x, y)/R);
+// 땅에 남은 흔적: 갈라지는 발자국, 떨어진 편지, 바퀴 자국 (모닥불 쪽에서 이어짐)
+function paintTrail(tx, ty, kind){
+  const g = gcv.getContext('2d'), dx = wd(FIRE.x - tx, W), dy = wd(FIRE.y - ty, H), d = Math.hypot(dx, dy) || 1, ux = dx/d, uy = dy/d, len = Math.min(13, d - 3);
+  for (let i = 0; i < len*3; i++) {
+    const t = i/3, wob = Math.sin(t*.9)*.6, px = tx + ux*(len - t) - uy*wob, py = ty + uy*(len - t) + ux*wob;
+    const split = kind === 'fork' && t > len*.62 ? (t - len*.62)*.55 : 0;
+    for (const sd of split ? [-1, 1] : [0]) {
+      const x = px - uy*split*sd, y = py + ux*split*sd;
+      if (kind === 'letters') { if (i % 4) continue; g.fillStyle = '#f2ead2'; g.save(); g.translate(x*GPX, y*GPX); g.rotate(i); g.fillRect(-3, -2, 6, 4); g.restore(); }
+      else if (kind === 'tracks') { g.fillStyle = 'rgba(40,30,20,.45)'; g.fillRect(x*GPX - 1, y*GPX - 1, 2, 2); }
+      else { g.fillStyle = 'rgba(40,30,20,.5)'; const side = i % 2 ? 1 : -1; g.beginPath(); g.ellipse((x - uy*.18*side)*GPX, (y + ux*.18*side)*GPX, 1.3, 2, Math.atan2(uy, ux) + Math.PI/2, 0, Math.PI*2); g.fill(); }
+    }
+  }
+}
+paintTrail(SITE.fork.cx, SITE.fork.cy + 1, 'fork');
+for (const s of STORY_SPOTS) { if (s.key === 'mailbox') paintTrail(s.x, s.y, 'letters'); if (s.key === 'bicycle') paintTrail(s.x, s.y, 'tracks'); }
+groundTex.needsUpdate = true;
+// 폭포 위 무지개와 물안개, 노인의 파이프 연기: 나무 위로 보이는 표지
+const RAINBOW_TEX = ctex(256, 128, (g) => { ['#d8452f', '#f2992e', '#f2d44a', '#6ab04c', '#3e8acc', '#8a5ac8'].forEach((c, i) => { g.strokeStyle = c; g.lineWidth = 7; g.beginPath(); g.arc(128, 128, 118 - i*7, Math.PI, 0); g.stroke(); }); });
+const rainbow = cutout(plane(9, 4.5, false), new THREE.MeshBasicMaterial({ map:RAINBOW_TEX, transparent:true, depthTest:false, depthWrite:false, fog:false, opacity:.4 })); rainbow.renderOrder = 7;
+const highSmoke = (n, col) => Array.from({ length:n }, (_, i) => { const m = new THREE.Mesh(plane(1, 1, false), new THREE.MeshBasicMaterial({ map:SMOKE_TEX, transparent:true, depthTest:false, depthWrite:false, fog:false, opacity:.3, color:col })); m.renderOrder = 7; scene.add(m); return { m, t:i/n, i }; });
+const wfMist = highSmoke(8, '#ffffff'), pipe = highSmoke(9, '#b9c2d6');
+const sndT = { piano:0, gramophone:0, clock:0 };
+function updateHints(dt, camX, camZ, nt){
+  // 무지개: 멀리서만, 낮에만
+  const wd0 = wdist(P.x, P.y, WATERFALL.x, WATERFALL.y);
+  rainbow.visible = nt < .5 && wd0 > 7;
+  rainbow.position.set(WATERFALL.x, 7.5, WATERFALL.y - 2.5); rainbow.lookAt(camera.position); rainbow.material.opacity = .4*Math.min(1, (wd0 - 7)/5);
+  for (const s of wfMist) { s.t = (s.t + dt/9) % 1; s.m.position.set(WATERFALL.x + Math.sin(s.t*5 + s.i)*.8, 5 + s.t*6, WATERFALL.y - 3); s.m.scale.setScalar(1.5 + s.t*3); s.m.material.opacity = .35*Math.min(1, s.t*5)*(1 - s.t); s.m.lookAt(camera.position); }
+  const om = SITE.oldman;
+  for (const s of pipe) { s.t = (s.t + dt/14) % 1; s.m.position.set(om.cx + 1.6 + Math.sin(s.t*6 + s.i)*.3, 6 + s.t*9, om.cy + .6); s.m.scale.setScalar(.5 + s.t*1.6); s.m.material.opacity = .32*Math.min(1, s.t*5)*(1 - s.t); s.m.lookAt(camera.position); }
+  // 소리: 피아노 음 하나, 축음기 탱고, 시계 똑딱
+  for (const st of STORY_SPOTS) {
+    const n = nearness(st.x, st.y, 16);
+    if (n <= 0 || !(st.key in sndT)) continue;
+    if ((sndT[st.key] -= dt) > 0) continue;
+    if (st.key === 'piano') { playNote('marimba', [0, 2, 4][Math.random()*3 | 0], n*.6); sndT.piano = 6 + Math.random()*4; }
+    else if (st.key === 'gramophone') { [5, 4, 3, 1].forEach((k, i) => setTimeout(() => playNote('marimba', k, n*.45), i*330)); sndT.gramophone = 9; }
+    else if (n > .5) { playNote('maracas', 0, (n - .5)*.5); sndT.clock = 1; }
+  }
+}
+function hintButterflies(list){   // 노란 나비 공터 쪽으로 길 잃은 나비가 날아감
+  const bs = SITE.butterflies, n = nearness(bs.cx, bs.cy, 18);
+  if (n <= 0 || found.butterflies) return;
+  const rx = wd(bs.cx - P.x, W), rz = wd(bs.cy - P.y, H), d = Math.hypot(rx, rz) || 1;
+  for (let i = 0; i < 3; i++) { const t = ((clock*.35 + i/3) % 1)*Math.min(6, d); list.push([P.x + rx/d*(1 + t) + Math.sin(clock*2 + i)*.3, 1 + Math.sin(clock*3 + i)*.3, P.y + rz/d*(1 + t) + Math.cos(clock*2 + i)*.3, i]); }
+}
+const STRAY_LABELS = ['나무?', '이건 덤불', '풀', '이름이 뭐였더라', '나무', '잎'];
+function drawHintOverlay(){   // 이름표 마을 근처엔 식물에 이름표가 하나둘
+  const lb = SITE.labels, n = nearness(lb.cx, lb.cy, 16);
+  if (n <= 0) return;
+  ctx.font = '10px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let ty = (P.y|0) - 5; ty <= (P.y|0) + 5; ty++) for (let tx = (P.x|0) - 5; tx <= (P.x|0) + 5; tx++) {
+    const k = id(tx, ty); if (type[k] !== BUSH || hash(k*331) > n*.22) continue;
+    const s = toScreen(tx + .5, 1.05, ty + .5); if (!s) continue;
+    const label = STRAY_LABELS[hash(k*337)*STRAY_LABELS.length | 0], w = ctx.measureText(label).width + 8;
+    ctx.globalAlpha = .85; ctx.fillStyle = 'rgba(255,248,230,.95)'; ctx.fillRect(s[0] - w/2, s[1] - 7, w, 14); ctx.fillStyle = '#4a2a16'; ctx.fillText(label, s[0], s[1]);
+  }
+  ctx.globalAlpha = 1;
+}
+/* 앵무새가 가까운 곳을 귀띔 */
+function parrotHint(){
+  const c = [
+    ...SITES.filter(s => !found[s.key]).map(s => ({ name:s.name, x:s.cx, y:s.cy })),
+    ...STORY_SPOTS.filter(s => !seen[s.key]).map(s => ({ name:STORY_INFO[s.key].name, x:s.x, y:s.y })),
+    ...(seen.waterfall ? [] : [{ name:'숲속 폭포', x:WATERFALL.x, y:WATERFALL.y }]),
+    ...(seen.lookout ? [] : [{ name:'전망 바위', x:LOOKOUT.x, y:LOOKOUT.y }])
+  ].sort((a, b) => wdist(P.x, P.y, a.x, a.y) - wdist(P.x, P.y, b.x, b.y));
+  if (!c.length) return null;
+  const t = c[Math.random() < .7 ? 0 : Math.min(c.length - 1, 1)];
+  const rx = wd(t.x - P.x, W), rz = wd(t.y - P.y, H), fx = rx*Math.cos(yaw) - rz*Math.sin(yaw), fz = -rx*Math.sin(yaw) - rz*Math.cos(yaw);
+  const a = Math.atan2(fx, fz)*180/Math.PI, d = Math.hypot(rx, rz);
+  const dir = Math.abs(a) < 35 ? '앞쪽' : Math.abs(a) > 145 ? '뒤쪽' : a > 0 ? '오른쪽' : '왼쪽';
+  return `${t.name}, ${dir} ${d < 10 ? '가까이' : d < 22 ? '조금 멀리' : '아주 멀리'}!`;
+}
+/* ---- 리본: 한 사람당 5개까지. 친구 화면에도 보이고, 어디서든 내 리본을 풀 수 있음 ---- */
+const RIBBON_MAX = 5;
+const RIBBON_TEX = ctex(48, 96, (g) => {
+  g.fillStyle = '#ffffff'; g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(20, 8); g.quadraticCurveTo(6, 44, 16, 92); g.lineTo(28, 90); g.quadraticCurveTo(22, 46, 30, 10); g.closePath(); g.fill(); g.stroke();
+  g.beginPath(); g.ellipse(24, 9, 15, 6, 0, 0, Math.PI*2); g.fill(); g.stroke();
+});
+const ribbonGeo = plane(.26, .52), ribbonMats = {}, ribbons = [];
+function ribbonMat(c){ if (!ribbonMats[c]) { const m = mat(RIBBON_TEX, false); m.userData.base = new THREE.Color(safeColor(c)); ribbonMats[c] = m; } return ribbonMats[c]; }
+// 내 리본임을 서버가 확인하는 비밀 열쇠 (브라우저에만 있고 다른 사람에게 보내지 않음)
+if (!ME.key) { ME.key = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join(''); saveMe(); }
+let myHash = '';
+crypto.subtle.digest('SHA-256', new TextEncoder().encode(ME.key)).then(d => { myHash = Array.from(new Uint8Array(d), b => b.toString(16).padStart(2, '0')).join(''); }).catch(() => {});
+function addRibbon(r, mine){
+  if (!r || typeof r.x !== 'number' || typeof r.y !== 'number' || ribbons.some(x => String(x.id) === String(r.id))) return null;
+  const me = cutout(ribbonGeo, ribbonMat(r.color)); me.position.set(wrapX(r.x), .95, wrapY(r.y));
+  const rb = { id:r.id, name:clean(r.name || '').slice(0, 12), color:r.color, x:r.x, y:r.y, mine:!!mine, me, ph:Math.random()*6 };
+  ribbons.push(rb); return rb;
+}
+function removeRibbon(rid){ const i = ribbons.findIndex(x => String(x.id) === String(rid)); if (i >= 0) { scene.remove(ribbons[i].me); ribbons.splice(i, 1); } }
+let myRibbons = []; try { myRibbons = (JSON.parse(localStorage.getItem('denggul-ribbons')) || []).slice(-RIBBON_MAX); } catch (e) {}
+const saveMyRibbons = () => { try { localStorage.setItem('denggul-ribbons', JSON.stringify(myRibbons)); } catch (e) {} };
+myRibbons.forEach(r => addRibbon(r, true));
+function tieRibbon(){
+  if (myRibbons.length >= RIBBON_MAX) { myBubble = { text:'리본은 5개까지예요. 리본 메뉴에서 하나 풀어 주세요', until:clock + 3 }; openRibbons(); return; }
+  const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  const row = { id:'me-' + Date.now(), name:ME.name, color:ME.color, x:+wrapX(P.x + fx*.45).toFixed(2), y:+wrapY(P.y + fz*.45).toFixed(2) };
+  addRibbon(row, true); myRibbons.push(row); saveMyRibbons(); paintRibbonBtn();
+  myBubble = { text:'리본을 묶었어요', until:clock + 2 };
+  if (sb && myHash) sb.from('ribbons').insert({ owner_hash:myHash, name:row.name, color:row.color, x:row.x, y:row.y }).select('id').single()
+    .then(({ data }) => { if (!data) return; const rb = ribbons.find(x => x.id === row.id); if (rb) rb.id = data.id; row.id = data.id; saveMyRibbons(); }, () => {});
+  if (!ribbonPanel.hidden) openRibbons();
+}
+function untieRibbon(rid){
+  removeRibbon(rid); myRibbons = myRibbons.filter(r => String(r.id) !== String(rid)); saveMyRibbons(); paintRibbonBtn();
+  if (sb && typeof rid === 'number') sb.rpc('untie_ribbon', { rid, owner_key:ME.key }).then(() => {}, () => {});
+  openRibbons();
+}
+NET_HOOKS.push(ch => {
+  sb.from('ribbons').select('id,name,color,x,y').order('id', { ascending:false }).limit(400)
+    .then(({ data }) => (data || []).reverse().forEach(r => { if (!myRibbons.some(m => m.id === r.id)) addRibbon(r, false); }), () => {});
+  ch.on('postgres_changes', { event:'INSERT', schema:'public', table:'ribbons' }, ({ new:r }) => { if (r && !myRibbons.some(m => m.id === r.id) && !(r.owner_hash && r.owner_hash === myHash)) addRibbon(r, false); });
+  ch.on('postgres_changes', { event:'DELETE', schema:'public', table:'ribbons' }, ({ old:r }) => r && removeRibbon(r.id));
+});
+function updateRibbons(camX, camZ){
+  for (const m of Object.values(ribbonMats)) m.color.copy(m.userData.base).multiply(tintCol);
+  for (const r of ribbons) { r.me.rotation.y = Math.atan2(camX - r.me.position.x, camZ - r.me.position.z); r.me.rotation.z = Math.sin(clock*1.5 + r.ph)*.12; }
+}
+/* 리본 메뉴: 여기 묶기 + 내 리본 목록(풀기) */
+const ribbonPanel = document.createElement('div');
+ribbonPanel.className = 'panel'; ribbonPanel.hidden = true;
+ribbonPanel.style.cssText = 'position:fixed;top:calc(env(safe-area-inset-top,0px) + 58px);right:calc(env(safe-area-inset-right,0px) + 12px);width:min(280px,calc(100vw - 24px));padding:12px;display:flex;flex-direction:column;gap:8px;z-index:4';
+document.body.append(ribbonPanel);
+function dirText(x, y){
+  const rx = wd(x - P.x, W), rz = wd(y - P.y, H), fx = rx*Math.cos(yaw) - rz*Math.sin(yaw), fz = -rx*Math.sin(yaw) - rz*Math.cos(yaw);
+  const a = Math.atan2(fx, fz)*180/Math.PI, d = Math.round(Math.hypot(rx, rz));
+  return `${Math.abs(a) < 35 ? '앞쪽' : Math.abs(a) > 145 ? '뒤쪽' : a > 0 ? '오른쪽' : '왼쪽'} ${d}걸음`;
+}
+function openRibbons(){
+  ribbonPanel.replaceChildren(); ribbonPanel.hidden = false;
+  const head = document.createElement('div'); head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px';
+  const t = document.createElement('b'); t.style.cssText = 'font:700 15px var(--display)'; t.textContent = `내 리본 ${myRibbons.length} / ${RIBBON_MAX}`;
+  const close = document.createElement('button'); close.type = 'button'; close.textContent = '닫기'; close.style.cssText = 'background:none;border:0;color:var(--dim);font:12px var(--body);cursor:pointer';
+  close.addEventListener('click', () => { ribbonPanel.hidden = true; cv.focus(); });
+  head.append(t, close); ribbonPanel.append(head);
+  const tie = document.createElement('button'); tie.type = 'button'; tie.textContent = '여기에 묶기' + (MOBILE ? '' : ' (R)'); tie.disabled = myRibbons.length >= RIBBON_MAX;
+  tie.style.cssText = 'background:var(--marigold);color:#3a2206;border:0;border-radius:6px;padding:9px;font:600 13px var(--body);cursor:pointer' + (tie.disabled ? ';opacity:.45;cursor:default' : '');
+  tie.addEventListener('click', () => { tieRibbon(); cv.focus(); }); ribbonPanel.append(tie);
+  if (!myRibbons.length) { const p = document.createElement('p'); p.style.cssText = 'margin:0;font:12px var(--body);color:var(--dim)'; p.textContent = '나무에 리본을 묶으면 같이 있는 사람 화면에도 보여요. 길을 표시해 두세요.'; ribbonPanel.append(p); }
+  myRibbons.forEach((r, i) => {
+    const row = document.createElement('div'); row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;font:13px var(--body)';
+    const sw = document.createElement('span'); sw.textContent = `${i + 1}. ${dirText(r.x, r.y)}`;
+    const un = document.createElement('button'); un.type = 'button'; un.textContent = '풀기'; un.style.cssText = 'background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font:12px var(--body);cursor:pointer';
+    un.addEventListener('click', () => untieRibbon(r.id)); row.append(sw, un); ribbonPanel.append(row);
+  });
+}
+/* ---- 스케치: 지금 장면을 액자와 서명이 있는 그림으로 ---- */
+let sketchReq = false, sketches = [];
+try { sketches = JSON.parse(localStorage.getItem('denggul-sketches')) || []; } catch (e) {}
+function placeName(){
+  const c = [...SITES.map(s => ({ name:s.name, x:s.cx, y:s.cy })), ...STORY_SPOTS.map(s => ({ name:STORY_INFO[s.key].name, x:s.x, y:s.y })),
+    { name:'숲속 폭포', x:WATERFALL.x, y:WATERFALL.y }, { name:'전망 바위', x:LOOKOUT.x, y:LOOKOUT.y }, { name:'모닥불 곁', x:FIRE.x, y:FIRE.y }]
+    .map(p => ({ ...p, d:wdist(P.x, P.y, p.x, p.y) })).sort((a, b) => a.d - b.d)[0];
+  return c.d < 8 ? c.name : '숲 어딘가';
+}
+function composeSketch(src){
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement('canvas'); c.width = 640; c.height = 470; const g = c.getContext('2d');
+    g.fillStyle = '#3a2410'; g.fillRect(0, 0, 640, 470); g.fillStyle = '#b8862e'; g.fillRect(10, 10, 620, 370);
+    const pw = 600, ph = 350, sc = Math.max(pw/img.width, ph/img.height), sw = pw/sc, sh = ph/sc;
+    g.filter = 'saturate(1.18) contrast(1.06)'; g.drawImage(img, (img.width - sw)/2, (img.height - sh)/2, sw, sh, 20, 20, pw, ph); g.filter = 'none';
+    g.fillStyle = 'rgba(255,240,210,.05)'; for (let i = 0; i < 2500; i++) g.fillRect(20 + Math.random()*pw, 20 + Math.random()*ph, 1, 1);
+    g.fillStyle = 'rgba(40,24,10,.85)'; g.font = '24px "Nanum Pen Script", cursive'; g.textAlign = 'right'; g.textBaseline = 'bottom';
+    g.fillText(`${ME.name || '탐험가'} ${new Date().getFullYear()}`, 606, 364);   // 루소처럼 오른쪽 아래에 서명
+    g.fillStyle = '#f3e6c8'; g.fillRect(10, 390, 620, 70); g.fillStyle = '#4a2a16'; g.textAlign = 'left'; g.textBaseline = 'top';
+    g.font = '26px "Nanum Pen Script", cursive'; g.fillText(placeName(), 26, 398); g.font = '19px "Nanum Pen Script", cursive'; g.fillText(today(), 26, 430);
+    sketches = [{ src:c.toDataURL('image/jpeg', .8), date:today() }, ...sketches].slice(0, 12);
+    try { localStorage.setItem('denggul-sketches', JSON.stringify(sketches)); } catch (e) { sketches = sketches.slice(0, 6); try { localStorage.setItem('denggul-sketches', JSON.stringify(sketches)); } catch (er) {} }
+    addLog('스케치', '#f2a93b', '그림첩에 한 장 붙였어요');
+  };
+  img.src = src;
+}
+let sketchFlash = 0;
+function takeSketch(){ sketchReq = true; sketchFlash = .35; }
+const sketchBox = document.createElement('div');
+sketchBox.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding:4px';
+feastBox.after(sketchBox);
+$albumBtn.addEventListener('click', () => {
+  sketchBox.replaceChildren();
+  const h = document.createElement('h3'); h.style.cssText = 'margin:8px 0 0;font:700 18px var(--display)'; h.textContent = '스케치'; sketchBox.append(h);
+  if (!sketches.length) { const p = document.createElement('p'); p.style.cssText = 'margin:0;font:13px var(--body);color:var(--dim)'; p.textContent = '오른쪽 위 "스케치"를 누르면 지금 보이는 장면이 그림 한 장으로 남아요.'; sketchBox.append(p); return; }
+  const grid = document.createElement('div'); grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px';
+  for (const s of sketches) { const im = document.createElement('img'); im.src = s.src; im.alt = '스케치 ' + s.date; im.style.cssText = 'width:100%;height:auto;border-radius:3px;box-shadow:0 6px 18px rgba(0,0,0,.4)'; grid.append(im); }
+  sketchBox.append(grid);
+});
+/* 오른쪽 위 버튼과 단축키 (R 리본, C 스케치) */
+const $sketchBtn = document.createElement('button'); $sketchBtn.type = 'button'; $sketchBtn.textContent = '스케치' + (MOBILE ? '' : ' (C)');
+$sketchBtn.addEventListener('click', () => { takeSketch(); cv.focus(); });
+const $ribbonBtn = document.createElement('button'); $ribbonBtn.type = 'button';
+$ribbonBtn.addEventListener('click', () => { if (ribbonPanel.hidden) openRibbons(); else ribbonPanel.hidden = true; });
+function paintRibbonBtn(){ $ribbonBtn.textContent = `리본 ${myRibbons.length}/${RIBBON_MAX}`; }
+paintRibbonBtn();
+document.querySelector('.tools').prepend($sketchBtn, $ribbonBtn);
+addEventListener('keydown', e => {
+  if (e.target === $say || modalOpen()) return;
+  const k = (e.key || '').toLowerCase();
+  if (e.code === 'KeyR' || k === 'ㄱ') tieRibbon();
+  else if (e.code === 'KeyC' || k === 'ㅊ') takeSketch();
+});
+
 function draw(dt = .016){
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
   updateObs(dt); const e = 0;   // 시점은 늘 같음. 멈춰 있으면 동물만 나옴
@@ -1904,12 +2117,13 @@ function draw(dt = .016){
   ALTARS.forEach(face); TIGERS.forEach(face); MONKEYS.forEach(face); critters.forEach(c => face(c.me));
   for (const st of STORIES) { face(st.me); if (st.key === 'swing') st.me.rotation.z = Math.sin(clock*.8)*.12; }
   // 이불, 나비, 흩날리는 잎, 반딧불, 재규어 눈
-  sheetMeshes.forEach((me, i) => { const s = sheets[i]; me.visible = !!s; if (s) { me.position.set(s.x + Math.sin(clock + i)*.3, s.h, s.z); me.rotation.set(0, yaw, Math.sin(clock*2 + i)*.25); } });
+  sheetMeshes.forEach((me, i) => { const s = sheets[i]; me.visible = !!s; if (s) { me.position.set(s.x + Math.sin(clock + i)*.3 + (s.h - 1)*.15, s.h, s.z); me.rotation.set(0, yaw, Math.sin(clock*2 + i)*.25); me.material.depthTest = s.h < 5.5; me.scale.setScalar(1 + s.h*.05); } });
   const bf = [];
   const bs = SITE.butterflies;
   for (let i = 0; i < 9; i++) bf.push([bs.cx + Math.sin(clock*.7 + i*2.3)*2.2, .8 + Math.sin(clock*1.3 + i)*.4, bs.cy + Math.cos(clock*.9 + i*1.7)*1.8, i]);
   const followers = [{ x:P.x, y:P.y, on:!!found.butterflies }, ...[...others.values()].map(o => ({ x:o.rx, y:o.ry, on:o.bf }))];
   for (const f of followers) if (f.on) for (let i = 0; i < 3; i++) bf.push([f.x + Math.cos(clock*1.3 + i*2.1)*.6, 1.2 + Math.sin(clock*1.7 + i*2.1)*.25, f.y + Math.sin(clock*1.1 + i*2.1)*.4, i]);
+  hintButterflies(bf);
   bflyMeshes.forEach((me, i) => { const b = bf[i]; me.visible = !!b; if (b) { me.position.set(b[0], b[1], b[2]); me.rotation.y = yaw; me.scale.x = .3 + Math.abs(Math.sin(clock*16 + b[3]))*.9; } });
   leafMeshes.forEach((me, i) => { const p = parts[i]; me.visible = !!p; if (p) { me.position.set(p.x, p.h, p.y); me.rotation.set(0, yaw, p.rot); } });
   fireflies.forEach(f => { f.me.visible = nt > .45; if (f.me.visible) f.me.position.set(P.x + f.ox + Math.sin(clock*.5 + f.ph)*.8, .5 + Math.abs(Math.sin(clock*.8 + f.ph))*1.4, P.y + f.oz + Math.cos(clock*.4 + f.ph)*.8); });
@@ -1918,9 +2132,10 @@ function draw(dt = .016){
     e.me.visible = nt > .55 && d > 3 && d < 16 && Math.sin(clock*.8 + e.k) < .9;
     e.mk.visible = nt < .45 && d > 4 && d < 14 && Math.sin(clock*.3 + e.k) > -.2;   // 낮엔 원숭이가 수풀 사이로 내다봄
   }
-  updateFire(dt, camX, camZ); updatePicks(camX, camZ); updateSmoke(dt, nt); updateWaterfall(dt, camX, camZ); updateLookout(camX, camZ); updateEnergy(dt);
+  updateFire(dt, camX, camZ); updatePicks(camX, camZ); updateSmoke(dt, nt); updateWaterfall(dt, camX, camZ); updateLookout(camX, camZ); updateEnergy(dt); updateHints(dt, camX, camZ, nt); updateRibbons(camX, camZ);
   for (const o of scene.children) if (o.isMesh && !o.isInstancedMesh && o !== ground && o !== sky) { o.position.x = camX + wd(o.position.x - camX, W); o.position.z = camZ + wd(o.position.z - camZ, H); }
   renderer.render(scene, camera);
+  if (sketchReq) { sketchReq = false; try { composeSketch(cv.toDataURL('image/jpeg', .9)); } catch (er) {} }
 
   // 겹쳐 그리기
   ctx.clearRect(0, 0, vw, vh);
@@ -1930,7 +2145,8 @@ function draw(dt = .016){
     ctx.stroke();
   }
   if (flash > .01) { ctx.fillStyle = `rgba(255,255,240,${flash*.55})`; ctx.fillRect(0, 0, vw, vh); }
-  drawTwinkles(); drawFireOverlay(); drawEnergyOverlay(); drawTouchHelp(dt); drawFireArrow();
+  drawTwinkles(); drawFireOverlay(); drawEnergyOverlay(); drawTouchHelp(dt); drawFireArrow(); drawHintOverlay();
+  if (sketchFlash > 0) { ctx.fillStyle = `rgba(255,250,235,${sketchFlash*1.6})`; ctx.fillRect(0, 0, vw, vh); sketchFlash -= dt; }
   drawObsOverlay(1, dt);
   ctx.font = '11px system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const L of LABELS) {

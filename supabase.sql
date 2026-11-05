@@ -18,3 +18,26 @@ create policy "anyone can teach a parrot" on public.parrot_lines
 
 -- 다른 사람이 가르친 말을 실시간으로 받기
 alter publication supabase_realtime add table public.parrot_lines;
+
+-- ---------------------------------------------------------------
+-- 리본: 나무에 묶는 표식 (한 사람당 5개, 내 리본만 풀 수 있음)
+create table if not exists public.ribbons (
+  id bigint generated always as identity primary key,
+  owner_hash text not null check (char_length(owner_hash) = 64),
+  name text not null default '' check (char_length(name) <= 12),
+  color text not null check (color ~ '^#[0-9a-fA-F]{6}$'),
+  x real not null check (x >= 0 and x < 96),
+  y real not null check (y >= 0 and y < 96),
+  created_at timestamptz not null default now()
+);
+alter table public.ribbons enable row level security;
+create policy "ribbons are readable" on public.ribbons for select to anon using (true);
+create policy "anyone can tie a ribbon" on public.ribbons for insert to anon with check (true);
+alter publication supabase_realtime add table public.ribbons;
+
+-- 리본 풀기: 묶은 사람의 브라우저에만 있는 열쇠가 맞아야 지워짐
+create or replace function public.untie_ribbon(rid bigint, owner_key text) returns void
+language sql security definer set search_path = public as $$
+  delete from public.ribbons where id = rid and owner_hash = encode(sha256(convert_to(owner_key, 'UTF8')), 'hex');
+$$;
+grant execute on function public.untie_ribbon(bigint, text) to anon;
