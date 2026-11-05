@@ -29,7 +29,13 @@ canvas#o{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
 .hud h1{margin:0;font:700 20px/1.1 var(--display);letter-spacing:.02em}
 .hud .stat{font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;letter-spacing:.03em}
 .hud .stat b{color:var(--marigold);font-weight:600}
-.tools{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:calc(env(safe-area-inset-right,0px) + 12px);display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:calc(100vw - 190px)}
+.hud .bagi{display:flex;gap:12px;align-items:center;font:24px/1 "Nanum Pen Script",cursive;color:#f3e6c8;text-shadow:0 1px 5px rgba(0,0,0,.8)}
+.hud .bagi span{display:flex;align-items:center;gap:2px}
+.hud .bagi img{width:28px;height:28px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6))}
+.tools{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:calc(env(safe-area-inset-right,0px) + 12px);display:flex;flex-direction:column;gap:6px;align-items:flex-end;z-index:4}
+.tools:not(.open) > button:not(.leaf){display:none}
+.tools button.leaf{order:-1;width:40px;height:40px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(20,18,40,.55);border:1px solid rgba(243,230,200,.25)}
+.tools.open button.leaf{background:rgba(20,18,40,.85)}
 .tools button{background:var(--panel);color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:8px 12px;font:12px var(--body);cursor:pointer}
 .tools button:hover,.tools button:focus-visible{color:var(--ink);border-color:var(--dim)}
 .tools #albumBtn{color:var(--marigold);border-color:rgba(242,169,59,.5)}
@@ -80,7 +86,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--marigold);outli
 
 <canvas id="c" tabindex="0" aria-label="정글 탐험 화면"></canvas>
 <canvas id="o" aria-hidden="true"></canvas>
-<div class="hud panel"><h1>덩굴숲</h1><div class="stat" id="stat">낮 · 혼자</div></div>
+<div class="hud"><h1 hidden>덩굴숲</h1><div class="stat" id="stat" hidden>낮 · 혼자</div></div>
 <div class="tools"><button id="nameBtn" type="button">이름</button><button id="albumBtn" type="button">그림첩 0/6</button><button id="sound" type="button">소리 켜기</button><button id="reset" type="button">처음부터</button></div>
 <div class="hint panel" id="hint"></div>
 <form class="chat" id="chat" autocomplete="off">
@@ -1734,8 +1740,10 @@ for (const [k] of bushByTile) {
   PICKS.push({ k, key, me, x:me.position.x, z:me.position.z });
 }
 const REGROW = 5*60*1000;   // 주운 자리는 5분 뒤 다시 열림
-const $bag = document.createElement('div'); $bag.className = 'stat'; document.querySelector('.hud').append($bag);
-function paintBag(){ const s = ITEM_KEYS.filter(k => bag[k] > 0).map(k => `${ITEMS[k].name} ${bag[k]}`).join(' · '); $bag.textContent = s ? '바구니: ' + s : '바구니가 비어 있어요'; }
+const $bag = document.createElement('div'); $bag.className = 'bagi'; $bag.setAttribute('aria-label', '바구니'); document.querySelector('.hud').append($bag);
+function paintBag(){   // 바구니: 든 열매만 그림과 숫자로
+  $bag.replaceChildren(...ITEM_KEYS.filter(k => bag[k] > 0).map(k => { const sp = document.createElement('span'), im = new Image(); im.src = ITEMS[k].tex.userData.canvas.toDataURL(); im.alt = ITEMS[k].name; sp.append(im, String(bag[k])); return sp; }));
+}
 paintBag();
 function updatePicks(camX, camZ){
   const now = Date.now();
@@ -2360,7 +2368,7 @@ for (const b of TP) for (const j of [0, 1]) if (hash(b.k*211 + j) < .7) VINES.pu
 let energy = 100, wet = false, faint = 0, fainted = false, faintMsg = null, speedMul = 1;
 try { const v = +localStorage.getItem('denggul-energy'); if (v > 0) energy = Math.min(100, v); } catch (e) {}
 setInterval(() => { try { localStorage.setItem('denggul-energy', String(Math.round(energy))); } catch (e) {} }, 4000);
-const $energy = document.createElement('div'); $energy.className = 'stat'; document.querySelector('.hud').append($energy);
+const $energy = document.createElement('div'); $energy.hidden = true;   // 기운은 글 대신 화면 가장자리로
 function underTree(x, y){ for (let ty = (y|0) - 1; ty <= (y|0) + 1; ty++) for (let tx = (x|0) - 1; tx <= (x|0) + 1; tx++) if (type[id(tx, ty)] === TREE && wdist(x, y, tx + .5, ty + .5) < 1.4) return true; return false; }
 function gainEnergy(n){ energy = Math.min(100, energy + n); }
 function updateEnergy(dt){
@@ -2389,9 +2397,9 @@ function updateEnergy(dt){
   $energy.textContent = '기운 ' + '●'.repeat(dots) + '○'.repeat(5 - dots) + (wet ? ' · 젖음' : '') + (energy < 30 ? ' · 지침' : '');
 }
 function drawEnergyOverlay(){
-  if (energy < 30 && faint === 0) {   // 지치면 가장자리가 어두워짐
+  if (energy < 50 && faint === 0) {   // 지칠수록 가장자리가 어두워짐
     const g = ctx.createRadialGradient(vw/2, vh/2, Math.min(vw, vh)*.25, vw/2, vh/2, Math.max(vw, vh)*.7);
-    g.addColorStop(0, 'rgba(10,8,20,0)'); g.addColorStop(1, `rgba(10,8,20,${(1 - energy/30)*.6})`); ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
+    g.addColorStop(0, 'rgba(10,8,20,0)'); g.addColorStop(1, `rgba(10,8,20,${(1 - energy/50)*.7})`); ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
   }
   if (wet) { ctx.fillStyle = 'rgba(120,150,170,.08)'; ctx.fillRect(0, 0, vw, vh); }
   if (faint > 0) { ctx.fillStyle = `rgba(6,4,14,${faint < 1.6 ? faint/1.6 : Math.max(0, 1 - (faint - 1.6)/1.6)})`; ctx.fillRect(0, 0, vw, vh); }
@@ -2654,6 +2662,13 @@ $ribbonBtn.addEventListener('click', () => { if (ribbonPanel.hidden) openRibbons
 function paintRibbonBtn(){ $ribbonBtn.textContent = `리본 ${myRibbons.length}/${RIBBON_MAX}`; }
 paintRibbonBtn();
 document.querySelector('.tools').prepend($ribbonBtn);
+{ const tools = document.querySelector('.tools'), leaf = document.createElement('button'); leaf.type = 'button'; leaf.className = 'leaf'; leaf.setAttribute('aria-label', '메뉴'); leaf.setAttribute('aria-expanded', 'false');
+  leaf.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#f3e6c8" stroke-width="1.4" stroke-linecap="round"><path d="M5 19C5 10 10 5 19 5c0 9-5 14-14 14z"/><path d="M5 19L15 9M9 15l-1-4M12 12l3 1M9 15l3 1"/></svg>';
+  tools.append(leaf);
+  const setOpen = o => { tools.classList.toggle('open', o); leaf.setAttribute('aria-expanded', String(o)); };
+  leaf.addEventListener('click', () => setOpen(!tools.classList.contains('open')));
+  tools.addEventListener('click', e => { if (e.target.closest('button') && !e.target.closest('button.leaf') && e.target.closest('button').id !== 'sound') setOpen(false); });
+  cv.addEventListener('pointerdown', () => setOpen(false)); }
 addEventListener('keydown', e => {
   if (e.target === $say || modalOpen()) return;
   const k = (e.key || '').toLowerCase();
