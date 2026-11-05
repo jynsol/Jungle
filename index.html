@@ -118,7 +118,7 @@ const IMG = {};
   veil.style.cssText = 'position:fixed;inset:0;z-index:50;background:#13201a;display:flex;align-items:center;justify-content:center;color:#cfc6a8;font:17px "Gowun Batang",serif;letter-spacing:.08em;transition:opacity .9s';
   veil.textContent = '숲으로 들어가는 중…'; document.body.append(veil);
   let left = 0, done = false;
-  const finish = () => { if (done) return; done = true; veil.style.opacity = 0; veil.style.pointerEvents = 'none'; setTimeout(() => veil.remove(), 1000); };
+  const finish = () => { if (done) return; done = true; repaintRings(); veil.style.opacity = 0; veil.style.pointerEvents = 'none'; setTimeout(() => veil.remove(), 1000); };
   const one = () => { if (--left <= 0) finish(); };
   for (const [k, src] of Object.entries(ASSETS)) if (src) { left++;
     fetch(src, { cache:'no-cache' }).then(r => r.ok ? r.blob() : Promise.reject()).then(b => {
@@ -167,10 +167,23 @@ const wd = (d, N) => d - N*Math.round(d/N);   // 이어진 숲에서의 가장 �
 const wdist = (ax, ay, bx, by) => Math.hypot(wd(ax - bx, W), wd(ay - by, H));
 const wrapX = x => ((x % W) + W) % W, wrapY = y => ((y % H) + H) % H;
 const border = () => false;   // 끝과 끝이 이어져 있어 가장자리가 없음
+// 지역 넷: 모닥불에서 보는 방향마다 숲의 성격이 다름 (처음 바라보는 쪽이 북)
+const REGIONS = [
+  { key:'high', name:'높은 숲', ang:0 },      // 큰 나무와 넓은 잎, 덩굴
+  { key:'flower', name:'꽃숲', ang:90 },     // 백합과 흰 꽃대
+  { key:'water', name:'물가', ang:180 },      // 웅덩이와 고사리
+  { key:'ruin', name:'폐허', ang:270 }        // 트인 땅, 산세베리아와 용설란
+];
+const RG_C = { x:(W/2|0) + .5, y:(H/2|0) + .5 };
+function regionW(x, y){
+  const dx = wd(x - RG_C.x, W), dy = wd(y - RG_C.y, H), d = Math.hypot(dx, dy), a = Math.atan2(dx, -dy), near = Math.max(0, Math.min(1, (d - 7)/12));
+  return REGIONS.map(r => near*Math.max(0, Math.cos(a - r.ang*Math.PI/180))**2);
+}
+function regionAt(x, y){ const w = regionW(x, y); let bi = -1, bw = .45; w.forEach((v, i) => { if (v > bw) { bw = v; bi = i; } }); return bi; }
 for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-  const n = n1(x/12, y/12)*.65 + n2(x/4, y/4)*.35; let t;
-  if (n < .3) t = WATER;
-  else { const r = R(); t = r < .1 ? TREE : (n > .66 && r < .6) ? FLOOR : BUSH; }
+  const n = n1(x/12, y/12)*.65 + n2(x/4, y/4)*.35, rw = regionW(x + .5, y + .5); let t;
+  if (n < .3 + .09*rw[2] - .06*rw[3]) t = WATER;
+  else { const r = R(); t = r < .1 + .07*rw[0] - .06*rw[3] ? TREE : (n > .66 - .16*rw[3] - .05*rw[1] && r < .6) ? FLOOR : BUSH; }
   type[id(x,y)] = t;
 }
 const setT = (x,y,t) => { if (!border(x,y)) type[id(x,y)] = t; };
@@ -189,6 +202,21 @@ SITES.forEach((s,i) => {
   if (s.key === 'labels') { setT(x-2, y-1, TREE); setT(x+3, y+2, TREE); setT(x+3, y-1, WATER); }
 });
 clear(SX+.5, SY+.5, 3.2);
+// 짐승 길: 모닥불에서 네 지역으로 풀이 눌린 오솔길. 길 끝이 그 지역의 퍼즐 자리
+const TRAIL = new Uint8Array(W*H);
+REGIONS.forEach((rg, i) => {
+  const a = rg.ang*Math.PI/180, ux = Math.sin(a), uy = -Math.cos(a), px = -uy, py = ux;
+  let end = 28; while (SITES.some(s => wdist(FIRE.x + ux*end, FIRE.y + uy*end, s.cx, s.cy) < 8) && end < 36) end++;
+  const ph = i*1.7 + .4; let hx = FIRE.x, hy = FIRE.y;
+  for (let t = 3; t <= end; t += .25) {
+    const wob = Math.sin(t*.22 + ph)*2.6 + Math.sin(t*.53 + ph*2)*1.1, x = FIRE.x + ux*t + px*wob, y = FIRE.y + uy*t + py*wob; hx = x; hy = y;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const tx = Math.floor(x) + dx, ty = Math.floor(y) + dy; if (Math.hypot(tx + .5 - x, ty + .5 - y) > (t % 7 < 2 ? .95 : .72)) continue;
+      const k = id(tx, ty); if (type[k] === RUIN) continue; type[k] = FLOOR; TRAIL[k] = 1;
+    }
+  }
+  rg.hub = { x:wrapX(hx), y:wrapY(hy) }; clear(rg.hub.x, rg.hub.y, 3.6);
+});
 const SITE = Object.fromEntries(SITES.map(s => [s.key, s]));
 // 이름표 마을의 이름표들
 const LABELS = [];   // 가까이 가면 위로 떠오르는 이름표
@@ -523,6 +551,7 @@ const $popVeil = document.getElementById('popVeil'), $albumVeil = document.getEl
 const foundCount = () => SITES.filter(s => found[s.key]).length;
 const paintAlbumBtn = () => $albumBtn.textContent = `그림첩 ${foundCount()}/${SITES.length}`;
 function showFound(s){
+  document.querySelector('#popVeil .tag').textContent = '새로운 기적';
   const box = document.getElementById('popCard'); box.replaceChildren(card(s));
   $popVeil.hidden = false; keys.clear(); joy = null; document.getElementById('popClose').focus();
 }
@@ -992,7 +1021,7 @@ function farSpot(minF, maxF, avoid, dir){   // dir: 처음 바라보는 쪽(북)
     const x = VR()*W | 0, y = VR()*H | 0, d = wdist(x + .5, y + .5, FIRE.x, FIRE.y);
     if (d < minF || d > maxF) continue;
     if (dir != null) { const a = Math.atan2(wd(x + .5 - FIRE.x, W), -wd(y + .5 - FIRE.y, H))*180/Math.PI, da = Math.abs(((a - dir) % 360 + 540) % 360 - 180); if (da > 35) continue; }
-    if (SITES.some(s => wdist(x, y, s.cx, s.cy) < 7) || avoid.some(a => wdist(x, y, a.x, a.y) < a.r)) continue;
+    if (SITES.some(s => wdist(x, y, s.cx, s.cy) < 7) || REGIONS.some(r => wdist(x, y, r.hub.x, r.hub.y) < 8) || avoid.some(a => wdist(x, y, a.x, a.y) < a.r)) continue;
     return { x:x + .5, y:y + .5 };
   }
   return { x:FIRE.x + minF, y:FIRE.y };
@@ -1024,9 +1053,15 @@ VISTA_CLEAR.push(...STORY_SPOTS.map(s => ({ x:s.x, y:s.y, r:s.key === 'galleon' 
 const GPX = 8, gcv = document.createElement('canvas'); gcv.width = W*GPX; gcv.height = H*GPX;
 { const g = gcv.getContext('2d');
   const base = { [FLOOR]:COLORS.floor, [BUSH]:'#24402e', [TREE]:'#2c4632', [WATER]:COLORS.water, [RUIN]:COLORS.ruin };
+  const hex = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+  const RGF = ['#2f4a34', '#4b5a3a', '#35574c', '#545646'].map(hex), RGB_ = ['#1b3626', '#2f4029', '#1d3c34', '#36392c'].map(hex), BF = hex(COLORS.floor), BB = hex('#24402e');
+  const tint = (b, tbl, rw) => { const c = b.slice(); rw.forEach((w, i) => { for (let j = 0; j < 3; j++) c[j] += (tbl[i][j] - b[j])*w; }); return `rgb(${c.map(v => v | 0).join(',')})`; };
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const k = id(x,y), t = type[k];
-    g.fillStyle = base[t]; g.fillRect(x*GPX, y*GPX, GPX, GPX);
+    const k = id(x,y), t = type[k], rw = (t === FLOOR || t === BUSH) ? regionW(x + .5, y + .5) : null;
+    g.fillStyle = t === FLOOR && TRAIL[k] ? '#6a5a3e' : t === FLOOR ? tint(BF, RGF, rw) : t === BUSH ? tint(BB, RGB_, rw) : base[t]; g.fillRect(x*GPX, y*GPX, GPX, GPX);
+    if (t === FLOOR && TRAIL[k]) { g.fillStyle = 'rgba(40,30,18,.35)'; if (hash(k*41) < .5) g.fillRect(x*GPX + 2, y*GPX + 2, 2, 2); g.fillStyle = 'rgba(150,130,90,.35)'; if (hash(k*43) < .4) g.fillRect(x*GPX + 4, y*GPX + 5, 3, 1); continue; }
+    if (t === FLOOR && rw && rw[1] > .4 && hash(k*47) < .45) { g.fillStyle = '#e8a0b4'; g.fillRect(x*GPX + 3, y*GPX + 2, 2, 2); }   // 꽃숲: 떨어진 꽃잎
+    if (t === FLOOR && rw && rw[3] > .4 && hash(k*49) < .35) { g.fillStyle = '#8a8670'; g.fillRect(x*GPX + 1, y*GPX + 4, 4, 3); }   // 폐허: 돌 부스러기
     if (t === FLOOR && hash(k*31) < .5) { g.fillStyle = COLORS.floorMark; g.fillRect(x*GPX + 1, y*GPX + 3, 4, 1); }
     if (t === WATER && hash(k*7) < .35) { g.fillStyle = COLORS.waterHi; g.fillRect(x*GPX + 1, y*GPX + 4, 5, 1); }
   }
@@ -1044,6 +1079,18 @@ ground.rotation.x = -Math.PI/2; ground.position.set(W/2, 0, H/2);
 const dummy = new THREE.Object3D();
 const SP_SUM = SPECIES.reduce((a, p) => a + p.wt, 0);
 const pickSpecies = u => { let acc = 0; for (let i = 0; i < SPECIES.length; i++) { acc += SPECIES[i].wt/SP_SUM; if (u < acc) return i; } return SPECIES.length - 1; };
+const RG_MULT = [
+  { broadleaf:2, banana:1.7, fern:1.3, lily:.5, whitespike:.5 },
+  { lily:3.2, whitespike:3, heartleaf:1.4, agave:.6 },
+  { fern:1.6, grass:1.6, heartleaf:1.3, sansevieria:.4 },
+  { sansevieria:3, agave:2.6, grass:1.4, banana:.4, broadleaf:.5 }
+];
+const SP_TABLES = [null, ...RG_MULT].map(m => { const ws = SPECIES.map(p => p.wt*((m && m[p.key]) || 1)), sum = ws.reduce((a, b) => a + b, 0); let acc = 0; return ws.map(w => acc += w/sum); });
+function pickSpeciesAt(u, k, j){
+  const rw = regionW(k % W + .5, (k / W | 0) + .5); let v = hash(k*17 + j*5), ti = 0;
+  for (let i = 0; i < 4; i++) { if (v < rw[i]) { ti = i + 1; break; } v -= rw[i]; }
+  const T = SP_TABLES[ti]; for (let i = 0; i < T.length; i++) if (u < T[i]) return i; return T.length - 1;
+}
 const GRASS = SPECIES.findIndex(p => p.key === 'grass'), AGAVE = SPECIES.findIndex(p => p.key === 'agave'), FERN = SPECIES.findIndex(p => p.key === 'fern');
 const BP = [], bushByTile = new Map();
 function addFlat(k, sp, x, z, j){
@@ -1053,10 +1100,10 @@ function addFlat(k, sp, x, z, j){
 }
 for (let k = 0; k < W*H; k++) {
   const tx = k % W, ty = k / W | 0;
-  if (type[k] === BUSH) { const n = MOBILE ? 3 : 4; for (let j = 0; j < n; j++) addFlat(k, pickSpecies(hash(k*7 + j)), tx + .5 + (hash(k*3 + j) - .5)*.75, ty + .5/n + j/n, j); }
+  if (type[k] === BUSH) { const n = MOBILE ? 3 : 4; for (let j = 0; j < n; j++) addFlat(k, pickSpeciesAt(hash(k*7 + j), k, j), tx + .5 + (hash(k*3 + j) - .5)*.75, ty + .5/n + j/n, j); }
   else if (type[k] === FLOOR) {
     // 모닥불과 기적의 자리는 비워 둠
-    if (wdist(tx + .5, ty + .5, FIRE.x, FIRE.y) < 3.4 || SITES.some(s => wdist(tx + .5, ty + .5, s.cx, s.cy) < 2.3) || VISTA_CLEAR.some(v => wdist(tx + .5, ty + .5, v.x, v.y) < v.r)) continue;
+    if (TRAIL[k] || wdist(tx + .5, ty + .5, FIRE.x, FIRE.y) < 3.4 || REGIONS.some(r => wdist(tx + .5, ty + .5, r.hub.x, r.hub.y) < 3) || SITES.some(s => wdist(tx + .5, ty + .5, s.cx, s.cy) < 2.3) || VISTA_CLEAR.some(v => wdist(tx + .5, ty + .5, v.x, v.y) < v.r)) continue;
     if (hash(k*53) < (MOBILE ? .35 : .55)) addFlat(k, GRASS, tx + .5 + (hash(k*61) - .5)*.6, ty + .3, 5);
     if (hash(k*59) < .08) addFlat(k, AGAVE, tx + .5, ty + .6, 6);
     else if (hash(k*67) < .14) addFlat(k, FERN, tx + .5 + (hash(k*71) - .5)*.5, ty + .7, 7);
@@ -1163,6 +1210,22 @@ const RINGS = [
   const me = cutout(ringGeo, m); me.renderOrder = -2 + i; me.frustumCulled = false;
   return { ...rg, me };
 });
+// 그림 파일(나무·야자·잎)이 다 오면 먼 숲 배경판도 그 그림으로 다시 그림 (멀수록 안개 색에 묻힘)
+function repaintRing(tex, col, light, seed){
+  const pics = ['tree', 'tree', 'palm', 'tree', 'orangetree'].map(k => IMG[k]).filter(Boolean), low = ['banana', 'broadleaf', 'heartleaf', 'fern'].map(k => IMG[k]).filter(Boolean);
+  if (!pics.length) return;
+  const c = tex.userData.canvas, g = c.getContext('2d'), w = c.width, h = c.height, r = rng(seed);
+  const items = [], lows = [];
+  for (let x = 0; x < w; x += 40 + r()*50) items.push({ x, top:h*(light ? .02 : .14) + r()*h*.26, im:pics[r()*pics.length | 0], flip:r() < .5 });
+  for (let x = 0; x < w; x += 60 + r()*60) lows.push({ x, top:h*(light ? .42 : .52) + r()*h*.15, im:low.length ? low[r()*low.length | 0] : null, flip:r() < .5 });
+  g.clearRect(0, 0, w, h); g.fillStyle = col; g.fillRect(0, h*(light ? .55 : .7), w, h);
+  const draw = it => { if (!it.im) return; const ih = h - it.top + 40, iw = ih*it.im.width/it.im.height;
+    for (const off of [-w, 0, w]) { g.save(); g.translate(it.x + off, it.top); if (it.flip) g.scale(-1, 1); g.drawImage(it.im, -iw/2, 0, iw, ih); g.restore(); } };
+  items.forEach(draw); lows.forEach(draw);
+  g.globalCompositeOperation = 'source-atop'; g.globalAlpha = light ? .6 : .4; g.fillStyle = col; g.fillRect(0, 0, w, h); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  tex.needsUpdate = true;
+}
+function repaintRings(){ try { repaintRing(RINGS[0].tex, '#7f927c', true, 31); repaintRing(RINGS[1].tex, '#45624a', false, 57); } catch (e) {} }
 let ringR = 18, ringAng = 22;
 let openS = 0;
 function openness(){
@@ -1376,6 +1439,7 @@ function lookTargets(){
   L.push({ key:'waterfall', x:WATERFALL.x, h:2.6, z:WATERFALL.y - 3.1 }, { key:'lookout', x:LOOKOUT.x, h:elevAt(LOOKOUT.x, LOOKOUT.y) + .6, z:LOOKOUT.y });
   for (const r of ribbons) L.push({ key:'ribbon', x:r.me.position.x, h:1.2, z:r.me.position.z, noSeen:true,
     info:{ name:r.mine ? '내 리본' : `${r.name || '누군가'}의 리본`, text:'여기까지 왔었다는 표시예요. 리본을 따라가면 그 사람이 걸은 길이에요.' } });
+  for (const pz of PUZZLES) L.push(...pz.targets());
   return L;
 }
 function wrapText(text, max){ const lines = []; let cur = ''; for (const ch of text) { if (ctx.measureText(cur + ch).width > max) { lines.push(cur); cur = ch; } else cur += ch; } lines.push(cur); return lines; }
@@ -1395,6 +1459,7 @@ function handleTap(x, y){
     const d = (s[0] - x)**2 + (s[1] - y)**2; if (d < bd) { bd = d; best = t; }
   }
   if (!best) { selected = null; return; }
+  if (best.act && wdist(best.x, best.z, P.x, P.y) < (best.reach || 4)) { best.act(); selected = null; return; }   // 가까이서 누르면 손을 댐
   selected = { ...best, until:clock + 8, isNew:!best.noSeen && !seen[best.key] };
   if (!best.noSeen && !seen[best.key]) { seen[best.key] = today(); try { localStorage.setItem('denggul-seen', JSON.stringify(seen)); } catch (er) {} }
 }
@@ -1980,6 +2045,249 @@ function updateScenes(dt, camX, camZ, nt, storm){
   }
 }
 
+/* ================= 퍼즐 =================
+   퍼즐 자리마다 누르면 반응하는 것이 3~4개 있고, 하나가 움직이면 다음이 움직임(연쇄).
+   멀리서 누르면 살펴보기(이름표), 가까이(4칸 안)에서 누르면 손을 댐.
+   진행은 각자 저장. 곁에(14칸 안) 있던 사람은 같은 단계로 함께 넘어가고, 다 풀면 함께 보상을 받음 */
+let pzSave = {}; try { pzSave = JSON.parse(localStorage.getItem('denggul-puzzles')) || {}; } catch (e) {}
+const savePz = () => { try { localStorage.setItem('denggul-puzzles', JSON.stringify(pzSave)); } catch (e) {} };
+const PUZZLES = [], SAIL_TOTAL = 4;
+const pzStep = pz => (pzSave[pz.id] && pzSave[pz.id].step) || 0;
+const sailCount = () => PUZZLES.filter(p => p.sail && pzStep(p) >= p.done).length;
+function setPzStep(pz, step, opts = {}){
+  if (step <= pzStep(pz)) return;
+  pzSave[pz.id] = { ...(pzSave[pz.id] || {}), step };
+  if (step >= pz.done) {
+    const w = [...others.values()].filter(o => wdist(o.rx, o.ry, pz.x, pz.y) < 14).map(o => o.name);
+    pzSave[pz.id].date = today(); pzSave[pz.id].with = [...new Set([opts.by, ...w].filter(Boolean))];
+  }
+  savePz();
+  if (!opts.remote && !opts.auto && chan) chan.send({ type:'broadcast', event:'pz', payload:{ id:ME.id, pz:pz.id, step } });
+  if (step >= pz.done) setTimeout(() => showPzReward(pz), 1200);
+}
+NET_HOOKS.push(ch => ch.on('broadcast', { event:'pz' }, ({ payload:p }) => {
+  if (!p || p.id === ME.id) return;
+  const pz = PUZZLES.find(q => q.id === p.pz), o = others.get(p.id);
+  if (!pz || !(p.step >= 0 && p.step <= pz.done) || wdist(P.x, P.y, pz.x, pz.y) > 14) return;   // 곁에 있던 사람만 함께 넘어감
+  setPzStep(pz, p.step | 0, { remote:true, by:o && o.name });
+}));
+
+/* 돛 조각: 네 조각이 모이면 범선에 무슨 일이 생김 */
+function paintSail(c, n){
+  const g = c.getContext('2d'), w = c.width, h = c.height;
+  const bg = g.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#1d2f45'); bg.addColorStop(1, '#2e4a3a'); g.fillStyle = bg; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#fff3c4'; g.beginPath(); g.arc(w*.82, h*.2, 22, 0, Math.PI*2); g.fill();
+  for (let i = 0; i < 16; i++) leafShape(g, (i*41) % w, h - 4, 50 + (i % 4)*14, -Math.PI/2 + (i % 5 - 2)*.35, COLORS.leaves[i % 4], .3);
+  g.fillStyle = '#5a3c22'; g.strokeStyle = '#1a120a'; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(w*.22, h*.78); g.quadraticCurveTo(w*.5, h*.93, w*.78, h*.76); g.lineTo(w*.74, h*.7); g.lineTo(w*.26, h*.7); g.closePath(); g.fill(); g.stroke();
+  g.strokeStyle = '#4a3020'; g.lineWidth = 6; g.beginPath(); g.moveTo(w*.5, h*.7); g.lineTo(w*.5, h*.1); g.stroke();
+  const cells = [[0, 0], [1, 0], [0, 1], [1, 1]], sx = w*.5, top = h*.13, cw = w*.13, ch = h*.27;
+  cells.forEach(([cx, cy], i) => {
+    const x0 = sx + (cx ? 4 : -cw - 4), y0 = top + cy*(ch + 4);
+    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + cw, y0 + 4); g.lineTo(x0 + cw - 4, y0 + ch); g.lineTo(x0 + 3, y0 + ch - 6); g.closePath();
+    if (i < n) { g.fillStyle = '#ece0bc'; g.fill(); g.strokeStyle = '#6b5236'; g.lineWidth = 2; g.stroke(); }
+    else { g.setLineDash([6, 6]); g.strokeStyle = 'rgba(236,224,188,.55)'; g.lineWidth = 2; g.stroke(); g.setLineDash([]); }
+  });
+}
+function showPzReward(pz){
+  if (modalOpen()) { setTimeout(() => showPzReward(pz), 1500); return; }
+  const s = pzSave[pz.id] || {}, fig = document.createElement('figure'); fig.className = 'retablo';
+  const c = document.createElement('canvas'); c.width = 560; c.height = 340; paintSail(c, sailCount());
+  const cap = document.createElement('figcaption');
+  const date = document.createElement('span'); date.className = 'date'; date.textContent = (s.date || today()) + ', 덩굴숲에서';
+  const b = document.createElement('b'); b.textContent = pz.rewardName;
+  const p = document.createElement('p'); p.textContent = pz.rewardText;
+  cap.append(date, b, p);
+  if (s.with && s.with.length) { const wi = document.createElement('span'); wi.className = 'with'; wi.textContent = '함께 푼 사람: ' + s.with.join(', '); cap.append(wi); }
+  fig.append(c, cap); document.getElementById('popCard').replaceChildren(fig);
+  document.querySelector('#popVeil .tag').textContent = `범선의 돛 조각 ${sailCount()} / ${SAIL_TOTAL}`;
+  $popVeil.hidden = false; keys.clear(); joy = null; document.getElementById('popClose').focus();
+}
+// 그림첩 맨 위에 돛 조각
+const sailBox = document.createElement('div'); sailBox.style.cssText = 'display:flex;flex-direction:column;gap:6px;padding:4px;font-family:var(--hand);color:var(--ink)';
+document.getElementById('grid').before(sailBox);
+$albumBtn.addEventListener('click', () => {
+  const n = sailCount(), h = document.createElement('h3'); h.style.cssText = 'margin:4px 0 0;font:700 18px var(--display)'; h.textContent = `범선의 돛 ${n} / ${SAIL_TOTAL}`;
+  const c = document.createElement('canvas'); c.width = 560; c.height = 340; c.style.cssText = 'width:100%;max-width:320px;height:auto;border:3px solid #3a2410;border-radius:3px'; paintSail(c, n);
+  const p = document.createElement('p'); p.style.cssText = 'margin:0;font-size:19px'; p.textContent = n >= SAIL_TOTAL ? '돛이 다 모였다. 숲 속의 범선이 기다린다.' : '숲 곳곳에 범선의 돛 조각이 숨어 있다. 다 모이면 무슨 일이 생길까.';
+  sailBox.replaceChildren(h, c, p);
+});
+
+/* 먹이 고르기: 바구니에 든 것 중 하나를 건넴 */
+const feedBar = document.createElement('div'); feedBar.hidden = true;
+feedBar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 84px);display:flex;gap:8px;z-index:5';
+document.body.append(feedBar);
+let feedFor = null, feedUntil = 0;
+function openFeed(obj){
+  const ks = ITEM_KEYS.filter(k => bag[k] > 0);
+  if (!ks.length) { obj.want(); return; }
+  feedFor = obj; feedUntil = clock + 8;
+  feedBar.replaceChildren(...ks.map(k => {
+    const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', ITEMS[k].name + ' 주기');
+    b.style.cssText = 'background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 10px 6px 6px;display:flex;align-items:center;gap:4px;color:var(--ink);font:600 14px var(--body);cursor:pointer';
+    const im = new Image(); im.src = ITEMS[k].tex.userData.canvas.toDataURL(); im.width = im.height = 36; im.alt = '';
+    b.append(im, String(bag[k]));
+    b.addEventListener('click', () => { feedBar.hidden = true; const f = feedFor; feedFor = null; if (f) f.give(k); cv.focus(); });
+    return b;
+  }));
+  feedBar.hidden = false;
+}
+function updateFeedBar(){ if (!feedFor) return; if (clock > feedUntil || wdist(P.x, P.y, feedFor.x, feedFor.z) > 5) { feedFor = null; feedBar.hidden = true; } }
+// 생각 풍선: 동물이 원하는 것을 그림으로
+const wants = [];   // { x, h, z, key, until }
+function drawPuzzleOverlay(){
+  for (let i = wants.length - 1; i >= 0; i--) {
+    const w = wants[i]; if (w.until < clock) { wants.splice(i, 1); continue; }
+    const s = toScreen(w.x, w.h, w.z); if (!s) continue;
+    ctx.globalAlpha = Math.min(1, w.until - clock);
+    ctx.fillStyle = 'rgba(255,250,236,.95)'; ctx.strokeStyle = '#3a2410'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(s[0] + 34, s[1] - 40, 26, 22, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    for (const [dx, dy, r] of [[12, -14, 5], [4, -4, 3]]) { ctx.beginPath(); ctx.arc(s[0] + dx, s[1] + dy, r, 0, Math.PI*2); ctx.fill(); ctx.stroke(); }
+    ctx.drawImage(ITEMS[w.key].tex.userData.canvas, s[0] + 16, s[1] - 58, 36, 36);
+  }
+  ctx.globalAlpha = 1;
+  for (const pz of PUZZLES) pz.overlay && pz.overlay();
+}
+const pzSfx = {
+  munch(v){ for (let i = 0; i < 6; i++) sfx((ac, t) => { const src = ac.createBufferSource(), lp = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = noiseBuf(ac, .1); lp.type = 'lowpass'; lp.frequency.value = 900; t += i*.45 + Math.random()*.1;
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + .08); src.connect(lp).connect(g).connect(ac.destination); src.start(t); src.stop(t + .1); }); },
+  hm(v){ sfx((ac, t) => { const o = ac.createOscillator(), g = ac.createGain(), lp = ac.createBiquadFilter(); o.type = 'sawtooth'; lp.type = 'lowpass'; lp.frequency.value = 500; o.frequency.setValueAtTime(170, t); o.frequency.linearRampToValueAtTime(140, t + .5);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + .08); g.gain.exponentialRampToValueAtTime(.0001, t + .55); o.connect(lp).connect(g).connect(ac.destination); o.start(t); o.stop(t + .6); }); },
+  rope(v){ sfx((ac, t) => { const src = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = noiseBuf(ac, 2); bp.type = 'bandpass'; bp.Q.value = 14; bp.frequency.setValueAtTime(520, t); bp.frequency.linearRampToValueAtTime(300, t + 1.8);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + .3); g.gain.exponentialRampToValueAtTime(.0001, t + 1.9); src.connect(bp).connect(g); g.connect(ac.destination); g.connect(reverb(ac)); src.start(t); src.stop(t + 2); }); },
+  thump(v){ sfx((ac, t) => { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(45, t + .25); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + .35); o.connect(g).connect(ac.destination); o.start(t); o.stop(t + .4); }); },
+  chime(v){ [523.3, 659.3, 784, 1046.5].forEach((f, i) => setTimeout(() => pianoNote(f, v), i*140)); }
+};
+
+/* ---- 퍼즐 1. 높은 숲: 나무늘보에게 바나나 ----
+   나무늘보(배고픔) → 바나나를 주면 천천히 먹고 → 곁의 덩굴을 당김 → 나무 꼭대기 위에 매달린 바구니가 내려옴 → 열면 돛 조각 */
+{
+  const hub = REGIONS[0].hub;
+  const TREE_T = ctex(300, 400, (g, w, h) => {
+    g.lineJoin = 'round';
+    g.fillStyle = '#4a3b2a'; g.strokeStyle = RG.line; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(96, h); g.quadraticCurveTo(128, h - 30, 126, h - 90); g.lineTo(130, 70); g.lineTo(166, 70); g.lineTo(172, h - 90); g.quadraticCurveTo(176, h - 30, 210, h); g.closePath(); g.fill(); g.stroke();
+    g.strokeStyle = '#3a2e20'; g.lineWidth = 2; for (let i = 0; i < 9; i++) { g.beginPath(); g.moveTo(136 + (i % 3)*10, 90 + i*30); g.quadraticCurveTo(146, 104 + i*30, 140 + (i % 2)*12, 116 + i*30); g.stroke(); }
+    g.fillStyle = '#4a3b2a'; g.strokeStyle = RG.line; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(160, 168); g.quadraticCurveTo(230, 160, 298, 168); g.lineTo(298, 182); g.quadraticCurveTo(230, 176, 162, 190); g.closePath(); g.fill(); g.stroke();   // 나무늘보 가지
+    g.fillStyle = RG.moss; for (let i = 0; i < 7; i++) { g.beginPath(); g.ellipse(176 + i*18, 168, 10, 4, 0, 0, Math.PI*2); g.fill(); }
+    for (const x of [200, 262]) { g.fillStyle = '#c23a4a'; for (let k = 0; k < 5; k++) { g.beginPath(); g.ellipse(x + (k - 2)*4, 160 - k % 2*5, 3, 9, (k - 2)*.4, 0, Math.PI*2); g.fill(); } }   // 가지 위 브로멜리아드
+    for (let i = 0; i < 26; i++) ovate(g, 20 + (i*47) % 260, 10 + (i*29) % 90, 70 + (i % 3)*12, (i % 7)*.9 - 2.8, COLORS.leaves[i % 4], 20);
+    g.fillStyle = '#e8d24a'; g.strokeStyle = '#6b5a22'; g.lineWidth = 1.5;   // 뿌리 곁 바나나 껍질 (힌트)
+    for (const [x, y, r] of [[218, h - 10, .3], [84, h - 14, 2.4], [236, h - 22, 1.2]]) { g.save(); g.translate(x, y); g.rotate(r); for (const a of [-.7, 0, .7]) { g.beginPath(); g.ellipse(Math.sin(a)*6, -Math.cos(a)*6, 3, 8, a, 0, Math.PI*2); g.fill(); g.stroke(); } g.restore(); }
+  });
+  const slothPaint = mode => ctex(96, 128, (g) => {
+    g.lineJoin = 'round'; g.strokeStyle = '#3a2e22'; g.lineWidth = 7; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(30, 6); g.quadraticCurveTo(24, 30, 36, 52); g.moveTo(66, 6); g.quadraticCurveTo(72, 30, 60, 52); g.stroke();   // 가지를 붙든 팔
+    g.strokeStyle = '#2a2016'; g.lineWidth = 2; for (const x of [26, 30, 34, 62, 66, 70]) { g.beginPath(); g.moveTo(x, 10); g.quadraticCurveTo(x - 2, 2, x + 3, 0); g.stroke(); }
+    g.fillStyle = '#8a7a62'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.beginPath(); g.ellipse(48, 78, 30, 40, 0, 0, Math.PI*2); g.fill(); g.stroke();
+    g.strokeStyle = '#a8987c'; g.lineWidth = 1.5; for (let i = 0; i < 16; i++) { const x = 26 + (i*13) % 44, y = 60 + (i*17) % 50; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 3, y + 8); g.stroke(); }
+    g.fillStyle = '#e6d8b8'; g.beginPath(); g.ellipse(48, 58, 17, 14, 0, 0, Math.PI*2); g.fill(); g.stroke();
+    g.fillStyle = '#3a2e22';
+    if (mode === 'sleep') { g.strokeStyle = '#3a2e22'; g.lineWidth = 2; for (const x of [40, 56]) { g.beginPath(); g.arc(x, 56, 4, .2, Math.PI - .2); g.stroke(); } }
+    else for (const [x, a] of [[39, .5], [57, -.5]]) { g.save(); g.translate(x, 56); g.rotate(a); g.beginPath(); g.ellipse(0, 0, 7, 3.5, 0, 0, Math.PI*2); g.fill(); g.restore(); g.fillStyle = '#f5ecd8'; g.beginPath(); g.arc(x + (x < 48 ? 1 : -1), 55, 1.4, 0, Math.PI*2); g.fill(); g.fillStyle = '#3a2e22'; }
+    g.beginPath(); g.ellipse(48, 63, 3.5, 2.5, 0, 0, Math.PI*2); g.fill();
+    g.strokeStyle = '#3a2e22'; g.lineWidth = 1.5; g.beginPath(); g.arc(48, 64, 6, .3, Math.PI - .3); g.stroke();
+    if (mode === 'eat') { g.fillStyle = '#f2d84a'; g.strokeStyle = '#6b5a22'; g.lineWidth = 1.5; g.save(); g.translate(60, 72); g.rotate(-.6); g.beginPath(); g.ellipse(0, 0, 5, 14, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.restore(); }
+  });
+  const ST = { idle:slothPaint('idle'), eat:slothPaint('eat'), sleep:slothPaint('sleep') };
+  const VINE_T = ctex(40, 256, (g, w, h) => {
+    g.strokeStyle = '#4a6a34'; g.lineWidth = 4; g.lineCap = 'round'; g.beginPath(); g.moveTo(20, 0); g.quadraticCurveTo(28, h*.5, 18, h - 16); g.stroke();
+    for (let y = 14; y < h - 20; y += 22) leafShape(g, 20 + Math.sin(y)*4, y, 16, Math.PI/2 + (y % 44 ? .9 : -.9), COLORS.leaves[(y/22 | 0) % 4], .34);
+    g.strokeStyle = '#5a4a2a'; g.lineWidth = 3; g.beginPath(); g.ellipse(18, h - 10, 8, 9, 0, 0, Math.PI*2); g.stroke();   // 끝의 고리
+  });
+  const basketPaint = open => ctex(96, 88, (g) => {
+    g.fillStyle = '#b08848'; g.strokeStyle = '#5a3c1a'; g.lineWidth = 2.5;
+    g.beginPath(); g.moveTo(10, 30); g.lineTo(86, 30); g.lineTo(76, 84); g.lineTo(20, 84); g.closePath(); g.fill(); g.stroke();
+    g.strokeStyle = '#8a6430'; g.lineWidth = 2; for (let y = 40; y < 84; y += 9) { g.beginPath(); g.moveTo(12 + (y - 30)*.18, y); g.lineTo(84 - (y - 30)*.18, y); g.stroke(); }
+    for (let x = 22; x < 80; x += 10) { g.beginPath(); g.moveTo(x, 30); g.lineTo(x + (48 - x)*.15, 84); g.stroke(); }
+    if (open) { g.fillStyle = '#ece0bc'; g.strokeStyle = '#6b5236'; g.beginPath(); g.moveTo(30, 32); g.lineTo(62, 8); g.lineTo(70, 34); g.closePath(); g.fill(); g.stroke(); }   // 삐져나온 돛 조각
+    else { g.fillStyle = '#9a7438'; g.strokeStyle = '#5a3c1a'; g.beginPath(); g.ellipse(48, 28, 40, 9, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.strokeStyle = '#5a3c1a'; g.lineWidth = 3; g.beginPath(); g.arc(48, 22, 12, Math.PI, 0); g.stroke(); }
+  });
+  const BK = { shut:basketPaint(false), open:basketPaint(true) };
+  const tree = cutout(plane(6, 8), mat(TREE_T));
+  const sloth = cutout(plane(1.1, 1.45), mat(ST.idle));
+  const vine = cutout(plane(.38, 2.5), mat(VINE_T));
+  const basket = cutout(plane(.95, .87), mat(BK.shut));
+  const rope = cutout(plane(.05, 1), new THREE.MeshBasicMaterial({ color:'#7a5a32' }));
+  const SL = { id:'sloth', name:'나무늘보', x:hub.x, y:hub.y, done:4, sail:true, t:0, last:-1, react:null,
+    rewardName:'첫 번째 돛 조각',
+    rewardText:'나무늘보가 바나나를 다 먹고 느릿느릿 덩굴을 당기자, 나무 꼭대기 위에 걸려 있던 바구니가 내려왔다. 안에는 오래된 돛 한 조각이 접혀 있었다.' };
+  const pos = { sloth:[0, 0], vine:[0, 0], basket:[0, 0], bh:9.2 };
+  const feedObj = { x:0, z:0,
+    give(k){ if (pzStep(SL) !== 0) return;
+      if (k === 'banana') { bag.banana--; saveBag(); paintBag(); paintFire(); setPzStep(SL, 1); }
+      else { SL.react = { kind:'no', t:clock }; pzSfx.hm(.08); } },   // 다른 건 고개를 갸웃
+    want(){ SL.react = { kind:'want', t:clock }; wants.push({ x:pos.sloth[0], h:3.9, z:pos.sloth[1], key:'banana', until:clock + 3.5 }); pzSfx.hm(.06); } };
+  SL.targets = () => {
+    const st = pzStep(SL), L = [];
+    L.push({ key:'pz-tree', noSeen:true, x:hub.x, h:1.4, z:hub.y, info:{ name:'아주 큰 나무', text:'뿌리 곁에 바나나 껍질이 흩어져 있다. 누가 먹었을까.' } });
+    L.push({ key:'pz-sloth', noSeen:true, x:pos.sloth[0], h:3.7, z:pos.sloth[1], reach:5,
+      info:{ name:'나무늘보', text:st >= 2 ? '배가 부른지 눈을 반쯤 감았다.' : '높은 가지에 매달려 아주 천천히 눈을 깜빡인다. 배가 고파 보인다.' },
+      act:() => { feedObj.x = pos.sloth[0]; feedObj.z = pos.sloth[1]; if (pzStep(SL) === 0) openFeed(feedObj); else SL.react = { kind:'blink', t:clock }; } });
+    L.push({ key:'pz-vine', noSeen:true, x:pos.vine[0], h:2.6, z:pos.vine[1], reach:5,
+      info:{ name:'덩굴', text:'끝에 고리가 달린 덩굴. 손이 닿지 않는다. 위로는 나무 꼭대기 너머까지 이어져 있다.' },
+      act:() => { SL.react = { kind:'vine', t:clock }; } });
+    L.push({ key:'pz-basket', noSeen:true, x:pos.basket[0], h:pos.bh + .5, z:pos.basket[1], reach:4,
+      info:{ name:'바구니', text:st >= 3 ? '덩굴에 매달려 내려온 바구니. 뚜껑이 덮여 있다.' : '나무 꼭대기보다 높은 곳에 바구니가 매달려 있다. 무언가 들어 있는 것 같다.' },
+      act:() => { if (pzStep(SL) === 3) { pzSfx.chime(.12); setPzStep(SL, 4); } } });
+    return L;
+  };
+  SL.update = (dt, camX, camZ) => {
+    const st = pzStep(SL); if (st !== SL.last) { SL.t = clock; SL.last = st; }
+    const el = clock - SL.t, d = wdist(P.x, P.y, hub.x, hub.y);
+    const [hx, hz] = wrapNear(hub.x, hub.y, camX, camZ), ang = Math.atan2(camX - hx, camZ - hz), rx = Math.cos(ang), rz = -Math.sin(ang), fx = Math.sin(ang), fz = Math.cos(ang);
+    const at = (r, f) => [hx + rx*r + fx*f, hz + rz*r + fz*f];
+    tree.position.set(hx, 0, hz); tree.rotation.y = ang;
+    pos.sloth = at(1.8, .12); pos.vine = at(2.45, .1); pos.basket = at(-1.7, .2);
+    // 나무늘보
+    const r = SL.react, re = r ? clock - r.t : 9;
+    let tilt = Math.sin(clock*.6)*.04;
+    if (r && r.kind === 'no' && re < 1.6) tilt += Math.sin(re*9)*.18*(1 - re/1.6);
+    if (r && r.kind === 'want' && re < 1.2) tilt += .15*Math.sin(re*Math.PI/1.2);
+    sloth.material.map = st === 1 || (st === 2 && el < 1.5) ? ST.eat : st >= 3 ? ST.sleep : ST.idle;
+    sloth.position.set(pos.sloth[0], 3.02, pos.sloth[1]); sloth.rotation.set(0, ang, tilt);
+    // 덩굴: 당겨지는 동안 크게 흔들림
+    let vw = Math.sin(clock*.9)*.03;
+    if (st === 2) vw += Math.sin(el*7)*.22*Math.max(0, 1 - el/3);
+    if (r && r.kind === 'vine' && re < 1.2) vw += Math.sin(re*14)*.08*(1 - re/1.2);
+    vine.position.set(pos.vine[0], 1.95 - (st === 2 ? Math.max(0, Math.sin(Math.min(el, 1.5)*2))*.25 : 0), pos.vine[1]); vine.rotation.set(0, ang, vw);
+    // 바구니: 나무 꼭대기 위 → 천천히 내려옴 → 땅
+    const k = st < 2 ? 0 : st === 2 ? Math.min(1, Math.max(0, (el - 1.2)/6)) : 1, e = k*k*(3 - 2*k);
+    pos.bh = 9.2 + (.02 - 9.2)*e;
+    basket.material.map = st >= 4 ? BK.open : BK.shut;
+    basket.position.set(pos.basket[0], pos.bh, pos.basket[1]); basket.scale.setScalar(1); basket.rotation.set(0, ang, st === 2 ? Math.sin(clock*3)*.08 : Math.sin(clock*.8)*.03);
+    rope.visible = (st < 3 || (st === 3 && el < .5)) && d < MARK_D; rope.scale.set(1, Math.max(.01, 13 - (pos.bh + .87)), 1); rope.position.set(pos.basket[0], pos.bh + .87, pos.basket[1]); rope.rotation.y = ang;
+    if (d > MARK_D && st < 2) proj(basket);   // 멀리서도 나무 위로 바구니가 보이게
+    // 단계가 저절로 넘어감
+    if (st === 1 && el > 3.8) setPzStep(SL, 2, { auto:true });
+    if (st === 2 && el > 7.4) { pzSfx.thump(.25); setPzStep(SL, 3, { auto:true }); }
+    if (st !== SL.sndStep) { SL.sndStep = st; const v = Math.max(0, 1 - d/14);
+      if (st === 1 && el < .2) pzSfx.munch(.12*v); if (st === 2 && el < .2) { pzSfx.rope(.1*v); setTimeout(() => pzSfx.rope(.08*v), 2600); } }
+  };
+  SL.overlay = () => {   // 내려온 바구니가 반짝임
+    const st = pzStep(SL); if (st !== 3 && !(st < 2 && wdist(P.x, P.y, hub.x, hub.y) < 30)) return;
+    const s = toScreen(pos.basket[0], pos.bh + .9, pos.basket[1]); if (!s) return;
+    const tw = Math.sin(clock*3); if (tw < .3) return;
+    ctx.globalAlpha = (tw - .3)*1.4; ctx.fillStyle = '#fff6c8'; ctx.font = '16px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✦', s[0] + 10, s[1]); ctx.globalAlpha = 1;
+  };
+  PUZZLES.push(SL);
+}
+
+/* 지역에 들어서면 이름이 잠깐 뜸 */
+const regionTag = document.createElement('div');
+regionTag.style.cssText = 'position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 62px);transform:translateX(-50%);font:700 20px "Gowun Batang",serif;color:#f3e6c8;text-shadow:0 2px 8px rgba(0,0,0,.6);letter-spacing:.12em;pointer-events:none;opacity:0;transition:opacity 1.2s;z-index:3';
+document.body.append(regionTag);
+let lastRegion = -1, regionTimer = 0;
+function updatePuzzles(dt, camX, camZ){
+  for (const pz of PUZZLES) pz.update(dt, camX, camZ);
+  updateFeedBar();
+  const ri = regionAt(P.x, P.y);
+  if (ri >= 0 && ri !== lastRegion) { regionTag.textContent = REGIONS[ri].name; regionTag.style.opacity = 1; regionTimer = 3; lastRegion = ri; }
+  if (wdist(P.x, P.y, FIRE.x, FIRE.y) < 7) lastRegion = -1;   // 모닥불에 돌아왔다 다시 나가면 또 뜸
+  if (regionTimer > 0 && (regionTimer -= dt) <= 0) regionTag.style.opacity = 0;
+}
+
 /* ---- 전망 바위 ---- */
 const ROCK_TEX = ctex(320, 256, (g, w, h) => {
   g.fillStyle = '#7a7a68'; g.strokeStyle = RG.line; g.lineWidth = 3;
@@ -2203,7 +2511,8 @@ function parrotHint(best){
     ...SITES.filter(s => !found[s.key]).map(s => ({ name:s.name, x:s.cx, y:s.cy })),
     ...STORY_SPOTS.filter(s => !seen[s.key]).map(s => ({ name:STORY_INFO[s.key].name, x:s.x, y:s.y })),
     ...(seen.waterfall ? [] : [{ name:'숲속 폭포', x:WATERFALL.x, y:WATERFALL.y }]),
-    ...(seen.lookout ? [] : [{ name:'전망 바위', x:LOOKOUT.x, y:LOOKOUT.y }])
+    ...(seen.lookout ? [] : [{ name:'전망 바위', x:LOOKOUT.x, y:LOOKOUT.y }]),
+    ...PUZZLES.filter(p => pzStep(p) < p.done).map(p => ({ name:p.name, x:p.x, y:p.y }))
   ].sort((a, b) => wdist(P.x, P.y, a.x, a.y) - wdist(P.x, P.y, b.x, b.y));
   if (!c.length) return null;
   const t = c[best || Math.random() < .7 ? 0 : Math.min(c.length - 1, 1)];
@@ -2537,7 +2846,7 @@ function draw(dt = .016){
     e.me.visible = nt > .55 && d > 3 && d < 16 && Math.sin(clock*.8 + e.k) < .9;
     e.mk.visible = nt < .45 && d > 4 && d < 14 && Math.sin(clock*.3 + e.k) > -.2;   // 낮엔 원숭이가 수풀 사이로 내다봄
   }
-  updateFire(dt, camX, camZ); updatePicks(camX, camZ); updateSmoke(dt, nt); updateWaterfall(dt, camX, camZ); updateLookout(camX, camZ); updateEnergy(dt); updateHints(dt, camX, camZ, nt); updateScenes(dt, camX, camZ, nt, st); updateCompass(); updateRibbons(camX, camZ); updateHammocks(dt, camX, camZ); updateLie(); updateAmbience(dt, nt);
+  updateFire(dt, camX, camZ); updatePicks(camX, camZ); updateSmoke(dt, nt); updateWaterfall(dt, camX, camZ); updateLookout(camX, camZ); updateEnergy(dt); updateHints(dt, camX, camZ, nt); updateScenes(dt, camX, camZ, nt, st); updatePuzzles(dt, camX, camZ); updateCompass(); updateRibbons(camX, camZ); updateHammocks(dt, camX, camZ); updateLie(); updateAmbience(dt, nt);
   for (const o of scene.children) if (o.isMesh && !o.isInstancedMesh && o !== ground && o !== sky) { o.position.x = camX + wd(o.position.x - camX, W); o.position.z = camZ + wd(o.position.z - camZ, H); }
   renderer.render(scene, camera);
 
@@ -2549,7 +2858,7 @@ function draw(dt = .016){
     ctx.stroke();
   }
   if (flash > .01) { ctx.fillStyle = `rgba(255,255,240,${flash*.55})`; ctx.fillRect(0, 0, vw, vh); }
-  drawTwinkles(); drawFireOverlay(); drawEnergyOverlay(); drawTouchHelp(dt); drawHintOverlay();
+  drawTwinkles(); drawFireOverlay(); drawPuzzleOverlay(); drawEnergyOverlay(); drawTouchHelp(dt); drawHintOverlay();
   drawObsOverlay(1, dt);
   ctx.font = '11px system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const L of []) {   // 이름표 마을의 이름표는 뺌
