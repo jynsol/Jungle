@@ -99,7 +99,11 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
    assets/ 폴더에 아래 이름의 png를 넣으면 기본 그림 대신 그 그림판으로 바뀌어요. 크기와 비율은 README 참고.
    모두 정면에서 본 모습, 투명 배경, 아래가 땅에 닿게. */
 const ASSET_NAMES = ['agave','grass','broadleaf','fern','lily','whitespike','heartleaf','banana','sansevieria','palm','tree','orangetree','lotus','flamingo','tiger','monkey','ruin','player','parrot','leaf','player_walk','butterfly','fire','log','cliff','waterfall_flow'];
+// 아직 기본 그림인 것들: 파일을 넣으면 바로 바뀜 (목록과 크기는 ART_LIST.md)
+ASSET_NAMES.push('galleon', 'galleon_front', 'piano', 'clock', 'gramophone', 'bicycle', 'mailbox', 'swing', 'chair', 'monkeys', 'whitebird', 'toucan', 'oldman', 'rock', 'fruit_banana', 'fruit_mango', 'fruit_cacao', 'bigtree', 'sloth_idle', 'sloth_eat', 'sloth_sleep', 'basket', 'basket_open', 'vine');
 const ASSETS = Object.fromEntries(ASSET_NAMES.map(n => [n, 'assets/' + n + '.png']));
+const ART = {};   // 그림 이름 → 그림이 오면 할 일 (그림판 바꾸고 비율 맞추기)
+const onArt = (k, fn) => (ART[k] || (ART[k] = [])).push(fn);
 const COLORS = {
   // 앙리 루소 「적도의 정글」(1909)에서 고른 색
   rousseau:{ deep:'#1c3428', dark:'#26443a', mid:'#355a45', sage:'#4d7356', moss:'#6a8a5a', pale:'#9db07a', agave:'#b9c98a', cream:'#ece6b4',
@@ -715,6 +719,8 @@ function ctex(w, h, paint){
 }
 function plane(w, h, base = true){ const g = new THREE.PlaneGeometry(w, h); if (base) g.translate(0, h/2, 0); return g; }
 function cutout(geo, m){ const me = new THREE.Mesh(geo, m); scene.add(me); return me; }
+function swapTex(t, im){ t.image = im; t.magFilter = THREE.LinearFilter; t.needsUpdate = true; }
+function fitGeo(me, h, im, base = true){ const w = h*im.width/im.height; me.geometry = plane(w, h, base); return w; }   // 높이는 그대로, 너비는 그림 비율대로
 
 /* 그림판 그림들 (assets/ 그림이 있으면 그걸로 바뀜) */
 const LINE = COLORS.leafLine;
@@ -999,6 +1005,7 @@ const EYES_TEX = ctex(32, 12, (g) => { g.fillStyle = COLORS.jaguar; for (const x
 const FIREFLY_TEX = ctex(8, 8, (g) => { g.fillStyle = '#fff6a0'; g.beginPath(); g.arc(4, 4, 3.6, 0, Math.PI*2); g.fill(); });
 
 function onAsset(k, im){
+  if (ART[k]) { ART[k].forEach(f => { try { f(im); } catch (e) {} }); return; }
   const swap = t => { t.image = im; t.magFilter = THREE.LinearFilter; t.needsUpdate = true; };
   if (k === 'player_walk') { loadPersonFrames(im); return; }
   const extra = { butterfly:BFLY_TEX, fire:FIRE_TEX, log:LOG_TEX, cliff:CLIFF_TEX, waterfall_flow:FLOW_TEX };
@@ -1168,7 +1175,7 @@ for (const b of TP) if (hash(b.k*103) < .05 && !border(b.k % W, b.k / W | 0)) { 
 const altarGeo = plane(2.2, 1.1);
 const ALTARS = []; for (const s of SITES) if (s.key !== 'mirror') { const me = cutout(altarGeo, mat(ALTAR_TEX)); me.position.set(s.cx, 0, s.cy + .95); ALTARS.push(me); }
 const personGeo = plane(.76, 1.14);
-const oldman = cutout(personGeo, mat(OLDMAN_TEX)); oldman.position.set(SITE.oldman.cx + 1.6, 0, SITE.oldman.cy + .6);
+const oldman = cutout(personGeo, mat(OLDMAN_TEX)); onArt('oldman', im => { swapTex(OLDMAN_TEX, im); fitGeo(oldman, 1.14, im); }); oldman.position.set(SITE.oldman.cx + 1.6, 0, SITE.oldman.cy + .6);
 const parrotGeo = plane(.42, .84);
 PARROTS.forEach(p => { p.mesh = cutout(parrotGeo, mat(PARROT_TEX[p.col])); p.mesh.position.set(p.x, 0, p.y); });
 const pool = (n, geo, m) => Array.from({ length:n }, () => { const me = cutout(geo, m); me.visible = false; return me; });
@@ -1396,6 +1403,7 @@ const CR_TYPES = {
   sloth:{ tex:SLOTH_TEX, w:.6, h:.68, y:[1.7, 2.4], wt:.2 }
 };
 for (const t of Object.values(CR_TYPES)) { t.geo = plane(t.w, t.h); t.mat = mat(t.tex); }
+for (const [k, art] of [['jesters', 'monkeys'], ['whitebird', 'whitebird'], ['toucan', 'toucan'], ['sloth', 'sloth_idle']]) onArt(art, im => { const t = CR_TYPES[k]; swapTex(t.tex, im); t.geo = plane(t.h*im.width/im.height, t.h); });
 const critters = [];
 let still = 0, obs = 0, pitch = 0, spawned = false, lookHold = 0, lookKey = null, newSeen = 0;
 let seen = {}; try { seen = JSON.parse(localStorage.getItem('denggul-seen')) || {}; } catch (e) {}
@@ -1792,6 +1800,11 @@ function updateSmoke(dt, nt){
 
 const CUP_TEX = ctex(96, 36, (g) => { g.fillStyle = '#a0583a'; g.strokeStyle = RG.line; g.lineWidth = 2; g.beginPath(); g.moveTo(34, 6); g.lineTo(62, 6); g.lineTo(58, 34); g.lineTo(38, 34); g.closePath(); g.fill(); g.stroke(); g.strokeStyle = '#e8e6dc'; g.lineWidth = 1.5; for (const x of [42, 50]) { g.beginPath(); g.moveTo(x, 4); g.quadraticCurveTo(x + 4, -2, x, -8); g.stroke(); } });
 for (const it of Object.values(ITEMS)) it.stick = ctex(96, 36, (g) => { g.strokeStyle = '#6b4a2a'; g.lineWidth = 3; g.beginPath(); g.moveTo(0, 32); g.lineTo(96, 12); g.stroke(); g.drawImage(it.tex.userData.canvas, 32, -4, 40, 40); });
+for (const [k, it] of Object.entries(ITEMS)) onArt('fruit_' + k, im => {
+  const c = it.tex.userData.canvas, g = c.getContext('2d'); c.width = c.height = 128; const s = Math.min(128/im.width, 128/im.height);
+  g.drawImage(im, (128 - im.width*s)/2, (128 - im.height*s)/2, im.width*s, im.height*s); it.tex.needsUpdate = true;
+  const sc = it.stick.userData.canvas, sg = sc.getContext('2d'); sg.clearRect(0, 0, sc.width, sc.height); sg.strokeStyle = '#6b4a2a'; sg.lineWidth = 3; sg.beginPath(); sg.moveTo(0, 32); sg.lineTo(96, 12); sg.stroke(); sg.drawImage(c, 32, -4, 40, 40); it.stick.needsUpdate = true;
+});
 const RECIPES = [
   { name:'구운 바나나', need:{ banana:1 }, msg:'구운 바나나를 나눠 먹었어요' },
   { name:'망고 구이', need:{ mango:1 }, msg:'망고 구이를 나눠 먹었어요' },
@@ -1890,7 +1903,9 @@ const STORIES = STORY_SPOTS.map(s => {
   const [w, h, cw, ch, paint] = ST_PAINT[s.key];
   const me = cutout(plane(w, h), mat(ctex(cw, ch, paint)));
   const y = s.key === 'swing' ? .2 : 0;
-  me.position.set(s.x, y, s.y); return { ...s, me, h:h*.55 + y };
+  me.position.set(s.x, y, s.y);
+  onArt(s.key, im => { swapTex(me.material.map, im); fitGeo(me, h, im); });
+  return { ...s, me, h:h*.55 + y };
 });
 
 /* ---- 폭포 ---- */
@@ -1939,6 +1954,8 @@ const GALLEON_FRONT = ctex(384, 320, (g, w, h) => {
   for (const [x, y] of [[60, 96], [300, 130], [196, 70]]) flower(g, x, y, 5, '#e8a0c8');
 });
 const galleonFront = cutout(plane(8, 6.6), mat(GALLEON_FRONT));
+let galArt = false, galFrontArt = false;
+onArt('galleon', () => { galArt = true; }); onArt('galleon_front', im => { galFrontArt = true; swapTex(GALLEON_FRONT, im); fitGeo(galleonFront, 6.6, im); });
 const galMotes = pool(14, plane(.07, .07, false), MOTE_MAT).map((m, i) => { m.material = MOTE_MAT.clone(); return { m, i, ph:Math.random()*6 }; });
 let creakT = 3;
 
@@ -1997,7 +2014,7 @@ function updateScenes(dt, camX, camZ, nt, storm){
   const gal = STORIES.find(s => s.key === 'galleon');
   if (gal) {
     const ang = gal.me.rotation.y, fx = Math.sin(ang), fz = Math.cos(ang);
-    galleonFront.position.set(gal.me.position.x + fx*.8, 0, gal.me.position.z + fz*.8); galleonFront.rotation.y = ang;
+    galleonFront.visible = !galArt || galFrontArt; galleonFront.position.set(gal.me.position.x + fx*.8, 0, gal.me.position.z + fz*.8); galleonFront.rotation.y = ang;
     GALLEON_FRONT.offset.x = Math.sin(clock*.6)*.004;
     const gd = wdist(P.x, P.y, gal.x, gal.y);
     for (const p of galMotes) { p.m.visible = gd < 16; if (!p.m.visible) continue;
@@ -2210,6 +2227,10 @@ const pzSfx = {
   const vine = cutout(plane(.38, 2.5), mat(VINE_T));
   const basket = cutout(plane(.95, .87), mat(BK.shut));
   const rope = cutout(plane(.05, 1), new THREE.MeshBasicMaterial({ color:'#7a5a32' }));
+  onArt('bigtree', im => { swapTex(TREE_T, im); fitGeo(tree, 8, im); });
+  for (const k of ['idle', 'eat', 'sleep']) onArt('sloth_' + k, im => { swapTex(ST[k], im); if (k === 'idle') fitGeo(sloth, 1.45, im); });
+  onArt('vine', im => { swapTex(VINE_T, im); fitGeo(vine, 2.5, im); });
+  onArt('basket', im => { swapTex(BK.shut, im); fitGeo(basket, .87, im); }); onArt('basket_open', im => swapTex(BK.open, im));
   const SL = { id:'sloth', name:'나무늘보', x:hub.x, y:hub.y, done:4, sail:true, t:0, last:-1, react:null,
     rewardName:'첫 번째 돛 조각',
     rewardText:'나무늘보가 바나나를 다 먹고 느릿느릿 덩굴을 당기자, 나무 꼭대기 위에 걸려 있던 바구니가 내려왔다. 안에는 오래된 돛 한 조각이 접혀 있었다.' };
@@ -2296,7 +2317,7 @@ const ROCK_TEX = ctex(320, 256, (g, w, h) => {
   g.fillStyle = RG.moss; g.beginPath(); g.ellipse(160, 40, 120, 18, 0, 0, Math.PI*2); g.fill();
   for (let i = 0; i < 16; i++) leafShape(g, (i*37) % 320, h - 2, 40 + (i % 3)*14, -Math.PI/2 + (i % 5 - 2)*.35, COLORS.leaves[i % 4], .25);
 });
-const rock = cutout(plane(8.4, 6.4), mat(ROCK_TEX));
+const rock = cutout(plane(8.4, 6.4), mat(ROCK_TEX)); onArt('rock', im => { swapTex(ROCK_TEX, im); fitGeo(rock, 6.4, im); });
 function updateLookout(camX, camZ){
   const ang = Math.atan2(camX - LOOKOUT.x, camZ - LOOKOUT.y), d = wdist(camX, camZ, LOOKOUT.x, LOOKOUT.y);
   rock.position.set(LOOKOUT.x - Math.sin(ang)*Math.min(1.2, d*.3), 0, LOOKOUT.y - Math.cos(ang)*Math.min(1.2, d*.3)); rock.rotation.y = ang;
