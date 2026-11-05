@@ -1205,7 +1205,7 @@ const GPX = 8, gcv = document.createElement('canvas'); gcv.width = W*GPX; gcv.he
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const k = id(x,y), t0 = type[k], t = t0 === BUSH && TRAIL_EDGE[k] ? FLOOR : t0, rw = (t === FLOOR || t === BUSH) ? regionW(x + .5, y + .5) : null;
     g.fillStyle = t === FLOOR && TRAIL[k] ? '#8a744c' : t === FLOOR ? tint(BF, RGF, rw) : t === BUSH ? tint(BB, RGB_, rw) : base[t]; g.fillRect(x*GPX, y*GPX, GPX, GPX);
-    if (t === FLOOR && TRAIL[k]) { g.fillStyle = 'rgba(40,30,18,.3)'; if (hash(k*41) < .5) g.fillRect(x*GPX + 2, y*GPX + 2, 2, 2); if (hash(k*43) < .22) { g.fillStyle = '#b3aa90'; g.beginPath(); g.ellipse(x*GPX + 4, y*GPX + 4, 2.6, 1.8, hash(k*45)*3, 0, Math.PI*2); g.fill(); } continue; }
+    if (t === FLOOR && TRAIL[k]) { g.fillStyle = 'rgba(40,30,18,.3)'; if (hash(k*41) < .5) g.fillRect(x*GPX + 2, y*GPX + 2, 2, 2); if (hash(k*43) < .12) { g.fillStyle = '#9a8c6a'; g.beginPath(); g.ellipse(x*GPX + 4, y*GPX + 4, 1.5, 1, hash(k*45)*3, 0, Math.PI*2); g.fill(); } continue; }
     if (t === FLOOR && rw && rw[1] > .4 && hash(k*47) < .45) { g.fillStyle = '#e8a0b4'; g.fillRect(x*GPX + 3, y*GPX + 2, 2, 2); }   // 꽃숲: 떨어진 꽃잎
     if (t === FLOOR && rw && rw[3] > .4 && hash(k*49) < .35) { g.fillStyle = '#8a8670'; g.fillRect(x*GPX + 1, y*GPX + 4, 4, 3); }   // 폐허: 돌 부스러기
     if (t === FLOOR && hash(k*31) < .5) { g.fillStyle = COLORS.floorMark; g.fillRect(x*GPX + 1, y*GPX + 3, 4, 1); }
@@ -1614,6 +1614,13 @@ function walkToScreen(x, y){   // 누른 땅으로 걸어감 (하늘을 누르�
   if (!(v.y < -.02) || Math.hypot(hx, hz) > 14) return;   // 하늘이나 너무 먼 곳을 누르면 걷지 않음
   P.goto = { x:wrapX(P.x + hx), z:wrapY(P.y + hz), stop:.25, best:1e9, bestT:clock };
 }
+const _bb = new THREE.Vector3();
+function tapInside(me, x, y){   // 누른 곳이 그 그림의 화면 테두리 안인지
+  const g = me.geometry; if (!g.boundingBox) g.computeBoundingBox(); const b = g.boundingBox; me.updateMatrixWorld();
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const cx of [b.min.x, b.max.x]) for (const cy of [b.min.y, b.max.y]) { _bb.set(cx, cy, 0).applyMatrix4(me.matrixWorld).project(camera); if (_bb.z > 1) return false; const sx = (_bb.x + 1)/2*innerWidth, sy = (1 - _bb.y)/2*innerHeight; x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy); }
+  const pad = 6; return x > x0 - pad && x < x1 + pad && y > y0 - pad && y < y1 + pad ? (x1 - x0)*(y1 - y0) + 1 : 0;   // 넓이 (작은 그림이 큰 그림 위에 있으면 작은 쪽)
+}
 function handleTap(x, y){
   let best = null, bd = (MOBILE ? 80 : 64)**2;
   const segD = (a, b) => { const vx = b[0] - a[0], vy = b[1] - a[1], l = vx*vx + vy*vy || 1, u = Math.max(0, Math.min(1, ((x - a[0])*vx + (y - a[1])*vy)/l)); return (a[0] + vx*u - x)**2 + (a[1] + vy*u - y)**2; };
@@ -1623,6 +1630,7 @@ function handleTap(x, y){
     if (t.h0 != null) { const a = toScreen(t.x, t.h0, t.z), b = toScreen(t.x, t.h1, t.z); if (!a || !b) continue; d = segD(a, b); }   // 긴 물건은 길이 전체가 눌림
     else { const s = toScreen(t.x, t.h, t.z); if (!s) continue; d = (s[0] - x)**2 + (s[1] - y)**2; }
     if (t.act && wdist(t.x, t.z, P.x, P.y) < (t.reach || 4)) d *= .45;   // 손닿는 곳에 있는 건 더 잘 잡힘
+    if (t.me && t.me.visible) { const ar = tapInside(t.me, x, y); if (ar) d *= ar < 8000 ? .12 : .25; }   // 그림 위를 정확히 누르면 그걸 집음 (옆 물건에 뺏기지 않게)
     if (d < bd) { bd = d; best = t; }
   }
   if (!best) { if (MOBILE) walkToScreen(x, y); return; }   // 땅을 눌러 걷기는 폰에서만 (컴퓨터는 키보드)
@@ -2643,7 +2651,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
       ladder.visible = st >= 4; const k = st === 4 ? ease(el/2.2) : 1; ladder.scale.set(1, Math.max(.02, k), 1); ladder.position.set(x, DECK, z); face(ladder, x, z); ladder.rotation.z = st === 4 ? Math.sin(el*6)*.06*(1 - k) : 0; }
     if (st === 2 && el > 11.6) setPzStep(SL, 3, { auto:true });
     if (st === 3 && el > 7.4) setPzStep(SL, 4, { auto:true });
-    if (st === 4 && el > 2.4) setPzStep(SL, 5, { auto:true });
+    if (st === 4 && el > 2.4) { setPzStep(SL, 5, { auto:true }); popAt(SPOT.ladder.x, SPOT.ladder.z, 1.2); }   // 사다리가 땅에 닿음: 올라갈 수 있다!
     if (!SL.snd) { SL.snd = true; const v = near();
       if (st === 1 && el < .3) { SL.react = { kind:'wake', t:clock }; pzSfx.hm(.1*v); }
       if (st === 2 && el < .3) { pzSfx.rope(.09*v); setTimeout(() => pzSfx.munch(.12*near()), 4200); }
