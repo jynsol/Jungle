@@ -524,7 +524,7 @@ function step(dt){
     // 화면 기준 입력(오른쪽 dx, 위쪽 -dy)을 숲 속 방향으로
     const wx = Math.cos(yaw)*dx + Math.sin(yaw)*dy, wz = -Math.sin(yaw)*dx + Math.cos(yaw)*dy;
     P.fx = wx; P.fy = wz;
-    const sp = (tileAt(P.x,P.y) === BUSH ? BUSH_SPEED : SPEED) * dt;
+    const sp = (tileAt(P.x,P.y) === BUSH ? BUSH_SPEED : SPEED) * dt * speedMul;
     const nx = P.x + wx*sp; if (!blocked(nx, P.y)) P.x = nx;
     const ny = P.y + wz*sp; if (!blocked(P.x, ny)) P.y = ny;
     P.x = wrapX(P.x); P.y = wrapY(P.y);
@@ -907,6 +907,33 @@ function onAsset(k, im){
   else if (k === 'tiger') swap(TIGER_TEX); else if (k === 'monkey') swap(MONKEY_SIT_TEX);
 }
 
+/* ---- 풍경 자리와 숲의 이야기 자리 (모두에게 같은 숲) ---- */
+const VR = rng(5150);
+function farSpot(minF, maxF, avoid){
+  for (let n = 0; n < 4000; n++) {
+    const x = VR()*W | 0, y = VR()*H | 0, d = wdist(x + .5, y + .5, FIRE.x, FIRE.y);
+    if (d < minF || d > maxF) continue;
+    if (SITES.some(s => wdist(x, y, s.cx, s.cy) < 7) || avoid.some(a => wdist(x, y, a.x, a.y) < a.r)) continue;
+    return { x:x + .5, y:y + .5 };
+  }
+  return { x:FIRE.x + minF, y:FIRE.y };
+}
+const WATERFALL = farSpot(20, 30, []), LOOKOUT = farSpot(18, 32, [{ ...WATERFALL, r:16 }]);
+clear(WATERFALL.x, WATERFALL.y + .8, 4.2);
+for (let y = Math.floor(WATERFALL.y - 3); y <= WATERFALL.y + 1; y++) for (let x = Math.floor(WATERFALL.x - 3); x <= WATERFALL.x + 3; x++)
+  if ((x + .5 - WATERFALL.x)**2/5 + (y + .5 - (WATERFALL.y - 1))**2/2.2 <= 1) setT(x, y, WATER);   // 폭포 웅덩이
+clear(LOOKOUT.x, LOOKOUT.y, 4.6);
+const VISTA_CLEAR = [{ ...WATERFALL, r:4.4 }, { ...LOOKOUT, r:4.8 }];
+const elevAt = (x, y) => 5.2*Math.max(0, Math.min(1, (3.7 - wdist(x, y, LOOKOUT.x, LOOKOUT.y))/2.3));   // 전망 바위 높이
+const STORY_KEYS = ['galleon', 'piano', 'clock', 'gramophone', 'bicycle', 'mailbox', 'swing', 'chair'];
+const STORY_SPOTS = [];
+for (const key of STORY_KEYS) {
+  const s = farSpot(9, 45, [...STORY_SPOTS.map(p => ({ ...p, r:11 })), ...VISTA_CLEAR.map(v => ({ ...v, r:9 }))]);
+  clear(s.x, s.y, key === 'galleon' ? 2.6 : 1.4);
+  STORY_SPOTS.push({ key, ...s });
+}
+VISTA_CLEAR.push(...STORY_SPOTS.map(s => ({ x:s.x, y:s.y, r:s.key === 'galleon' ? 2.8 : 1.5 })));
+
 /* 바닥: 지도 한 장을 땅에 깔기 */
 const GPX = 8, gcv = document.createElement('canvas'); gcv.width = W*GPX; gcv.height = H*GPX;
 { const g = gcv.getContext('2d');
@@ -942,7 +969,7 @@ for (let k = 0; k < W*H; k++) {
   if (type[k] === BUSH) for (let j = 0; j < 4; j++) addFlat(k, pickSpecies(hash(k*7 + j)), tx + .5 + (hash(k*3 + j) - .5)*.75, ty + .125 + j*.25, j);
   else if (type[k] === FLOOR) {
     // 모닥불과 기적의 자리는 비워 둠
-    if (wdist(tx + .5, ty + .5, FIRE.x, FIRE.y) < 3.4 || SITES.some(s => wdist(tx + .5, ty + .5, s.cx, s.cy) < 2.3)) continue;
+    if (wdist(tx + .5, ty + .5, FIRE.x, FIRE.y) < 3.4 || SITES.some(s => wdist(tx + .5, ty + .5, s.cx, s.cy) < 2.3) || VISTA_CLEAR.some(v => wdist(tx + .5, ty + .5, v.x, v.y) < v.r)) continue;
     if (hash(k*53) < .55) addFlat(k, GRASS, tx + .5 + (hash(k*61) - .5)*.6, ty + .3, 5);
     if (hash(k*59) < .08) addFlat(k, AGAVE, tx + .5, ty + .6, 6);
     else if (hash(k*67) < .14) addFlat(k, FERN, tx + .5 + (hash(k*71) - .5)*.5, ty + .7, 7);
@@ -1198,9 +1225,12 @@ function lookTargets(){
   for (const p of PARROTS) L.push({ key:'parrot', x:p.x, h:.6, z:p.y });
   for (const e of EYES) if (e.mk.visible) L.push({ key:'peek', x:e.mk.position.x, h:e.mk.position.y + .18, z:e.mk.position.z });
   L.push({ key:'oldman', x:oldman.position.x, h:.7, z:oldman.position.z });
+  for (const st of STORIES) L.push({ key:st.key, x:st.x, h:st.h, z:st.y });
+  L.push({ key:'waterfall', x:WATERFALL.x, h:2.6, z:WATERFALL.y - 3.1 }, { key:'lookout', x:LOOKOUT.x, h:elevAt(LOOKOUT.x, LOOKOUT.y) + .6, z:LOOKOUT.y });
   return L;
 }
 function wrapText(text, max){ const lines = []; let cur = ''; for (const ch of text) { if (ctx.measureText(cur + ch).width > max) { lines.push(cur); cur = ch; } else cur += ch; } lines.push(cur); return lines; }
+const hudEl = document.querySelector('.hud');
 function drawObsOverlay(e, dt){
   if (e < .5) { lookHold = 0; lookKey = null; return; }
   const cx = vw/2, cy = vh/2;
@@ -1219,8 +1249,8 @@ function drawObsOverlay(e, dt){
       const info = OBS_INFO[best.key];
       if (!seen[best.key]) { seen[best.key] = today(); newSeen = 2.5; try { localStorage.setItem('denggul-seen', JSON.stringify(seen)); } catch (er) {} }
       ctx.font = '19px "Nanum Pen Script", cursive';
-      const lines = wrapText(info.text, Math.min(320, vw - 64)), w = Math.min(352, vw - 32), h = 50 + lines.length*21;
-      const bx = cx - w/2, by = Math.min(vh*.68, vh - h - 90);
+      const w = Math.min(330, vw - 24), lines = wrapText(info.text, w - 28), h = 50 + lines.length*21;
+      const bx = 12, by = (hudEl.getBoundingClientRect().bottom || 80) + 8;
       ctx.fillStyle = '#f3e6c8'; ctx.fillRect(bx, by, w, h); ctx.strokeStyle = '#3a2410'; ctx.lineWidth = 3; ctx.strokeRect(bx, by, w, h);
       ctx.fillStyle = '#4a2a16'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
       ctx.font = '26px "Nanum Pen Script", cursive'; ctx.fillText(info.name, bx + 14, by + 9);
@@ -1313,6 +1343,7 @@ NET_HOOKS.push(ch => {
     if (!p || p.id === ME.id) return;
     const o = others.get(p.id), food = RECIPES[p.r | 0]; if (!o || !food) return;
     addLog(o.name, o.color, food.msg);
+    if (nearFire(P.x, P.y)) gainEnergy(25);
     if (nearFire(P.x, P.y)) recordFeast(food.name, [o.name, ...[...others.values()].filter(x => x !== o && nearFire(x.rx, x.ry)).map(x => x.name)]);
   });
 });
@@ -1396,7 +1427,7 @@ function updateFire(dt, camX, camZ){
       if (k >= 1) {
         const withNames = [...others.values()].filter(o => nearFire(o.rx, o.ry)).map(o => o.name);
         addLog(ME.name || '나', myColor, r.msg); myBubble = { text:`${r.name} 다 됐어요!`, until:clock + 4 };
-        recordFeast(r.name, withNames);
+        recordFeast(r.name, withNames); gainEnergy(35);
         if (chan) chan.send({ type:'broadcast', event:'feast', payload:{ id:ME.id, r:cooking.r } });
       } else { for (const [kk, n] of Object.entries(r.need)) bag[kk] = (bag[kk] || 0) + n; saveBag(); paintBag(); }   // 불을 떠나면 재료는 돌려받음
       cooking = null; cookMesh.visible = false; paintFire();
@@ -1510,12 +1541,189 @@ const RECIPES = [
 const crowdNow = () => 1 + [...others.values()].filter(o => nearFire(o.rx, o.ry)).length;
 const canMake = r => Object.entries(r.need).every(([k, n]) => (bag[k] || 0) >= n) && (!r.crowd || crowdNow() >= r.crowd);
 
+/* ---- 숲의 이야기 ---- */
+const STORY_INFO = {
+  galleon:{ name:'숲 속의 범선', text:'바다에서 이백 킬로미터 떨어진 숲 한가운데 범선이 서 있다. 돛대 사이로 난초가 피었다. 어떻게 왔는지는 아무도 묻지 않는다.' },
+  piano:{ name:'이끼 낀 피아노', text:'아무도 치지 않는데 비 오는 날이면 도 음 하나가 울린다. 원숭이들은 그 소리에 맞춰 잠든다.' },
+  clock:{ name:'멈춘 괘종시계', text:'세 시 십 분에 멈춰 있다. 이 숲에서는 그게 늘 맞는 시각이다.' },
+  gramophone:{ name:'축음기', text:'판은 없는데 바람이 불면 오래된 탱고가 흘러나온다.' },
+  bicycle:{ name:'녹슨 자전거', text:'앞바퀴에 덩굴이 감겨 있다. 주인은 걸어서 더 멀리 갔다고 한다.' },
+  mailbox:{ name:'우체통', text:'숲으로 보낸 편지는 모두 여기 도착한다. 답장은 앵무새가 대신 읽어 준다.' },
+  swing:{ name:'빈 그네', text:'아무도 없는데 천천히 흔들린다. 밀어 주는 쪽이 누구인지는 아무도 모른다.' },
+  chair:{ name:'흔들의자', text:'앉으면 백 년 전 오후가 잠깐 지나간다. 일어나면 손에 모래가 묻어 있다.' },
+  waterfall:{ name:'숲속 폭포', text:'물소리가 너무 커서 여기서 한 말은 앵무새도 따라 하지 못한다.' },
+  lookout:{ name:'전망 바위', text:'여기서는 모닥불 연기와 지는 해가 한눈에 보인다. 숲이 생각보다 둥글다.' }
+};
+Object.assign(OBS_INFO, STORY_INFO);
+const ST_PAINT = {
+  galleon:[3.6, 3.2, 288, 256, (g, w, h) => {
+    g.strokeStyle = RG.line; g.lineWidth = 3;
+    g.fillStyle = '#6b4a2a'; g.beginPath(); g.moveTo(20, 170); g.quadraticCurveTo(144, 250, 268, 170); g.lineTo(250, 150); g.lineTo(38, 150); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#8a6438'; g.fillRect(40, 150, 210, 14); g.strokeRect(40, 150, 210, 14);
+    g.strokeStyle = '#4a3020'; g.lineWidth = 5; for (const x of [90, 160, 220]) { g.beginPath(); g.moveTo(x, 152); g.lineTo(x, 30 + (x % 3)*10); g.stroke(); }
+    g.fillStyle = 'rgba(236,230,200,.9)'; g.strokeStyle = RG.line; g.lineWidth = 2;
+    for (const [x, t] of [[90, 46], [160, 36], [220, 56]]) { g.beginPath(); g.moveTo(x - 30, t); g.quadraticCurveTo(x, t + 14, x + 30, t); g.lineTo(x + 26, t + 60); g.quadraticCurveTo(x, t + 48, x - 26, t + 64); g.closePath(); g.fill(); g.stroke(); }
+    g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.moveTo(178, 70); g.lineTo(186, 96); g.lineTo(170, 90); g.fill(); g.globalCompositeOperation = 'source-over';
+    for (let i = 0; i < 14; i++) leafShape(g, 30 + i*18, 160 + (i % 3)*8, 26, -Math.PI/2 + (i % 5 - 2)*.4, COLORS.leaves[i % 4], .3);
+    for (const x of [110, 200]) flower(g, x, 88, 6, '#e8a0c8');
+  }],
+  piano:[1.6, 1.3, 176, 144, (g) => {
+    g.fillStyle = '#2a2220'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.fillRect(10, 30, 156, 80); g.strokeRect(10, 30, 156, 80);
+    g.fillStyle = '#efe8d4'; g.fillRect(20, 76, 136, 18); g.fillStyle = '#1a1412'; for (let x = 26; x < 150; x += 12) g.fillRect(x, 76, 6, 10);
+    g.fillStyle = '#2a2220'; for (const x of [18, 150]) g.fillRect(x, 110, 8, 32);
+    for (let i = 0; i < 9; i++) leafShape(g, 10 + i*18, 32, 22, -Math.PI/2 + (i % 3 - 1)*.6, RG.moss, .3);
+  }],
+  clock:[.75, 2.0, 96, 256, (g) => {
+    g.fillStyle = '#6b4a2a'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.fillRect(18, 20, 60, 230); g.strokeRect(18, 20, 60, 230);
+    g.fillStyle = '#f2ead2'; g.beginPath(); g.arc(48, 56, 24, 0, Math.PI*2); g.fill(); g.stroke();
+    g.strokeStyle = '#1a1412'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(48, 56); g.lineTo(48 + 16*Math.cos(-.04), 56 + 16*Math.sin(-.04)); g.moveTo(48, 56); g.lineTo(48 + 11*Math.cos(Math.PI*2*(3.17/12) - Math.PI/2), 56 + 11*Math.sin(Math.PI*2*(3.17/12) - Math.PI/2)); g.stroke();
+    g.fillStyle = '#c9a046'; g.beginPath(); g.arc(48, 170, 10, 0, Math.PI*2); g.fill(); g.fillRect(46, 100, 4, 70);
+    for (let i = 0; i < 4; i++) leafShape(g, 18, 120 + i*30, 30, Math.PI + .4, RG.sage, .3);
+  }],
+  gramophone:[1.0, 1.1, 128, 144, (g) => {
+    g.fillStyle = '#6b4a2a'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.fillRect(24, 100, 80, 40); g.strokeRect(24, 100, 80, 40);
+    g.fillStyle = '#c9a046'; g.beginPath(); g.moveTo(60, 100); g.lineTo(54, 60); g.lineTo(10, 10); g.quadraticCurveTo(60, -6, 120, 18); g.lineTo(66, 62); g.lineTo(70, 100); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#8a6a2a'; g.beginPath(); g.ellipse(64, 14, 52, 12, -.15, 0, Math.PI*2); g.fill(); g.stroke();
+  }],
+  bicycle:[1.5, .95, 176, 112, (g) => {
+    g.strokeStyle = '#8a4a2a'; g.lineWidth = 4;
+    for (const x of [40, 136]) { g.beginPath(); g.arc(x, 76, 30, 0, Math.PI*2); g.stroke(); }
+    g.beginPath(); g.moveTo(40, 76); g.lineTo(80, 76); g.lineTo(122, 40); g.lineTo(70, 40); g.lineTo(40, 76); g.moveTo(80, 76); g.lineTo(66, 30); g.moveTo(122, 40); g.lineTo(136, 76); g.lineTo(116, 26); g.stroke();
+    for (let i = 0; i < 8; i++) leafShape(g, 136 + Math.cos(i)*26, 76 + Math.sin(i)*26, 14, i, RG.mid, .3);
+  }],
+  mailbox:[.6, 1.5, 80, 200, (g) => {
+    g.fillStyle = '#4a3020'; g.fillRect(36, 80, 10, 120);
+    g.fillStyle = '#c0392b'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.beginPath(); g.moveTo(8, 84); g.lineTo(8, 40); g.quadraticCurveTo(40, 14, 72, 40); g.lineTo(72, 84); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#1a1412'; g.fillRect(22, 52, 36, 5);
+    g.fillStyle = '#f2ead2'; g.save(); g.translate(40, 50); g.rotate(-.2); g.fillRect(-12, -14, 24, 14); g.restore();
+  }],
+  swing:[1.0, 2.6, 128, 336, (g) => {
+    g.strokeStyle = '#4a3020'; g.lineWidth = 6; g.beginPath(); g.moveTo(0, 8); g.lineTo(128, 12); g.stroke();
+    g.strokeStyle = '#a08060'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(30, 10); g.lineTo(34, 280); g.moveTo(98, 12); g.lineTo(94, 280); g.stroke();
+    g.fillStyle = '#6b4a2a'; g.strokeStyle = RG.line; g.fillRect(26, 278, 76, 12); g.strokeRect(26, 278, 76, 12);
+  }],
+  chair:[.95, 1.15, 112, 136, (g) => {
+    g.strokeStyle = '#5b3a22'; g.lineWidth = 5;
+    g.beginPath(); g.moveTo(30, 10); g.lineTo(28, 80); g.lineTo(90, 80); g.moveTo(26, 46); g.lineTo(92, 46); g.moveTo(34, 80); g.lineTo(34, 112); g.moveTo(86, 80); g.lineTo(86, 112); g.stroke();
+    g.beginPath(); g.moveTo(6, 116); g.quadraticCurveTo(60, 136, 108, 112); g.stroke();
+    g.fillStyle = '#c8a070'; g.fillRect(30, 72, 60, 10);
+  }]
+};
+const STORIES = STORY_SPOTS.map(s => {
+  const [w, h, cw, ch, paint] = ST_PAINT[s.key];
+  const me = cutout(plane(w, h), mat(ctex(cw, ch, paint)));
+  const y = s.key === 'swing' ? .2 : 0;
+  me.position.set(s.x, y, s.y); return { ...s, me, h:h*.55 + y };
+});
+
+/* ---- 폭포 ---- */
+const CLIFF_TEX = ctex(320, 288, (g, w, h) => {
+  g.fillStyle = '#5d6a5a'; g.strokeStyle = RG.line; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(0, h); g.lineTo(10, 60); g.quadraticCurveTo(60, 10, 130, 22); g.lineTo(190, 22); g.quadraticCurveTo(270, 6, 312, 70); g.lineTo(w, h); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = '#4a5648'; for (let i = 0; i < 18; i++) { const x = 20 + (i*53) % 280, y = 70 + (i*37) % 200; g.beginPath(); g.ellipse(x, y, 26, 14, (i % 3)*.4, 0, Math.PI*2); g.fill(); }
+  for (let i = 0; i < 22; i++) leafShape(g, (i < 11 ? 0 : 320) + (i < 11 ? 1 : -1)*(4 + (i*13) % 50), 60 + i*10 % 220, 40 + (i % 4)*8, i < 11 ? -.3 + (i % 3)*.3 : Math.PI + .3 - (i % 3)*.3, COLORS.leaves[i % 4], .28);
+  g.strokeStyle = RG.mid; g.lineWidth = 2; for (let i = 0; i < 7; i++) { const x = 30 + i*44; g.beginPath(); g.moveTo(x, 30); g.quadraticCurveTo(x + 10, 110, x - 4, 150 + (i % 3)*30); g.stroke(); }
+});
+const FLOW_TEX = ctex(64, 128, (g) => { g.fillStyle = 'rgba(226,240,236,.85)'; g.fillRect(8, 0, 48, 128); g.fillStyle = 'rgba(255,255,255,.95)'; for (let i = 0; i < 14; i++) g.fillRect(10 + (i*17) % 44, (i*29) % 128, 3, 26); g.fillStyle = 'rgba(160,200,196,.7)'; for (let i = 0; i < 8; i++) g.fillRect(12 + (i*23) % 40, (i*41) % 128, 2, 18); });
+FLOW_TEX.wrapT = THREE.RepeatWrapping; FLOW_TEX.repeat.set(1, 2);
+const cliff = cutout(plane(7, 6.2), mat(CLIFF_TEX));
+const flow = cutout(plane(1.3, 5.1), mat(FLOW_TEX, true, { alphaTest:.3 }));
+const mist = pool(10, plane(1, 1, false), new THREE.MeshBasicMaterial({ map:SMOKE_TEX, transparent:true, depthWrite:false, opacity:.35 })).map((m, i) => ({ m, t:i/10 }));
+let wfAudio = null;
+function updateWaterfall(dt, camX, camZ){
+  const cx = WATERFALL.x, cz = WATERFALL.y - 3.1, ang = Math.atan2(camX - cx, camZ - cz);
+  cliff.position.set(cx, 0, cz); cliff.rotation.y = ang;
+  flow.position.set(cx + Math.sin(ang)*.15, .3, cz + Math.cos(ang)*.15); flow.rotation.y = ang;
+  FLOW_TEX.offset.y = (FLOW_TEX.offset.y + dt*1.4) % 1;
+  for (const s of mist) { s.t = (s.t + dt/3) % 1; s.m.visible = true; s.m.position.set(cx + Math.sin(s.t*7 + s.t)*.8, .2 + s.t*1.4, cz + 1.2 + Math.cos(s.t*5)*.4); s.m.scale.setScalar(.6 + s.t*1.4); s.m.material.opacity = .35*(1 - s.t); s.m.lookAt(camera.position); }
+  if (audio && !wfAudio) try {
+    const { ac } = audio, buf = ac.createBuffer(1, ac.sampleRate*2, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1;
+    const src = ac.createBufferSource(), lp = ac.createBiquadFilter(), gn = ac.createGain(); src.buffer = buf; src.loop = true; lp.type = 'lowpass'; lp.frequency.value = 900; gn.gain.value = 0;
+    src.connect(lp).connect(gn).connect(ac.destination); src.start(); wfAudio = gn;
+  } catch (e) { wfAudio = {}; }
+  if (wfAudio && wfAudio.gain) wfAudio.gain.setTargetAtTime(soundOn ? Math.max(0, 1 - wdist(P.x, P.y, cx, cz)/16)*.2 : 0, audio.ac.currentTime, .3);
+}
+
+/* ---- 전망 바위 ---- */
+const ROCK_TEX = ctex(320, 256, (g, w, h) => {
+  g.fillStyle = '#7a7a68'; g.strokeStyle = RG.line; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(0, h); g.lineTo(30, 70); g.quadraticCurveTo(160, 0, 290, 70); g.lineTo(w, h); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = '#66665a'; for (let i = 0; i < 12; i++) { g.beginPath(); g.ellipse(40 + (i*61) % 250, 90 + (i*43) % 150, 30, 16, .3, 0, Math.PI*2); g.fill(); }
+  g.fillStyle = RG.moss; g.beginPath(); g.ellipse(160, 40, 120, 18, 0, 0, Math.PI*2); g.fill();
+  for (let i = 0; i < 16; i++) leafShape(g, (i*37) % 320, h - 2, 40 + (i % 3)*14, -Math.PI/2 + (i % 5 - 2)*.35, COLORS.leaves[i % 4], .25);
+});
+const rock = cutout(plane(8.4, 6.4), mat(ROCK_TEX));
+function updateLookout(camX, camZ){
+  const ang = Math.atan2(camX - LOOKOUT.x, camZ - LOOKOUT.y), d = wdist(camX, camZ, LOOKOUT.x, LOOKOUT.y);
+  rock.position.set(LOOKOUT.x - Math.sin(ang)*Math.min(1.2, d*.3), 0, LOOKOUT.y - Math.cos(ang)*Math.min(1.2, d*.3)); rock.rotation.y = ang;
+}
+
+/* ---- 늘어진 덩굴 ---- */
+const VINE_TEX = ctex(48, 320, (g) => {
+  g.strokeStyle = '#4a6a3a'; g.lineWidth = 4; g.beginPath(); g.moveTo(24, 0); g.bezierCurveTo(6, 90, 42, 200, 22, 318); g.stroke();
+  for (let i = 0; i < 12; i++) { const y = 20 + i*24, x = 24 + Math.sin(i*1.3)*10; leafShape(g, x, y, 16, i % 2 ? .5 : Math.PI - .5, COLORS.leaves[i % 4], .35); }
+});
+const VINES = [];
+for (const b of TP) for (const j of [0, 1]) if (hash(b.k*211 + j) < .7) VINES.push({ x:b.x + (hash(b.k*223 + j) - .5)*1.8, z:b.z + (hash(b.k*227 + j) - .5)*.6, s:.8 + hash(b.k*229 + j)*.5, m:1 });
+{ const vgeo = new THREE.PlaneGeometry(.5, 3.3); vgeo.translate(0, 3.0, 0);
+  const vm = new THREE.InstancedMesh(vgeo, billboard(mat(VINE_TEX)), Math.max(1, VINES.length)); vm.frustumCulled = false;
+  VINES.forEach((v, i) => { dummy.position.set(v.x, 0, v.z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, v.s, 1); dummy.updateMatrix(); vm.setMatrixAt(i, dummy.matrix); });
+  scene.add(vm); }
+
+/* ---- 기운, 젖음, 쓰러짐 ---- */
+let energy = 100, wet = false, faint = 0, fainted = false, faintMsg = null, speedMul = 1;
+try { const v = +localStorage.getItem('denggul-energy'); if (v > 0) energy = Math.min(100, v); } catch (e) {}
+setInterval(() => { try { localStorage.setItem('denggul-energy', String(Math.round(energy))); } catch (e) {} }, 4000);
+const $energy = document.createElement('div'); $energy.className = 'stat'; document.querySelector('.hud').append($energy);
+function underTree(x, y){ for (let ty = (y|0) - 1; ty <= (y|0) + 1; ty++) for (let tx = (x|0) - 1; tx <= (x|0) + 1; tx++) if (type[id(tx, ty)] === TREE && wdist(x, y, tx + .5, ty + .5) < 1.4) return true; return false; }
+function gainEnergy(n){ energy = Math.min(100, energy + n); }
+function updateEnergy(dt){
+  const st = stormLevel(), nearF = nearFire(P.x, P.y);
+  wet = st > .3 && !nearF && !underTree(P.x, P.y);
+  let d = 0;
+  if (P.moving) d -= tileAt(P.x, P.y) === BUSH ? .4 : .12;
+  if (wet) d -= .45;
+  if (nearF) d += P.sit ? 4 : 1.2;
+  if (faint === 0) energy = Math.max(0, Math.min(100, energy + d*dt));
+  speedMul = faint > 0 ? 0 : energy < 30 ? .55 + .45*energy/30 : 1;
+  if (energy <= 0 && faint === 0) { faint = .001; fainted = false; }
+  if (faint > 0) {
+    faint += dt;
+    if (faint > 1.6 && !fainted) {   // 모닥불 곁에서 눈을 뜸
+      fainted = true;
+      const a = Math.random()*Math.PI*2; P.x = wrapX(FIRE.x + Math.sin(a)*1.35); P.y = wrapY(FIRE.y + Math.cos(a)*1.35); P.sit = true; yaw = a; energy = 45;
+      const have = ITEM_KEYS.filter(k => bag[k] > 0), lost = have.length ? have[Math.random()*have.length | 0] : null;
+      if (lost) { bag[lost]--; saveBag(); paintBag(); }
+      faintMsg = { until:clock + 6, lost:lost ? ITEMS[lost].name : null }; sendPresence(true); paintFire();
+    }
+    if (faint > 3.2) faint = 0;
+  }
+  const dots = Math.round(energy/20);
+  $energy.textContent = '기운 ' + '●'.repeat(dots) + '○'.repeat(5 - dots) + (wet ? ' · 젖음' : '') + (energy < 30 ? ' · 지침' : '');
+}
+function drawEnergyOverlay(){
+  if (energy < 30 && faint === 0) {   // 지치면 가장자리가 어두워짐
+    const g = ctx.createRadialGradient(vw/2, vh/2, Math.min(vw, vh)*.25, vw/2, vh/2, Math.max(vw, vh)*.7);
+    g.addColorStop(0, 'rgba(10,8,20,0)'); g.addColorStop(1, `rgba(10,8,20,${(1 - energy/30)*.6})`); ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
+  }
+  if (wet) { ctx.fillStyle = 'rgba(120,150,170,.08)'; ctx.fillRect(0, 0, vw, vh); }
+  if (faint > 0) { ctx.fillStyle = `rgba(6,4,14,${faint < 1.6 ? faint/1.6 : Math.max(0, 1 - (faint - 1.6)/1.6)})`; ctx.fillRect(0, 0, vw, vh); }
+  if (faintMsg && faintMsg.until > clock) {
+    const a = Math.min(1, (faintMsg.until - clock)/1.5);
+    ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#f6ead2';
+    ctx.font = '30px "Nanum Pen Script", cursive'; ctx.fillText('누군가 당신을 모닥불 곁에 데려다 놓았다.', vw/2, vh*.3);
+    if (faintMsg.lost) { ctx.font = '21px "Nanum Pen Script", cursive'; ctx.fillText(`바구니에서 ${faintMsg.lost}가 하나 사라졌다.`, vw/2, vh*.3 + 34); }
+    ctx.globalAlpha = 1;
+  }
+}
+
 function draw(dt = .016){
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
   updateObs(dt); const e = 0;   // 시점은 늘 같음. 멈춰 있으면 동물만 나옴
-  const camX = P.x - fx*CAM_D, camZ = P.y - fz*CAM_D;
-  camera.position.set(camX, CAM_H, camZ);
-  camera.lookAt(P.x + fx*3, 1.05 + Math.sin(pitch)*2.5, P.y + fz*3);
+  const camX = P.x - fx*CAM_D, camZ = P.y - fz*CAM_D, elevP = elevAt(P.x, P.y);
+  camera.position.set(camX, CAM_H + elevP, camZ);
+  camera.lookAt(P.x + fx*3, 1.05 + elevP + Math.sin(pitch)*2.5, P.y + fz*3);
   const actors = [{ x:P.x, y:P.y, w:1 - e }]; for (const o of others.values()) actors.push({ x:o.rx, y:o.ry });
   updateBushes(actors, dt, camX, camZ);
   updateTrees(dt, camX, camZ);
@@ -1525,7 +1733,8 @@ function draw(dt = .016){
   U.uTime.value = clock; U.uWind.value = .03 + .22*st;
   tintCol.copy(DAY_TINT).lerp(NIGHT_TINT, nt).lerp(DUSK_TINT, dusk*.45).multiplyScalar(1 - .3*st); for (const m of tinted) m.color.copy(tintCol);
   scene.background.copy(DAY_SKY).lerp(NIGHT_SKY, nt).lerp(DUSK_SKY, dusk*.75).lerp(STORM_SKY, st*.65); scene.fog.color.copy(scene.background);
-  scene.fog.near = 2 - 1*nt; scene.fog.far = 17 - 6*nt - 5*st;
+  const view = (1 + elevP*.4)*(energy < 30 ? .55 + .45*energy/30 : 1);   // 바위 위에선 멀리, 지치면 가까이
+  scene.fog.near = 2 - 1*nt; scene.fog.far = (17 - 6*nt - 5*st)*view; U.uCull.value = scene.fog.far + 3;
   // 낮엔 옅은 해, 해질녘엔 크고 붉은 해(「해 질 녘의 처녀림」), 밤엔 큰 달(「뱀 부리는 여인」)
   sky.material.map = nt > .55 ? MOON_TEX : dusk > .35 ? RED_SUN_TEX : SUN_TEX;
   sky.visible = st < .6;
@@ -1536,13 +1745,13 @@ function draw(dt = .016){
   if (audio && audio.rg) audio.rg.gain.setTargetAtTime(soundOn ? st*.1 : 0, audio.ac.currentTime, .3);
   // 사람들 (판은 늘 카메라 쪽을 봄, 걷는 방향으로 좌우 뒤집힘)
   const rx = Math.cos(yaw), rz = -Math.sin(yaw);
-  myMesh.position.set(P.x, 0, P.y); myMesh.rotation.y = yaw;
+  myMesh.position.set(P.x, elevP, P.y); myMesh.rotation.y = yaw;
   if (P.moving) { const s = P.fx*rx + P.fy*rz; if (Math.abs(s) > .2) P.flip = s < 0 ? -1 : 1; }
   myMesh.scale.set(P.flip || 1, P.sit ? .72 : 1, 1); myMesh.visible = e < .6;
   for (const [key, o] of others) {
     let me = peopleMeshes.get(key);
     if (!me || me.userData.color !== o.color) { if (me) scene.remove(me); me = cutout(personGeo, mat(personTex(o.color))); me.userData.color = o.color; peopleMeshes.set(key, me); }
-    me.position.set(o.rx, 0, o.ry); me.rotation.y = yaw;
+    me.position.set(o.rx, elevAt(o.rx, o.ry), o.ry); me.rotation.y = yaw;
     if (o.m) { const s = o.fx*rx + o.fy*rz; if (Math.abs(s) > .2) o.flip = s < 0 ? -1 : 1; }
     me.scale.set(o.flip || 1, o.sit ? .72 : 1, 1);
   }
@@ -1551,6 +1760,7 @@ function draw(dt = .016){
   oldman.rotation.y = yaw;
   const face = me => { me.rotation.y = Math.atan2(camX - me.position.x, camZ - me.position.z); };
   ALTARS.forEach(face); TIGERS.forEach(face); MONKEYS.forEach(face); critters.forEach(c => face(c.me));
+  for (const st of STORIES) { face(st.me); if (st.key === 'swing') st.me.rotation.z = Math.sin(clock*.8)*.12; }
   // 이불, 나비, 흩날리는 잎, 반딧불, 재규어 눈
   sheetMeshes.forEach((me, i) => { const s = sheets[i]; me.visible = !!s; if (s) { me.position.set(s.x + Math.sin(clock + i)*.3, s.h, s.z); me.rotation.set(0, yaw, Math.sin(clock*2 + i)*.25); } });
   const bf = [];
@@ -1566,7 +1776,7 @@ function draw(dt = .016){
     e.me.visible = nt > .55 && d > 3 && d < 16 && Math.sin(clock*.8 + e.k) < .9;
     e.mk.visible = nt < .45 && d > 4 && d < 14 && Math.sin(clock*.3 + e.k) > -.2;   // 낮엔 원숭이가 수풀 사이로 내다봄
   }
-  updateFire(dt, camX, camZ); updatePicks(camX, camZ); updateSmoke(dt, nt);
+  updateFire(dt, camX, camZ); updatePicks(camX, camZ); updateSmoke(dt, nt); updateWaterfall(dt, camX, camZ); updateLookout(camX, camZ); updateEnergy(dt);
   for (const o of scene.children) if (o.isMesh && !o.isInstancedMesh && o !== ground && o !== sky) { o.position.x = camX + wd(o.position.x - camX, W); o.position.z = camZ + wd(o.position.z - camZ, H); }
   renderer.render(scene, camera);
 
@@ -1578,7 +1788,7 @@ function draw(dt = .016){
     ctx.stroke();
   }
   if (flash > .01) { ctx.fillStyle = `rgba(255,255,240,${flash*.55})`; ctx.fillRect(0, 0, vw, vh); }
-  drawTwinkles(); drawFireOverlay();
+  drawTwinkles(); drawFireOverlay(); drawEnergyOverlay();
   drawObsOverlay(1, dt);
   ctx.font = '11px system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const L of LABELS) {
@@ -1597,15 +1807,15 @@ function draw(dt = .016){
   ctx.textBaseline = 'top';
   for (const o of others.values()) {
     if (wdist(o.rx, o.ry, P.x, P.y) > 18) continue;
-    const s = toScreen(o.rx, 1.22, o.ry); if (!s) continue;
+    const s = toScreen(o.rx, 1.22 + elevAt(o.rx, o.ry), o.ry); if (!s) continue;
     ctx.fillStyle = 'rgba(30,24,64,.75)'; const w = ctx.measureText(o.name).width + 10; ctx.fillRect(s[0] - w/2, s[1] - 16, w, 15);
     ctx.fillStyle = '#f6ead2'; ctx.textAlign = 'center'; ctx.fillText(o.name, s[0], s[1] - 14);
   }
   const say = (x, h, z, b, kind) => { if (!b || b.until <= clock || wdist(x, z, P.x, P.y) > 14) return; const s = toScreen(x, h, z); if (s) drawBubble(s[0], s[1], b.text, kind); };
   PARROTS.forEach(p => say(p.x, .9, p.y, p.bubble, 'parrot'));
   say(oldman.position.x, 1.2, oldman.position.z, SITE.oldman.bubble, 'old');
-  for (const o of others.values()) say(o.rx, 1.25, o.ry, o.bubble);
-  if (e < .6) say(P.x, 1.25, P.y, myBubble);
+  for (const o of others.values()) say(o.rx, 1.25 + elevAt(o.rx, o.ry), o.ry, o.bubble);
+  say(P.x, 1.25 + elevP, P.y, myBubble);
   if (joy) { ctx.strokeStyle = 'rgba(246,234,210,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(joy.sx, joy.sy, 40, 0, Math.PI*2); ctx.stroke(); }
   const n = others.size;
   $stat.innerHTML = `${label}${st > .2 ? ' · 폭풍' : ''} · ${n ? `함께 <b>${n + 1}</b>명` : '혼자'}`;
