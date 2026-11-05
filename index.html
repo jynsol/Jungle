@@ -22,6 +22,7 @@ body{margin:0}
 html,body{height:100%;background:var(--bg);color:var(--ink)}
 body{overflow:hidden;font-family:var(--body)}
 canvas#c{display:block;width:100%;height:100%;touch-action:none;outline:none}
+canvas#o{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px}
 .hud{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:calc(env(safe-area-inset-left,0px) + 12px);
   padding:10px 14px;display:flex;flex-direction:column;gap:4px;pointer-events:none}
@@ -78,6 +79,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--marigold);outli
 <body>
 
 <canvas id="c" tabindex="0" aria-label="정글 탐험 화면"></canvas>
+<canvas id="o" aria-hidden="true"></canvas>
 <div class="hud panel"><h1>덩굴숲</h1><div class="stat" id="stat">낮 · 혼자</div></div>
 <div class="tools"><button id="nameBtn" type="button">이름</button><button id="albumBtn" type="button">그림첩 0/6</button><button id="sound" type="button">소리 켜기</button><button id="reset" type="button">처음부터</button></div>
 <div class="hint panel" id="hint"></div>
@@ -91,7 +93,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--marigold);outli
 
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 /* ================= 그래픽 교체용 =================
    assets/ 폴더에 아래 이름의 png를 넣으면 색 대신 그 그림으로 그려져요. 없는 파일은 색으로 그려요.
    한 칸 = 28px. 자세한 크기는 README 참고. */
@@ -108,16 +111,15 @@ const COLORS = {
 /* ================================================ */
 
 const IMG = {};
-for (const [k,src] of Object.entries(ASSETS)) if (src) { const im = new Image(); im.onload = () => IMG[k] = im; im.onerror = () => {}; im.src = src; }
+for (const [k,src] of Object.entries(ASSETS)) if (src) { const im = new Image(); im.onload = () => { IMG[k] = im; onAsset(k, im); }; im.onerror = () => {}; im.src = src; }
 
 const W = 96, H = 96, T = 28, DAY = 180;
 const FLOOR = 0, BUSH = 1, TREE = 2, WATER = 3, RUIN = 4;
 const SPEED = 3.2, BUSH_SPEED = 1.9;
 
-const cv = document.getElementById('c'), ctx = cv.getContext('2d');
-const dk = document.createElement('canvas'), dctx = dk.getContext('2d');
+const cv = document.getElementById('c'), ov = document.getElementById('o'), ctx = ov.getContext('2d');
 let vw, vh;
-function resize(){ const d = Math.min(2, devicePixelRatio || 1); vw = innerWidth; vh = innerHeight; cv.width = vw*d; cv.height = vh*d; ctx.setTransform(d,0,0,d,0,0); ctx.imageSmoothingEnabled = false; dk.width = vw; dk.height = vh; }
+function resize(){ const d = Math.min(2, devicePixelRatio || 1); vw = innerWidth; vh = innerHeight; ov.width = vw*d; ov.height = vh*d; ctx.setTransform(d,0,0,d,0,0); }
 addEventListener('resize', resize); resize();
 
 function rng(s){ return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
@@ -194,7 +196,9 @@ const PARROTS = [];
   } }
 
 /* ---- 상태 ---- */
-const P = { x:SX+.5, y:SY+.5, fx:0, fy:1, r:.3, moving:false };
+const P = { x:SX+.5, y:SY+.5, fx:0, fy:-1, r:.3, moving:false, flip:1 };
+let yaw = 0;   // 카메라가 숲을 바라보는 방향. 판들이 정면을 향하도록 좌우로 조금만 돌아감
+const YAW_MAX = .65;
 let clock = 0, myColor = COLORS.me, myBubble = null, myId = null, oldmanT = 0;
 const others = new Map(), parts = [], sheets = [];
 let found = {};   // key -> { date, with:[이름] }
@@ -233,15 +237,23 @@ addEventListener('keydown', e => {
   if (modalOpen()) { if (e.key === 'Escape') closeModals(); return; }
   if (e.target === $say) { if (e.key === 'Escape') { $say.value = ''; $say.blur(); cv.focus(); } return; }
   if (e.key === 'Enter') { e.preventDefault(); keys.clear(); $say.focus(); return; }
-  if (KEYMAP[e.code]) { keys.add(e.code); e.preventDefault(); startAudio(); }
+  if (KEYMAP[e.code] || e.code === 'KeyQ' || e.code === 'KeyE') { keys.add(e.code); e.preventDefault(); startAudio(); }
 });
 addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
 $say.addEventListener('focus', () => keys.clear());
-let joy = null;
-cv.addEventListener('pointerdown', e => { startAudio(); $say.blur(); cv.focus(); joy = { id:e.pointerId, sx:e.clientX, sy:e.clientY, x:e.clientX, y:e.clientY }; cv.setPointerCapture(e.pointerId); });
-cv.addEventListener('pointermove', e => { if (joy && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; } });
-const endJoy = e => { if (joy && e.pointerId === joy.id) joy = null; };
+let joy = null, look = null;
+cv.addEventListener('pointerdown', e => {
+  startAudio(); $say.blur(); cv.focus();
+  if (e.pointerType === 'mouse' || e.clientX > innerWidth*.6) look = { id:e.pointerId, x:e.clientX };
+  else joy = { id:e.pointerId, sx:e.clientX, sy:e.clientY, x:e.clientX, y:e.clientY };
+  cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointermove', e => {
+  if (joy && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; }
+  if (look && e.pointerId === look.id) { yaw = Math.max(-YAW_MAX, Math.min(YAW_MAX, yaw - (e.clientX - look.x)*.005)); look.x = e.clientX; }
+});
+const endJoy = e => { if (joy && e.pointerId === joy.id) joy = null; if (look && e.pointerId === look.id) look = null; };
 cv.addEventListener('pointerup', endJoy); cv.addEventListener('pointercancel', endJoy);
 
 /* ---- 소리: 덤불 스스스, 앵무새 꽥 ---- */
@@ -489,16 +501,19 @@ function step(dt){
   clock += dt;
   let dx = 0, dy = 0;
   if (!modalOpen()) {
-    for (const c of keys) { dx += KEYMAP[c][0]; dy += KEYMAP[c][1]; }
+    for (const c of keys) if (KEYMAP[c]) { dx += KEYMAP[c][0]; dy += KEYMAP[c][1]; }
+    yaw = Math.max(-YAW_MAX, Math.min(YAW_MAX, yaw + ((keys.has('KeyQ') ? 1 : 0) - (keys.has('KeyE') ? 1 : 0))*dt*1.2));
     if (joy) { const jx = joy.x-joy.sx, jy = joy.y-joy.sy, l = Math.hypot(jx,jy); if (l > 8) { dx = jx/Math.max(l,40); dy = jy/Math.max(l,40); } }
   }
   const len = Math.hypot(dx,dy); if (len > 1) { dx /= len; dy /= len; }
   P.moving = len > .05;
   if (P.moving) {
-    P.fx = dx; P.fy = dy;
+    // 화면 기준 입력(오른쪽 dx, 위쪽 -dy)을 숲 속 방향으로
+    const wx = Math.cos(yaw)*dx + Math.sin(yaw)*dy, wz = -Math.sin(yaw)*dx + Math.cos(yaw)*dy;
+    P.fx = wx; P.fy = wz;
     const sp = (tileAt(P.x,P.y) === BUSH ? BUSH_SPEED : SPEED) * dt;
-    const nx = P.x + dx*sp; if (!blocked(nx, P.y)) P.x = nx;
-    const ny = P.y + dy*sp; if (!blocked(P.x, ny)) P.y = ny;
+    const nx = P.x + wx*sp; if (!blocked(nx, P.y)) P.x = nx;
+    const ny = P.y + wz*sp; if (!blocked(P.x, ny)) P.y = ny;
   }
   disturb(P.x, P.y, dt, P.moving);
   for (const o of others.values()) {
@@ -511,11 +526,11 @@ function step(dt){
   }
   for (let i = parts.length-1; i >= 0; i--) {
     const p = parts[i]; p.life -= dt; if (p.life <= 0) { parts.splice(i,1); continue; }
-    p.x += p.vx*dt; p.y += p.vy*dt; p.vx *= .92; p.vy *= .92; p.rot += dt*6;
+    p.x += p.vx*dt; p.y += p.vy*dt; p.vh = (p.vh ?? 1) - dt*2.2; p.h = Math.max(.02, (p.h ?? .5) + p.vh*dt); p.vx *= .92; p.vy *= .92; p.rot += dt*6;
   }
   // 하늘로 올라가는 이불
-  if (Math.random() < dt*.4 && sheets.length < 6) sheets.push({ x:SITE.rising.cx + (Math.random()-.5), y:SITE.rising.cy, life:6 });
-  for (let i = sheets.length-1; i >= 0; i--) { const s = sheets[i]; s.life -= dt; s.y -= dt*.7; if (s.life <= 0) sheets.splice(i,1); }
+  if (Math.random() < dt*.35 && sheets.length < 8) sheets.push({ x:SITE.rising.cx + (Math.random()-.5), z:SITE.rising.cy + 1.2, h:1, life:10 });
+  for (let i = sheets.length-1; i >= 0; i--) { const s = sheets[i]; s.life -= dt; s.h += dt*.7; if (s.life <= 0) sheets.splice(i,1); }
   PARROTS.forEach((p,i) => parrotTalk(p, i, dt));
   const om = SITE.oldman;
   if (Math.hypot(P.x-om.cx-1.6, P.y-om.cy) < 3) { if ((oldmanT -= dt) <= 0) { om.bubble = { text:OLDMAN_LINES[Math.random()*OLDMAN_LINES.length | 0], until:clock + 6 }; oldmanT = 8; } }
@@ -532,26 +547,238 @@ function dayState(){
   return { dark, label: dark < .3 ? '낮' : dark > .62 ? '밤' : ph < .5 ? '해질녘' : '새벽' };
 }
 
-/* ---- 그리기 ---- */
-let actors = [];
-function pushed(lx, ly){
-  for (const a of actors) {
-    const ddx = lx - a.x, ddy = ly - a.y, d = Math.hypot(ddx, ddy);
-    if (d < 1.1 && d > .001) { const push = (1.1-d)/1.1*.55; lx += ddx/d*push; ly += ddy/d*push; }
+/* ---- 무대: 그림판들을 간격을 두고 세우고, 뒤에서 따라가며 봄 ---- */
+const CAM_D = 3.8, CAM_H = 2.5;
+const renderer = new THREE.WebGLRenderer({ canvas:cv, antialias:true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, 1, .1, 90);
+const DAY_SKY = new THREE.Color('#f3c98f'), NIGHT_SKY = new THREE.Color('#1d1850');
+const DAY_TINT = new THREE.Color('#ffffff'), NIGHT_TINT = new THREE.Color('#5a5aa8'), tintCol = new THREE.Color();
+scene.background = DAY_SKY.clone();
+scene.fog = new THREE.Fog(DAY_SKY.clone(), 6, 30);
+function fitRenderer(){ renderer.setSize(vw, vh, false); camera.aspect = vw / vh; camera.updateProjectionMatrix(); }
+fitRenderer(); addEventListener('resize', fitRenderer);
+
+const tinted = [];
+function mat(tex, tint = true, extra = {}){
+  const m = new THREE.MeshBasicMaterial({ map:tex, alphaTest:.5, side:THREE.DoubleSide, ...extra });
+  if (tint) tinted.push(m); return m;
+}
+function ctex(w, h, paint){
+  const c = document.createElement('canvas'); c.width = w; c.height = h; paint(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+function plane(w, h, base = true){ const g = new THREE.PlaneGeometry(w, h); if (base) g.translate(0, h/2, 0); return g; }
+function cutout(geo, m){ const me = new THREE.Mesh(geo, m); scene.add(me); return me; }
+
+/* 그림판 그림들 (assets/ 그림이 있으면 그걸로 바뀜) */
+const LINE = COLORS.leafLine;
+function leafShape(g, x, y, len, rot, col, wid = .28){
+  g.save(); g.translate(x, y); g.rotate(rot); g.fillStyle = col; g.strokeStyle = LINE; g.lineWidth = Math.max(1.5, len/28);
+  g.beginPath(); g.moveTo(0,0); g.quadraticCurveTo(len*.5, -len*wid, len, 0); g.quadraticCurveTo(len*.5, len*wid, 0, 0); g.fill(); g.stroke();
+  g.lineWidth = Math.max(1, len/45); g.beginPath(); g.moveTo(len*.05, 0); g.lineTo(len*.85, 0); g.stroke(); g.restore();
+}
+function flower(g, x, y, r, col){
+  g.fillStyle = col; for (let a = 0; a < 5; a++) { g.beginPath(); g.arc(x + Math.cos(a*1.26)*r, y + Math.sin(a*1.26)*r, r*.8, 0, Math.PI*2); g.fill(); }
+  g.fillStyle = COLORS.flowerEye; g.beginPath(); g.arc(x, y, r*.55, 0, Math.PI*2); g.fill();
+}
+const BUSH_TEX = [0,1,2,3].map(v => ctex(128, 96, (g, w, h) => {
+  const r = rng(v*131 + 5);
+  for (let i = 0; i < 18; i++) leafShape(g, 14 + r()*(w-28), h - 2, 32 + r()*34, -Math.PI*(.14 + r()*.72), COLORS.leaves[(i + v) % 4], .22 + r()*.14);
+  if (v % 2) for (let i = 0; i < 2; i++) flower(g, 26 + r()*(w-52), 20 + r()*28, 5, COLORS.flowers[(v + i) % 3]);
+}));
+const TREE_TEX = [0,1].map(v => ctex(160, 240, (g, w, h) => {
+  const r = rng(v*71 + 3), cx = w/2, cy = 86;
+  g.strokeStyle = LINE; g.lineWidth = 3; g.fillStyle = '#5b3a22';
+  g.beginPath(); g.moveTo(cx - 12, h); g.lineTo(cx - 6, cy); g.lineTo(cx + 6, cy); g.lineTo(cx + 12, h); g.closePath(); g.fill(); g.stroke();
+  g.strokeStyle = '#8a5f3a'; g.lineWidth = 2;
+  for (let y = 112; y < h; y += 15) { g.beginPath(); g.moveTo(cx - 9, y); g.lineTo(cx + 9, y - 5); g.stroke(); }
+  g.fillStyle = COLORS.tree; g.beginPath(); g.ellipse(cx, cy, 50, 36, 0, 0, Math.PI*2); g.fill();
+  for (let i = 0; i < 22; i++) {
+    const a = -Math.PI - .45 + r()*(Math.PI + .9);
+    leafShape(g, cx, cy, (v ? 44 : 52) + r()*26, a, COLORS.leaves[i % 4], v ? .34 : .2);
   }
-  return [lx, ly];
+  if (v) flower(g, cx + 20, cy - 24, 6, COLORS.flowers[0]);
+}));
+const ALTAR_TEX = ctex(160, 80, (g, w, h) => {
+  g.fillStyle = COLORS.ruin; g.strokeStyle = '#5a3218'; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(10, h-2); g.lineTo(26, 12); g.lineTo(w-26, 12); g.lineTo(w-10, h-2); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = COLORS.ruinLine; g.fillRect(20, 34, w-40, 13);
+  g.fillStyle = COLORS.ruinDot; for (let x = 22; x < w-34; x += 14) { g.beginPath(); g.moveTo(x, 34); g.lineTo(x+7, 47); g.lineTo(x+14, 34); g.fill(); }
+  g.fillStyle = '#f0b884'; for (let x = 36; x < w-30; x += 22) { g.beginPath(); g.arc(x, 62, 3, 0, Math.PI*2); g.fill(); }
+});
+let playerImg = null;
+const personCache = {};
+function personTex(color){
+  if (personCache[color]) return personCache[color];
+  const t = ctex(64, 96, (g) => {
+    g.strokeStyle = LINE; g.lineWidth = 2.5;
+    g.fillStyle = color; g.beginPath(); g.moveTo(8, 93); g.lineTo(56, 93); g.lineTo(32, 38); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#fff1d6'; for (let x = 16; x < 48; x += 8) { g.beginPath(); g.moveTo(x, 76); g.lineTo(x+4, 69); g.lineTo(x+8, 76); g.fill(); }
+    g.fillStyle = '#d99a6c'; g.beginPath(); g.arc(32, 29, 12, 0, Math.PI*2); g.fill(); g.stroke();
+    g.fillStyle = '#1a120a'; g.beginPath(); g.arc(37, 29, 2, 0, Math.PI*2); g.fill();
+    g.fillStyle = '#e8c36a'; g.beginPath(); g.ellipse(32, 19, 21, 5, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.fillRect(24, 7, 16, 12); g.strokeRect(24, 7, 16, 12);
+  });
+  if (playerImg) { t.image = playerImg; t.magFilter = THREE.NearestFilter; t.needsUpdate = true; }
+  return personCache[color] = t;
 }
-function drawPerson(px, py, fx, fy, color){
-  if (IMG.player) { ctx.drawImage(IMG.player, px - T/2, py - T/2, T, T); return; }
-  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(px, py, T*P.r, 0, Math.PI*2); ctx.fill();
-  ctx.strokeStyle = COLORS.leafLine; ctx.lineWidth = 1.5; ctx.stroke();
-  ctx.fillStyle = COLORS.eye; ctx.beginPath(); ctx.arc(px + fx*T*.16, py + fy*T*.16, T*.08, 0, Math.PI*2); ctx.fill();
+const OLDMAN_TEX = ctex(64, 96, (g) => {
+  g.strokeStyle = LINE; g.lineWidth = 2.5;
+  g.fillStyle = '#7a4b8f'; g.beginPath(); g.moveTo(6, 93); g.lineTo(58, 93); g.lineTo(32, 40); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = '#c98b5a'; g.beginPath(); g.arc(30, 31, 12, 0, Math.PI*2); g.fill(); g.stroke();
+  g.fillStyle = '#f6efe2'; g.beginPath(); g.moveTo(20, 34); g.quadraticCurveTo(30, 62, 40, 34); g.fill();
+  g.fillStyle = '#e8c36a'; g.beginPath(); g.ellipse(30, 20, 27, 6, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.fillRect(21, 6, 18, 14); g.strokeRect(21, 6, 18, 14);
+});
+const PARROT_TEX = [0,1].map(col => ctex(48, 96, (g) => {
+  const body = col ? '#2f6fd8' : '#e8402f', wing = col ? '#f5c330' : '#2f6fd8';
+  g.strokeStyle = LINE; g.lineWidth = 2;
+  g.fillStyle = '#6b4a2a'; g.fillRect(18, 62, 12, 34); g.strokeRect(18, 62, 12, 34);
+  g.fillStyle = '#8a6a3a'; g.fillRect(6, 58, 36, 6); g.strokeRect(6, 58, 36, 6);
+  g.fillStyle = wing; g.beginPath(); g.moveTo(20, 46); g.lineTo(28, 46); g.lineTo(27, 70); g.lineTo(21, 70); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = body; g.beginPath(); g.ellipse(24, 34, 11, 16, 0, 0, Math.PI*2); g.fill(); g.stroke();
+  g.fillStyle = '#f5c330'; g.beginPath(); g.ellipse(29, 38, 5, 10, .3, 0, Math.PI*2); g.fill(); g.stroke();
+  g.fillStyle = '#fff1d6'; g.beginPath(); g.arc(20, 25, 5, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#1a120a'; g.beginPath(); g.arc(19, 25, 2.2, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#2a2a2a'; g.beginPath(); g.moveTo(13, 25); g.quadraticCurveTo(4, 27, 9, 35); g.lineTo(14, 31); g.closePath(); g.fill();
+}));
+const SHEET_TEX = ctex(64, 48, (g) => {
+  g.fillStyle = '#fffaf0'; g.strokeStyle = '#b9b0a0'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(4, 10); g.quadraticCurveTo(32, 0, 60, 8); g.lineTo(58, 40); g.quadraticCurveTo(32, 30, 6, 44); g.closePath(); g.fill(); g.stroke();
+});
+const BFLY_TEX = ctex(32, 24, (g) => {
+  g.fillStyle = '#ffd23a'; g.strokeStyle = '#7a5410'; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(16, 12); g.lineTo(2, 2); g.lineTo(3, 22); g.closePath(); g.moveTo(16, 12); g.lineTo(30, 2); g.lineTo(29, 22); g.closePath(); g.fill(); g.stroke();
+});
+const LEAF_TEX = ctex(24, 12, (g) => leafShape(g, 1, 6, 22, 0, COLORS.leaves[1], .3));
+const disc = (col, glow) => ctex(128, 128, (g) => {
+  g.fillStyle = glow; g.beginPath(); g.arc(64, 64, 62, 0, Math.PI*2); g.fill();
+  g.fillStyle = col; g.beginPath(); g.arc(64, 64, 46, 0, Math.PI*2); g.fill();
+});
+const SUN_TEX = disc('#ffe36b', 'rgba(255,190,90,.9)'), MOON_TEX = disc('#fff3c4', 'rgba(255,243,196,.55)');
+const EYES_TEX = ctex(32, 12, (g) => { g.fillStyle = COLORS.jaguar; for (const x of [8, 24]) { g.beginPath(); g.ellipse(x, 6, 6, 4, 0, 0, Math.PI*2); g.fill(); } g.fillStyle = '#1a120a'; for (const x of [8, 24]) g.fillRect(x - 1, 2, 2, 8); });
+const FIREFLY_TEX = ctex(8, 8, (g) => { g.fillStyle = '#fff6a0'; g.beginPath(); g.arc(4, 4, 3.6, 0, Math.PI*2); g.fill(); });
+
+function onAsset(k, im){
+  const swap = t => { t.image = im; t.magFilter = THREE.NearestFilter; t.needsUpdate = true; };
+  if (k === 'bush') BUSH_TEX.forEach(swap);
+  else if (k === 'tree') TREE_TEX.forEach(swap);
+  else if (k === 'ruin') swap(ALTAR_TEX);
+  else if (k === 'player') { playerImg = im; Object.values(personCache).forEach(swap); }
+  else if (k === 'parrot') PARROT_TEX.forEach(swap);
+  else if (k === 'leaf') swap(LEAF_TEX);
 }
-function butterfly(x, y, ph){
-  const f = Math.abs(Math.sin(clock*16 + ph))*5 + 1;
-  ctx.fillStyle = '#ffd23a'; ctx.beginPath();
-  ctx.moveTo(x, y); ctx.lineTo(x - f, y - 4); ctx.lineTo(x - f, y + 3); ctx.closePath();
-  ctx.moveTo(x, y); ctx.lineTo(x + f, y - 4); ctx.lineTo(x + f, y + 3); ctx.closePath(); ctx.fill();
+
+/* 바닥: 지도 한 장을 땅에 깔기 */
+const GPX = 8, gcv = document.createElement('canvas'); gcv.width = W*GPX; gcv.height = H*GPX;
+{ const g = gcv.getContext('2d');
+  const base = { [FLOOR]:COLORS.floor, [BUSH]:'#2c5e34', [TREE]:'#3d5e2c', [WATER]:COLORS.water, [RUIN]:COLORS.ruin };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const k = id(x,y), t = type[k];
+    g.fillStyle = base[t]; g.fillRect(x*GPX, y*GPX, GPX, GPX);
+    if (t === FLOOR && hash(k*31) < .5) { g.fillStyle = COLORS.floorMark; g.fillRect(x*GPX + 1, y*GPX + 3, 4, 1); }
+    if (t === WATER && hash(k*7) < .35) { g.fillStyle = COLORS.waterHi; g.fillRect(x*GPX + 1, y*GPX + 4, 5, 1); }
+  }
+  const fk = SITE.fork; g.strokeStyle = '#ffd99a'; g.lineWidth = GPX*.4; g.setLineDash([GPX, GPX*.8]);
+  for (const a of [-.5, .9]) { g.beginPath(); g.moveTo(fk.cx*GPX, (fk.cy+1)*GPX); g.lineTo((fk.cx + Math.cos(a+1.6)*2.6)*GPX, (fk.cy + 1 + Math.sin(a+1.6)*2.6)*GPX); g.stroke(); }
+  g.setLineDash([]);
+  const m = SITE.mirror; g.fillStyle = '#fff3c4'; g.beginPath(); g.ellipse(m.cx*GPX, m.cy*GPX, GPX*.6, GPX*.35, 0, 0, Math.PI*2); g.fill();
+}
+const groundTex = new THREE.CanvasTexture(gcv); groundTex.colorSpace = THREE.SRGBColorSpace; groundTex.magFilter = THREE.NearestFilter; groundTex.anisotropy = 8;
+const ground = cutout(new THREE.PlaneGeometry(W, H), mat(groundTex, true, { alphaTest:0, side:THREE.FrontSide }));
+ground.rotation.x = -Math.PI/2; ground.position.set(W/2, 0, H/2);
+
+/* 덤불: 칸마다 판 두 장, 같은 그림끼리 묶어서 그림 */
+const dummy = new THREE.Object3D();
+const bushGeo = plane(1.6, 1.2), BP = [], bushByTile = new Map();
+for (let k = 0; k < W*H; k++) if (type[k] === BUSH) for (const j of [0, 1]) {
+  const tx = k % W, ty = k / W | 0;
+  const b = { k, v:hash(k*7 + j)*4 | 0, x:tx + .5 + (hash(k*3 + j) - .5)*.5, z:ty + (j ? .78 : .28), s:.8 + hash(k*9 + j)*.45, h:.85 + hash(k*5 + j)*.45 };
+  BP.push(b); if (!bushByTile.has(k)) bushByTile.set(k, []); bushByTile.get(k).push(b);
+}
+const counts = [0,0,0,0]; for (const b of BP) b.idx = counts[b.v]++;
+const bushMeshes = BUSH_TEX.map((t, v) => { const m = new THREE.InstancedMesh(bushGeo, mat(t), Math.max(1, counts[v])); m.frustumCulled = false; scene.add(m); return m; });
+function placeBush(b, lean = 0, squash = 1){
+  dummy.position.set(b.x, 0, b.z); dummy.rotation.set(0, 0, lean); dummy.scale.set(b.s, b.h*squash, 1); dummy.updateMatrix();
+  bushMeshes[b.v].setMatrixAt(b.idx, dummy.matrix);
+}
+BP.forEach(b => placeBush(b));
+
+/* 나무: 키 큰 판. 카메라와 나 사이에 오면 납작하게 접힘 */
+const treeGeo = plane(2.4, 3.6), TP = [], treeByTile = new Map();
+for (let k = 0; k < W*H; k++) if (type[k] === TREE) {
+  const b = { k, v:hash(k*11) < .5 ? 0 : 1, x:k % W + .5 + (hash(k*13) - .5)*.3, z:(k / W | 0) + .5, s:.9 + hash(k*17)*.35, f:1 };
+  TP.push(b); treeByTile.set(k, b);
+}
+const tcounts = [0,0]; for (const b of TP) b.idx = tcounts[b.v]++;
+const treeMeshes = TREE_TEX.map((t, v) => { const m = new THREE.InstancedMesh(treeGeo, mat(t), Math.max(1, tcounts[v])); m.frustumCulled = false; scene.add(m); return m; });
+function placeTree(b){ dummy.position.set(b.x, 0, b.z); dummy.rotation.set(0, 0, 0); dummy.scale.set(b.s, b.s*b.f, 1); dummy.updateMatrix(); treeMeshes[b.v].setMatrixAt(b.idx, dummy.matrix); }
+TP.forEach(placeTree);
+
+/* 기적의 자리, 앵무새, 노인 */
+const altarGeo = plane(2.2, 1.1);
+for (const s of SITES) if (s.key !== 'mirror') cutout(altarGeo, mat(ALTAR_TEX)).position.set(s.cx, 0, s.cy + .95);
+const personGeo = plane(.76, 1.14);
+const oldman = cutout(personGeo, mat(OLDMAN_TEX)); oldman.position.set(SITE.oldman.cx + 1.6, 0, SITE.oldman.cy + .6);
+const parrotGeo = plane(.42, .84);
+PARROTS.forEach(p => { p.mesh = cutout(parrotGeo, mat(PARROT_TEX[p.col])); p.mesh.position.set(p.x, 0, p.y); });
+const pool = (n, geo, m) => Array.from({ length:n }, () => { const me = cutout(geo, m); me.visible = false; return me; });
+const sheetMeshes = pool(8, plane(.7, .5, false), mat(SHEET_TEX));
+const bflyMeshes = pool(40, plane(.24, .18, false), mat(BFLY_TEX));
+const leafMeshes = pool(60, plane(.22, .11, false), mat(LEAF_TEX));
+const fireflies = pool(30, plane(.07, .07, false), mat(FIREFLY_TEX, false, { fog:false })).map(me => ({ me, ox:(Math.random()-.5)*14, oz:(Math.random()-.5)*14, ph:Math.random()*9 }));
+const EYES = []; for (const [k] of bushByTile) if (hash(k*17) < .012) { const me = cutout(plane(.3, .11, false), mat(EYES_TEX, false, { fog:false })); me.visible = false; me.position.set(k % W + .5, .62, (k / W | 0) + .55); EYES.push({ k, me }); }
+const sky = cutout(plane(7, 7, false), mat(SUN_TEX, false, { fog:false, depthWrite:false }));
+const myMesh = cutout(personGeo, mat(personTex(myColor)));
+const peopleMeshes = new Map();
+
+/* 덤불 헤치기: 가까운 판은 옆으로 젖혀지고 낮아짐 */
+const dirtyB = new Set();
+function updateBushes(actors){
+  const touched = new Map();
+  for (const a of actors) for (let ty = (a.y|0) - 2; ty <= (a.y|0) + 2; ty++) for (let tx = (a.x|0) - 2; tx <= (a.x|0) + 2; tx++) {
+    if (tx < 0 || ty < 0 || tx >= W || ty >= H) continue;
+    const list = bushByTile.get(id(tx,ty)); if (!list) continue;
+    for (const b of list) {
+      const ddx = b.x - a.x, ddz = b.z - a.y, d = Math.hypot(ddx, ddz*1.6);
+      if (d > 1.3) continue;
+      const f = (1.3 - d)/1.3, cur = touched.get(b) || [0, 1];
+      cur[0] += (ddx >= 0 ? -1 : 1) * f * .95; cur[1] = Math.min(cur[1], 1 - .45*f);
+      touched.set(b, cur);
+    }
+  }
+  const dirtyMeshes = new Set();
+  for (const [b, [lean, sq]] of touched) { placeBush(b, lean + sway[b.k]*Math.sin(clock*24 + b.idx)*.12, sq); dirtyMeshes.add(b.v); }
+  for (const b of dirtyB) if (!touched.has(b)) { placeBush(b); dirtyMeshes.add(b.v); }
+  dirtyB.clear(); for (const b of touched.keys()) dirtyB.add(b);
+  for (const v of dirtyMeshes) bushMeshes[v].instanceMatrix.needsUpdate = true;
+}
+const foldedT = new Set();
+function updateTrees(dt, camX, camZ){
+  const near = new Set();
+  for (let ty = (P.y|0) - 6; ty <= (P.y|0) + 6; ty++) for (let tx = (P.x|0) - 6; tx <= (P.x|0) + 6; tx++) {
+    if (tx < 0 || ty < 0 || tx >= W || ty >= H) continue;
+    const b = treeByTile.get(id(tx,ty)); if (b) near.add(b);
+  }
+  for (const b of foldedT) near.add(b);
+  const ax = camX - P.x, az = camZ - P.y, L2 = ax*ax + az*az, dirty = new Set();
+  for (const b of near) {
+    const bx = b.x - P.x, bz = b.z - P.y, u = (bx*ax + bz*az)/L2, perp = Math.abs(bx*az - bz*ax)/Math.sqrt(L2);
+    const target = u > -.05 && u < 1.2 && perp < 1.3 ? .12 : 1;
+    const nf = b.f + (target - b.f)*Math.min(1, dt*8);
+    if (Math.abs(nf - b.f) > .001) { b.f = nf; placeTree(b); dirty.add(b.v); }
+    if (b.f < .999) foldedT.add(b); else foldedT.delete(b);
+  }
+  for (const v of dirty) treeMeshes[v].instanceMatrix.needsUpdate = true;
+}
+
+/* 위에 겹쳐 그리는 것들: 이름표, 이름, 말풍선 */
+const _v = new THREE.Vector3();
+function toScreen(x, h, z){
+  _v.set(x, h, z).project(camera);
+  if (_v.z > 1 || _v.z < -1) return null;
+  return [(_v.x + 1)/2*vw, (1 - _v.y)/2*vh];
 }
 function drawBubble(px, py, text, kind){
   ctx.font = '13px system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif';
@@ -560,154 +787,69 @@ function drawBubble(px, py, text, kind){
   for (const ch of text) { if (ctx.measureText(cur + ch).width > max) { lines.push(cur); cur = ch; } else cur += ch; }
   lines.push(cur);
   const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, h = lines.length*17 + 10;
-  const bx = px - w/2, by = py - T*.55 - h - 8;
+  const bx = px - w/2, by = py - h - 10;
   ctx.fillStyle = kind === 'parrot' ? 'rgba(198,240,170,.96)' : kind === 'old' ? 'rgba(232,212,250,.96)' : 'rgba(250,242,222,.96)';
   ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, w, h, 6) : ctx.rect(bx, by, w, h); ctx.fill();
   ctx.beginPath(); ctx.moveTo(px-5, by+h); ctx.lineTo(px+5, by+h); ctx.lineTo(px, by+h+6); ctx.fill();
   ctx.fillStyle = '#1c1a12'; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
   lines.forEach((l,i) => ctx.fillText(l, bx + 8, by + 6 + i*17));
 }
-function drawParrot(px, py, col, i){
-  const bob = Math.sin(clock*3 + i)*1.5;
-  if (IMG.parrot) { ctx.drawImage(IMG.parrot, px - 10, py - 14 + bob, 20, 20); return; }
-  const body = col ? '#2f6fd8' : '#e8402f';
-  ctx.fillStyle = col ? '#f5c330' : '#2f6fd8'; ctx.beginPath(); ctx.moveTo(px-2, py+2+bob); ctx.lineTo(px+2, py+2+bob); ctx.lineTo(px+1, py+12+bob); ctx.lineTo(px-1, py+12+bob); ctx.fill();
-  ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(px, py - 2 + bob, 5.5, 8, 0, 0, Math.PI*2); ctx.fill();
-  ctx.strokeStyle = COLORS.leafLine; ctx.lineWidth = 1.2; ctx.stroke();
-  ctx.fillStyle = '#f5c330'; ctx.beginPath(); ctx.ellipse(px + 2.5, py + bob, 2.5, 5, .3, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#fff1d6'; ctx.beginPath(); ctx.arc(px - 1.5, py - 7 + bob, 2.2, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#1a120a'; ctx.beginPath(); ctx.arc(px - 1.5, py - 7 + bob, 1, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.moveTo(px - 4, py - 6 + bob); ctx.lineTo(px - 8, py - 3 + bob); ctx.lineTo(px - 4, py - 3 + bob); ctx.fill();
-}
 
-function draw(){
-  const camX = P.x*T - vw/2, camY = P.y*T - vh/2;
-  const sx_ = x => x*T - camX, sy_ = y => y*T - camY;
-  ctx.fillStyle = COLORS.tree; ctx.fillRect(0,0,vw,vh);
-  const x0 = Math.max(0, Math.floor(camX/T)), x1 = Math.min(W-1, Math.floor((camX+vw)/T));
-  const y0 = Math.max(0, Math.floor(camY/T)), y1 = Math.min(H-1, Math.floor((camY+vh)/T));
-  actors = [{ x:P.x, y:P.y }]; for (const o of others.values()) actors.push({ x:o.rx, y:o.ry });
-  const trees = [], bushes = [];
-  // 바닥
-  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-    const k = id(x,y), t = type[k], sx = Math.round(x*T - camX), sy = Math.round(y*T - camY);
-    if (t === FLOOR || t === TREE) {
-      if (IMG.floor) ctx.drawImage(IMG.floor, sx, sy, T, T);
-      else { ctx.fillStyle = COLORS.floor; ctx.fillRect(sx, sy, T, T);
-        if (hash(k*31) < .5) { ctx.fillStyle = COLORS.floorMark; ctx.fillRect(sx + hash(k*37)*(T-8) | 0, sy + hash(k*41)*(T-4) | 0, 6, 2); } }
-      if (t === TREE) trees.push(sx, sy);
-    } else if (t === BUSH) {
-      if (IMG.bush) ctx.drawImage(IMG.bush, sx, sy, T, T);
-      else { ctx.fillStyle = COLORS.bush; ctx.fillRect(sx, sy, T, T); }
-      if (bent[k] > .05) { ctx.globalAlpha = bent[k]*.8; ctx.fillStyle = COLORS.bent; ctx.fillRect(sx, sy, T, T); ctx.globalAlpha = 1; }
-      bushes.push(k);
-    } else if (t === WATER) {
-      if (IMG.water) ctx.drawImage(IMG.water, sx, sy, T, T);
-      else {
-        ctx.fillStyle = COLORS.water; ctx.fillRect(sx, sy, T, T);
-        const s = Math.sin(clock*1.5 + x*.9 + y*.6);
-        if (s > .5) { ctx.fillStyle = COLORS.waterHi; ctx.fillRect(sx+5, sy + T/2 + s*3 | 0, T-10, 2); }
-      }
-    } else if (t === RUIN) {
-      if (IMG.ruin) ctx.drawImage(IMG.ruin, sx, sy, T, T);
-      else { ctx.fillStyle = COLORS.ruin; ctx.fillRect(sx, sy, T, T); ctx.fillStyle = COLORS.ruinLine; ctx.fillRect(sx, sy + T/2 - 3, T, 6);
-        ctx.fillStyle = COLORS.ruinDot; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(sx + i*T/3, sy + T/2 - 3); ctx.lineTo(sx + i*T/3 + T/6, sy + T/2 + 3); ctx.lineTo(sx + (i+1)*T/3, sy + T/2 - 3); ctx.fill(); } }
-    }
+function draw(dt = .016){
+  const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  const camX = P.x - fx*CAM_D, camZ = P.y - fz*CAM_D;
+  camera.position.set(camX, CAM_H, camZ);
+  camera.lookAt(P.x + fx*2.2, .55, P.y + fz*2.2);
+  const actors = [{ x:P.x, y:P.y }]; for (const o of others.values()) actors.push({ x:o.rx, y:o.ry });
+  updateBushes(actors);
+  updateTrees(dt, camX, camZ);
+  // 낮과 밤
+  const { dark, label } = dayState(), nt = Math.max(0, Math.min(1, (dark - .12)/.66));
+  tintCol.copy(DAY_TINT).lerp(NIGHT_TINT, nt); for (const m of tinted) m.color.copy(tintCol);
+  scene.background.copy(DAY_SKY).lerp(NIGHT_SKY, nt); scene.fog.color.copy(scene.background);
+  scene.fog.near = 6 - 3*nt; scene.fog.far = 30 - 16*nt;
+  sky.material.map = nt > .5 ? MOON_TEX : SUN_TEX;
+  sky.position.set(camX + fx*48, 12, camZ + fz*48); sky.lookAt(camera.position);
+  // 사람들 (판은 늘 카메라 쪽을 봄, 걷는 방향으로 좌우 뒤집힘)
+  const rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  myMesh.position.set(P.x, 0, P.y); myMesh.rotation.y = yaw;
+  if (P.moving) { const s = P.fx*rx + P.fy*rz; if (Math.abs(s) > .2) P.flip = s < 0 ? -1 : 1; }
+  myMesh.scale.x = P.flip || 1;
+  for (const [key, o] of others) {
+    let me = peopleMeshes.get(key);
+    if (!me || me.userData.color !== o.color) { if (me) scene.remove(me); me = cutout(personGeo, mat(personTex(o.color))); me.userData.color = o.color; peopleMeshes.set(key, me); }
+    me.position.set(o.rx, 0, o.ry); me.rotation.y = yaw;
+    if (o.m) { const s = o.fx*rx + o.fy*rz; if (Math.abs(s) > .2) o.flip = s < 0 ? -1 : 1; }
+    me.scale.x = o.flip || 1;
   }
-  // 기적의 자리 장식 (바닥 위)
-  const m = SITE.mirror, ph = (clock % DAY) / DAY;
-  ctx.globalAlpha = .75; ctx.fillStyle = '#fff3c4'; ctx.beginPath(); ctx.ellipse(sx_(m.cx), sy_(m.cy), 9, 5, 0, 0, Math.PI*2); ctx.fill();
-  ctx.strokeStyle = '#fff3c4'; ctx.lineWidth = 1; ctx.globalAlpha = .4 + .3*Math.sin(clock*2);
-  ctx.beginPath(); ctx.ellipse(sx_(m.cx), sy_(m.cy), 16 + 4*Math.sin(clock), 9 + 2*Math.sin(clock), 0, 0, Math.PI*2); ctx.stroke();
-  ctx.globalAlpha = 1;
-  const fk = SITE.fork;
-  ctx.strokeStyle = '#ffd99a'; ctx.lineWidth = 3; ctx.setLineDash([6,6]); ctx.lineDashOffset = -clock*10; ctx.globalAlpha = .55 + .25*Math.sin(clock*2);
-  for (const a of [-.5, .9]) { ctx.beginPath(); ctx.moveTo(sx_(fk.cx), sy_(fk.cy + 1)); ctx.lineTo(sx_(fk.cx + Math.cos(a+1.6)*2.6), sy_(fk.cy + 1 + Math.sin(a+1.6)*2.6)); ctx.stroke(); }
-  ctx.setLineDash([]); ctx.globalAlpha = 1;
-  // 사람들, 앵무새, 노인 (잎 아래)
-  const om = SITE.oldman, ox = sx_(om.cx + 1.6), oy = sy_(om.cy);
-  ctx.fillStyle = '#7a4b8f'; ctx.beginPath(); ctx.moveTo(ox - 9, oy + 8); ctx.lineTo(ox + 9, oy + 8); ctx.lineTo(ox + 4, oy - 4); ctx.lineTo(ox - 4, oy - 4); ctx.fill();
-  ctx.fillStyle = '#c98b5a'; ctx.beginPath(); ctx.arc(ox, oy - 7, 4.5, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#e8c36a'; ctx.beginPath(); ctx.ellipse(ox, oy - 10, 10, 2.5, 0, 0, Math.PI*2); ctx.fill(); ctx.fillRect(ox - 4, oy - 15, 8, 5);
-  PARROTS.forEach((p,i) => drawParrot(sx_(p.x), sy_(p.y), p.col, i));
-  for (const o of others.values()) drawPerson(sx_(o.rx), sy_(o.ry), o.fx, o.fy, o.color);
-  const px = sx_(P.x), py = sy_(P.y);
-  drawPerson(px, py, P.fx, P.fy, myColor);
-  // 잎과 꽃: 사람 둘레로 벌어지고 흔들림
-  const paths = COLORS.leaves.map(() => new Path2D()), flowers = COLORS.flowers.map(() => new Path2D()), eyes = new Path2D(), imgLeaves = [];
-  for (const k of bushes) {
-    const tx = k % W, ty = k / W | 0, sc = 1 - .4*bent[k];
-    for (let i = 0; i < 5; i++) {
-      const [lx, ly] = pushed(tx + .12 + hash(k*5+i)*.76, ty + .12 + hash(k*11+i)*.76);
-      const j = sway[k] * Math.sin(clock*28 + i*2.1 + k) * 2;
-      const sx = lx*T - camX + j, sy = ly*T - camY + j*.5, rot = hash(k*13+i)*Math.PI;
-      if (IMG.leaf) imgLeaves.push(sx, sy, rot, sc);
-      else { const p = paths[(k + i) & 3]; p.moveTo(sx + Math.cos(rot)*7*sc, sy + Math.sin(rot)*7*sc); p.ellipse(sx, sy, 7*sc, 3.8*sc, rot, 0, Math.PI*2); }
-    }
-    if (hash(k*19) < .1) {
-      const [fx, fy] = pushed(tx + .2 + hash(k*29)*.6, ty + .2 + hash(k*43)*.6), c = hash(k*47)*3 | 0, x = fx*T - camX, y = fy*T - camY;
-      for (let a = 0; a < 5; a++) { const ax = x + Math.cos(a*1.26)*3.6, ay = y + Math.sin(a*1.26)*3.6; flowers[c].moveTo(ax + 2.8, ay); flowers[c].arc(ax, ay, 2.8, 0, Math.PI*2); }
-      eyes.moveTo(x + 1.8, y); eyes.arc(x, y, 1.8, 0, Math.PI*2);
-    }
-  }
-  if (IMG.leaf) for (let i = 0; i < imgLeaves.length; i += 4) {
-    ctx.save(); ctx.translate(imgLeaves[i], imgLeaves[i+1]); ctx.rotate(imgLeaves[i+2]); const s = imgLeaves[i+3];
-    ctx.drawImage(IMG.leaf, -7*s, -5*s, 14*s, 10*s); ctx.restore();
-  } else { ctx.strokeStyle = COLORS.leafLine; ctx.lineWidth = 1; paths.forEach((p,i) => { ctx.fillStyle = COLORS.leaves[i]; ctx.fill(p); ctx.stroke(p); }); }
-  flowers.forEach((p,i) => { ctx.fillStyle = COLORS.flowers[i]; ctx.fill(p); });
-  ctx.fillStyle = COLORS.flowerEye; ctx.fill(eyes);
-  for (const p of parts) {
-    ctx.globalAlpha = Math.min(1, p.life*1.6); ctx.fillStyle = p.c;
-    ctx.beginPath(); ctx.ellipse(sx_(p.x), sy_(p.y), 4, 2.4, p.rot, 0, Math.PI*2); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-  // 나무 수관
-  for (let i = 0; i < trees.length; i += 2) {
-    const sx = trees[i], sy = trees[i+1];
-    if (IMG.tree) ctx.drawImage(IMG.tree, sx - T*.3, sy - T*.3, T*1.6, T*1.6);
-    else { ctx.fillStyle = COLORS.treeRim; ctx.beginPath(); ctx.arc(sx + T/2, sy + T/2, T*.8, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = COLORS.tree; ctx.beginPath(); ctx.arc(sx + T/2 - 2, sy + T/2 - 2, T*.64, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = COLORS.treeHi; ctx.beginPath(); ctx.ellipse(sx + T/2 - 6, sy + T/2 - 7, T*.22, T*.1, -.6, 0, Math.PI*2); ctx.fill(); }
-  }
-  // 이불, 나비 (나무 위로 떠다님)
-  ctx.fillStyle = '#fffaf0';
-  for (const s of sheets) { ctx.globalAlpha = Math.min(1, s.life/2); const x = sx_(s.x), y = sy_(s.y), wv = Math.sin(clock*3 + s.x)*3;
-    ctx.beginPath(); ctx.moveTo(x - 9, y + wv); ctx.quadraticCurveTo(x, y - 5, x + 9, y - wv); ctx.lineTo(x + 8, y + 10 - wv); ctx.quadraticCurveTo(x, y + 6, x - 8, y + 11 + wv); ctx.fill(); }
-  ctx.globalAlpha = 1;
+  for (const [key, me] of peopleMeshes) if (!others.has(key)) { scene.remove(me); peopleMeshes.delete(key); }
+  PARROTS.forEach((p, i) => { p.mesh.rotation.y = yaw; p.mesh.position.y = Math.abs(Math.sin(clock*3 + i))*.03; });
+  oldman.rotation.y = yaw;
+  // 이불, 나비, 흩날리는 잎, 반딧불, 재규어 눈
+  sheetMeshes.forEach((me, i) => { const s = sheets[i]; me.visible = !!s; if (s) { me.position.set(s.x + Math.sin(clock + i)*.3, s.h, s.z); me.rotation.set(0, yaw, Math.sin(clock*2 + i)*.25); } });
+  const bf = [];
   const bs = SITE.butterflies;
-  for (let i = 0; i < 9; i++) butterfly(sx_(bs.cx + Math.sin(clock*.7 + i*2.3)*2.2), sy_(bs.cy + Math.cos(clock*.9 + i*1.7)*1.8), i);
+  for (let i = 0; i < 9; i++) bf.push([bs.cx + Math.sin(clock*.7 + i*2.3)*2.2, .8 + Math.sin(clock*1.3 + i)*.4, bs.cy + Math.cos(clock*.9 + i*1.7)*1.8, i]);
   const followers = [{ x:P.x, y:P.y, on:!!found.butterflies }, ...[...others.values()].map(o => ({ x:o.rx, y:o.ry, on:o.bf }))];
-  for (const f of followers) if (f.on) for (let i = 0; i < 3; i++) butterfly(sx_(f.x + Math.cos(clock*1.3 + i*2.1)*.7), sy_(f.y - .4 + Math.sin(clock*1.7 + i*2.1)*.5), i);
-  // 어둠: 남색 밤, 각자 횃불만큼 밝음
-  const { dark, label } = dayState();
-  const rad = T * (10 - 5.5*(dark - .12)/.66) * (1 + .03*Math.sin(clock*9));
-  dctx.globalCompositeOperation = 'source-over'; dctx.clearRect(0,0,vw,vh);
-  dctx.fillStyle = `rgba(${COLORS.night},${dark})`; dctx.fillRect(0,0,vw,vh);
-  dctx.globalCompositeOperation = 'destination-out';
-  const light = (x,y,r) => { const g = dctx.createRadialGradient(x,y,r*.3,x,y,r); g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)'); dctx.fillStyle = g; dctx.fillRect(x-r,y-r,r*2,r*2); };
-  light(px, py, rad);
-  for (const o of others.values()) light(sx_(o.rx), sy_(o.ry), rad*.6);
-  light(sx_(m.cx), sy_(m.cy), T*2.2 * dark);   // 거울 연못은 밤에 스스로 빛남
-  ctx.drawImage(dk, 0, 0, vw, vh);
-  // 밤에 덤불 속 재규어 눈
-  if (dark > .5) {
-    ctx.fillStyle = COLORS.jaguar; ctx.globalAlpha = Math.min(1, (dark - .5)*4);
-    for (const k of bushes) {
-      if (hash(k*17) > .012) continue;
-      const tx = k % W + .5, ty = (k / W | 0) + .5, d = Math.hypot(tx - P.x, ty - P.y);
-      if (d < 2.8 || Math.sin(clock*.8 + k) > .9) continue;
-      const x = sx_(tx), y = sy_(ty);
-      ctx.beginPath(); ctx.ellipse(x - 4, y, 2.2, 1.4, 0, 0, Math.PI*2); ctx.ellipse(x + 4, y, 2.2, 1.4, 0, 0, Math.PI*2); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+  for (const f of followers) if (f.on) for (let i = 0; i < 3; i++) bf.push([f.x + Math.cos(clock*1.3 + i*2.1)*.6, 1.2 + Math.sin(clock*1.7 + i*2.1)*.25, f.y + Math.sin(clock*1.1 + i*2.1)*.4, i]);
+  bflyMeshes.forEach((me, i) => { const b = bf[i]; me.visible = !!b; if (b) { me.position.set(b[0], b[1], b[2]); me.rotation.y = yaw; me.scale.x = .3 + Math.abs(Math.sin(clock*16 + b[3]))*.9; } });
+  leafMeshes.forEach((me, i) => { const p = parts[i]; me.visible = !!p; if (p) { me.position.set(p.x, p.h, p.y); me.rotation.set(0, yaw, p.rot); } });
+  fireflies.forEach(f => { f.me.visible = nt > .45; if (f.me.visible) f.me.position.set(P.x + f.ox + Math.sin(clock*.5 + f.ph)*.8, .5 + Math.abs(Math.sin(clock*.8 + f.ph))*1.4, P.y + f.oz + Math.cos(clock*.4 + f.ph)*.8); });
+  for (const e of EYES) {
+    const d = Math.hypot(e.me.position.x - P.x, e.me.position.z - P.y);
+    e.me.visible = nt > .55 && d > 3 && d < 16 && Math.sin(clock*.8 + e.k) < .9;
   }
-  // 이름표: 가까이 가면 위로 떠오름
+  renderer.render(scene, camera);
+
+  // 겹쳐 그리기
+  ctx.clearRect(0, 0, vw, vh);
   ctx.font = '11px system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const L of LABELS) {
     const near = Math.hypot(L.x - P.x, L.y - P.y) < 1.9;
-    L.a += ((near ? 1 : 0) - L.a) * Math.min(1, .016*12);
+    L.a += ((near ? 1 : 0) - L.a) * Math.min(1, dt*12);
     if (L.a < .02) continue;
-    const x = sx_(L.x), y = sy_(L.y) - T*.5 - 10*L.a, w = ctx.measureText(L.text).width + 12;
+    const s = toScreen(L.x, 1.15 + .2*L.a, L.y); if (!s) continue;
+    const [x, y] = s, w = ctx.measureText(L.text).width + 12;
     ctx.globalAlpha = L.a;
     ctx.fillStyle = 'rgba(255,248,230,.96)'; ctx.fillRect(x - w/2, y - 9, w, 18);
     ctx.beginPath(); ctx.moveTo(x - 4, y + 9); ctx.lineTo(x + 4, y + 9); ctx.lineTo(x, y + 14); ctx.fill();
@@ -715,14 +857,19 @@ function draw(){
     ctx.fillStyle = '#4a2a16'; ctx.fillText(L.text, x, y);
   }
   ctx.globalAlpha = 1;
-  // 이름과 말풍선
-  ctx.font = '11px system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  for (const o of others.values()) { ctx.fillStyle = 'rgba(246,234,210,.9)'; ctx.fillText(o.name, sx_(o.rx), sy_(o.ry) + T*.42); }
-  PARROTS.forEach(p => { if (p.bubble && p.bubble.until > clock) drawBubble(sx_(p.x), sy_(p.y) + 4, p.bubble.text, 'parrot'); });
-  if (om.bubble && om.bubble.until > clock) drawBubble(ox, oy, om.bubble.text, 'old');
-  for (const o of others.values()) if (o.bubble && o.bubble.until > clock) drawBubble(sx_(o.rx), sy_(o.ry), o.bubble.text);
-  if (myBubble && myBubble.until > clock) drawBubble(px, py, myBubble.text);
-  if (joy) { ctx.strokeStyle = 'rgba(246,234,210,.4)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(joy.sx, joy.sy, 40, 0, Math.PI*2); ctx.stroke(); }
+  ctx.textBaseline = 'top';
+  for (const o of others.values()) {
+    if (Math.hypot(o.rx - P.x, o.ry - P.y) > 18) continue;
+    const s = toScreen(o.rx, 1.22, o.ry); if (!s) continue;
+    ctx.fillStyle = 'rgba(30,24,64,.75)'; const w = ctx.measureText(o.name).width + 10; ctx.fillRect(s[0] - w/2, s[1] - 16, w, 15);
+    ctx.fillStyle = '#f6ead2'; ctx.textAlign = 'center'; ctx.fillText(o.name, s[0], s[1] - 14);
+  }
+  const say = (x, h, z, b, kind) => { if (!b || b.until <= clock || Math.hypot(x - P.x, z - P.y) > 14) return; const s = toScreen(x, h, z); if (s) drawBubble(s[0], s[1], b.text, kind); };
+  PARROTS.forEach(p => say(p.x, .9, p.y, p.bubble, 'parrot'));
+  say(oldman.position.x, 1.2, oldman.position.z, SITE.oldman.bubble, 'old');
+  for (const o of others.values()) say(o.rx, 1.25, o.ry, o.bubble);
+  say(P.x, 1.25, P.y, myBubble);
+  if (joy) { ctx.strokeStyle = 'rgba(246,234,210,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(joy.sx, joy.sy, 40, 0, Math.PI*2); ctx.stroke(); }
   const n = others.size;
   $stat.innerHTML = `${label} · ${n ? `함께 <b>${n + 1}</b>명` : '혼자'}`;
 }
@@ -751,11 +898,11 @@ $reset.addEventListener('click', () => {
 });
 
 const touch = matchMedia('(pointer:coarse)').matches;
-$hint.textContent = (returning ? '다시 왔네요. ' : '') + (touch ? '화면을 끌어서 이동' : 'WASD·방향키로 이동 · Enter로 말하기') + ' · 앵무새 곁에서 한 말은 앵무새가 기억해요';
+$hint.textContent = (returning ? '다시 왔네요. ' : '') + (touch ? '왼쪽을 끌어 걷고 오른쪽을 끌어 둘러보기' : 'WASD로 걷기 · 마우스를 끌거나 Q·E로 둘러보기 · Enter로 말하기') + ' · 앵무새 곁에서 한 말은 앵무새가 기억해요';
 setTimeout(() => $hint.style.opacity = 0, 8000);
 
 let last = performance.now();
-function frame(now){ const dt = Math.min(.05, (now - last)/1000); last = now; step(dt); draw(); requestAnimationFrame(frame); }
+function frame(now){ const dt = Math.min(.05, (now - last)/1000); last = now; step(dt); draw(dt); requestAnimationFrame(frame); }
 requestAnimationFrame(frame);
 cv.focus();
 if (!ME.name) openName();
