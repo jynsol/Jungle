@@ -1140,7 +1140,7 @@ const GPX = 8, gcv = document.createElement('canvas'); gcv.width = W*GPX; gcv.he
   g.setLineDash([]);
   const m = SITE.mirror; g.fillStyle = '#fff3c4'; g.beginPath(); g.ellipse(m.cx*GPX, m.cy*GPX, GPX*.6, GPX*.35, 0, 0, Math.PI*2); g.fill();
 }
-const groundTex = new THREE.CanvasTexture(gcv); groundTex.colorSpace = THREE.SRGBColorSpace; groundTex.magFilter = THREE.LinearFilter;   // 칸 경계가 각지지 않게 groundTex.anisotropy = 8;
+const groundTex = new THREE.CanvasTexture(gcv); groundTex.colorSpace = THREE.SRGBColorSpace; groundTex.magFilter = THREE.LinearFilter; groundTex.anisotropy = 8;   // 칸 경계가 각지지 않게
 groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping; groundTex.repeat.set(3, 3);
 const ground = cutout(new THREE.PlaneGeometry(W*3, H*3, 144, 144), mat(groundTex, true, { alphaTest:0, side:THREE.FrontSide }));
 ground.rotation.x = -Math.PI/2; ground.position.set(W/2, 0, H/2);
@@ -1806,11 +1806,13 @@ const saveBag = () => { try { localStorage.setItem('denggul-bag', JSON.stringify
 const PICKS = [];
 for (const [k] of bushByTile) {
   if (type[k] !== BUSH || hash(k*131) > .025) continue;
-  const x = k % W + .5, z = (k / W | 0) + .5; if (wdist(x, z, FIRE.x, FIRE.y) < 5) continue;
+  const x = k % W + .5, z = (k / W | 0) + .5; if (wdist(x, z, FIRE.x, FIRE.y) < 5 || wdist(x, z, REGIONS[0].hub.x, REGIONS[0].hub.y) < 9) continue;   // 오두막 나무 밑엔 열매를 두지 않음
   const key = ITEM_KEYS[hash(k*137)*ITEM_KEYS.length | 0], me = cutout(plane(.36, .36), mat(ITEMS[key].tex));
   me.position.set(x + (hash(k*139) - .5)*.4, .08, z + (hash(k*149) - .5)*.4);
   PICKS.push({ k, key, me, x:me.position.x, z:me.position.z });
 }
+{ const h = REGIONS[0].hub, far = PICKS.filter(p => { const d = wdist(p.x, p.z, h.x, h.y); return d > 12 && d < 30; }).sort((a, b) => hash(a.k*151) - hash(b.k*151));   // 바나나는 오두막에서 조금 떨어진 덤불 몇 곳에 꼭 있음
+  for (const p of far.slice(0, 3)) if (p.key !== 'banana') { p.key = 'banana'; p.me.material.map = ITEMS.banana.tex; } }
 const REGROW = 5*60*1000;   // 주운 자리는 5분 뒤 다시 열림
 const $bag = document.createElement('div'); $bag.className = 'bagi'; $bag.setAttribute('aria-label', '바구니'); document.querySelector('.hud').append($bag);
 function paintBag(){   // 바구니: 든 열매만 그림과 숫자로
@@ -1828,7 +1830,7 @@ function updatePicks(camX, camZ){
     if (!up) continue;
     p.me.position.y = .08 + Math.abs(Math.sin(clock*2 + p.k))*.04;
     p.me.rotation.y = Math.atan2(camX - p.me.position.x, camZ - p.me.position.z);
-    if (wdist(p.x, p.z, P.x, P.y) < .7) collectPick(p);
+    if (wdist(p.x, p.z, P.x, P.y) < 1) collectPick(p);
   }
 }
 function collectPick(p){   // 걸어서 지나가거나, 눌러서 주움
@@ -2287,8 +2289,6 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     g.strokeStyle = '#3a2e20'; g.lineWidth = 2; for (let i = 0; i < 11; i++) { g.beginPath(); g.moveTo(150 + (i % 3)*9, 110 + i*30); g.quadraticCurveTo(160, 124 + i*30, 154 + (i % 2)*12, 136 + i*30); g.stroke(); }
     g.fillStyle = '#2a1e14'; g.beginPath(); g.ellipse(160, h - 150, 9, 14, 0, 0, Math.PI*2); g.fill();   // 옹이 구멍
     for (let i = 0; i < 34; i++) ovate(g, 14 + (i*47) % 292, 6 + (i*29) % 120, 72 + (i % 3)*12, (i % 7)*.9 - 2.8, COLORS.leaves[i % 4], 20);
-    g.fillStyle = '#e8d24a'; g.strokeStyle = '#6b5a22'; g.lineWidth = 1.5;   // 뿌리 곁 바나나 껍질
-    for (const [x, y, r] of [[236, h - 10, .3], [92, h - 14, 2.4], [252, h - 22, 1.2]]) { g.save(); g.translate(x, y); g.rotate(r); for (const a of [-.7, 0, .7]) { g.beginPath(); g.ellipse(Math.sin(a)*6, -Math.cos(a)*6, 3, 8, a, 0, Math.PI*2); g.fill(); g.stroke(); } g.restore(); }
   });
   const DECK_T = ctex(256, 256, (g, w, h) => {   // 둥근 나무 발판 (위에서 본 모습)
     g.save(); g.beginPath(); g.arc(128, 128, 124, 0, Math.PI*2); g.clip();
@@ -2518,7 +2518,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     if (r && (r.kind === 'blink' || r.kind === 'wake') && re < 1.2) tilt += .14*Math.sin(re*Math.PI/1.2);
     const eating = st === 2 && el > 4 && el < 8.6;
     sloth.material.map = eating ? ST.eat : (st === 0 || st >= 5) ? ST.sleep : ST.idle;
-    { const [x, z] = at(slothAt); sloth.position.set(x, BR - 1.45 + crawl*(DECK - BR) - (eating ? .06 : 0), z);   // 다 먹으면 줄기를 타고 발판 끝 매듭까지 기어오름 face(sloth, x, z); sloth.rotation.z = tilt + (st === 3 ? Math.sin(clock*2)*.06 : 0); }
+    { const [x, z] = at(slothAt); sloth.position.set(x, BR - 1.45 + crawl*(DECK - BR) - (eating ? .06 : 0), z); face(sloth, x, z); sloth.rotation.z = tilt + (st === 3 ? Math.sin(clock*2)*.06 : 0); }   // 다 먹으면 줄기를 타고 발판 끝 매듭까지 기어오름
     // 사다리: 말려 있다가 → 풀려 내려옴
     { const [x, z] = at(SPOT.ladder); rolled.visible = st < 4; rolled.position.set(x, DECK - .05, z); face(rolled, x, z); rolled.rotation.z = st === 3 && el > 6 ? Math.sin(clock*14)*.1 : 0;
       ladder.visible = st >= 4; const k = st === 4 ? ease(el/2.2) : 1; ladder.scale.set(1, Math.max(.02, k), 1); ladder.position.set(x, DECK, z); face(ladder, x, z); ladder.rotation.z = st === 4 ? Math.sin(el*6)*.06*(1 - k) : 0; }
