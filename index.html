@@ -1478,7 +1478,7 @@ function lookTargets(){
   L.push({ key:'oldman', x:oldman.position.x, h:.7, z:oldman.position.z, me:oldman });
   for (const st of STORIES) L.push({ key:st.key, x:st.x, h:st.h, z:st.y, me:st.me });
   L.push({ key:'waterfall', x:WATERFALL.x, h:2.6, z:WATERFALL.y - 3.1 }, { key:'lookout', x:LOOKOUT.x, h:elevAt(LOOKOUT.x, LOOKOUT.y) + .6, z:LOOKOUT.y });
-  for (const r of ribbons) L.push({ key:'ribbon', x:r.me.position.x, h:1.2, z:r.me.position.z, noSeen:true, me:r.me,
+  if (false) for (const r of ribbons) L.push({ key:'ribbon', x:r.me.position.x, h:1.2, z:r.me.position.z, noSeen:true, me:r.me,
     info:{ name:r.mine ? '내 리본' : `${r.name || '누군가'}의 리본`, text:'여기까지 왔었다는 표시예요. 리본을 따라가면 그 사람이 걸은 길이에요.' } });
   for (const pz of PUZZLES) L.push(...pz.targets());
   return L;
@@ -2711,6 +2711,7 @@ NET_HOOKS.push(ch => {
   ch.on('postgres_changes', { event:'DELETE', schema:'public', table:'ribbons' }, ({ old:r }) => r && removeRibbon(r.id));
 });
 function updateRibbons(camX, camZ){
+  for (const r of ribbons) r.me.visible = false; return;   // 리본은 뺌
   for (const m of Object.values(ribbonMats)) m.color.copy(m.userData.base).multiply(tintCol);
   for (const r of ribbons) { r.me.rotation.y = Math.atan2(camX - r.me.position.x, camZ - r.me.position.z); r.me.rotation.z = Math.sin(clock*1.5 + r.ph)*.12; }
 }
@@ -2747,7 +2748,7 @@ const $ribbonBtn = document.createElement('button'); $ribbonBtn.type = 'button';
 $ribbonBtn.addEventListener('click', () => { if (ribbonPanel.hidden) openRibbons(); else ribbonPanel.hidden = true; });
 function paintRibbonBtn(){ $ribbonBtn.innerHTML = ICON(IC.ribbon); $ribbonBtn.setAttribute('aria-label', '리본'); $ribbonBtn.classList.add('ic'); }
 paintRibbonBtn();
-document.querySelector('.tools').prepend($ribbonBtn);
+// 리본은 뺌 (길이 생겨서)
 { const tools = document.querySelector('.tools'), leaf = document.createElement('button'); leaf.type = 'button'; leaf.className = 'leaf'; leaf.setAttribute('aria-label', '메뉴'); leaf.setAttribute('aria-expanded', 'false');
   leaf.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#f3e6c8" stroke-width="1.4" stroke-linecap="round"><path d="M5 19C5 10 10 5 19 5c0 9-5 14-14 14z"/><path d="M5 19L15 9M9 15l-1-4M12 12l3 1M9 15l3 1"/></svg>';
   tools.append(leaf);
@@ -2758,7 +2759,7 @@ document.querySelector('.tools').prepend($ribbonBtn);
 addEventListener('keydown', e => {
   if (e.target === $say || modalOpen()) return;
   const k = (e.key || '').toLowerCase();
-  if (e.code === 'KeyR' || k === 'ㄱ') tieRibbon();
+  // 리본 묶기 단축키는 뺌
 });
 
 /* ---- 꽃비 속의 빈 해먹: 멀리선 누가 잠든 듯, 가까이 가면 꽃잎뿐. 누우면 쉼 ---- */
