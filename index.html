@@ -1450,9 +1450,9 @@ const CR_TYPES = {
 for (const t of Object.values(CR_TYPES)) { t.geo = plane(t.w, t.h); t.mat = mat(t.tex); }
 for (const [k, art] of [['jesters', 'monkeys'], ['whitebird', 'whitebird'], ['toucan', 'toucan'], ['sloth', 'sloth_idle']]) onArt(art, im => { const t = CR_TYPES[k]; swapTex(t.tex, im); t.geo = plane(t.h*im.width/im.height, t.h); });
 const critters = [];
-let still = 0, obs = 0, pitch = 0, spawned = false, lookHold = 0, lookKey = null, newSeen = 0;
+let lookT = -9, pitchHint = 0, still = 0, obs = 0, pitch = 0, spawned = false, lookHold = 0, lookKey = null, newSeen = 0;
 let seen = {}; try { seen = JSON.parse(localStorage.getItem('denggul-seen')) || {}; } catch (e) {}
-cv.addEventListener('pointermove', e => { if (look && e.pointerId === look.id) { const dy = e.clientY - (look.py ?? e.clientY); look.py = e.clientY; pitch = Math.max(-.35, Math.min(.6, pitch - dy*.005)); } });
+cv.addEventListener('pointermove', e => { if (look && e.pointerId === look.id) { const dy = e.clientY - (look.py ?? e.clientY); look.py = e.clientY; pitch = Math.max(-.35, Math.min(1.05, pitch - dy*.006)); lookT = clock; } });
 function spawnCritters(){
   const keys = Object.keys(CR_TYPES), tot = keys.reduce((a, k) => a + CR_TYPES[k].wt, 0);
   for (let i = 0; i < 3; i++) for (let tries = 0; tries < 25; tries++) {
@@ -2442,6 +2442,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     { const [x, z] = at(SPOT.vine); vine.position.set(x, vy, z); face(vine, x, z); vine.rotation.z = vw; }
     // 원숭이: 나무 아래로 오면 오렌지를 던짐 (나무늘보가 깨면 그만)
     { const [x, z] = at(SPOT.monkey); monkey.position.set(x, 7.75 + Math.abs(Math.sin(clock*1.3))*.03, z); face(monkey, x, z); monkey.rotation.z = Math.sin(clock*.7)*.05; }
+    if (onGround() && d < 4.2) pitchHint = .75;   // 나무 밑에선 위를 보게
     if (st === 0 && onGround() && d < 4.5 && !SL.orange && (SL.throwT -= dt) <= 0) { SL.throwT = 3.5 + Math.random()*2.5; throwOrange(); }
     const o = SL.orange;
     if (o) { const k = clock - o.t; orange.visible = true; let px, pz, py;
@@ -3035,7 +3036,9 @@ function draw(dt = .016){
   updateObs(dt); const e = 0;   // 시점은 늘 같음. 멈춰 있으면 동물만 나옴
   const camX = P.x - fx*CAM_D, camZ = P.y - fz*CAM_D, elevP = elevAt(P.x, P.y) + (P.upH || 0);
   camera.position.set(camX, CAM_H + elevP, camZ);
-  camera.lookAt(P.x + fx*3, 1.05 + elevP + Math.sin(pitch)*2.5, P.y + fz*3);
+  if (!P.moving && pitchHint > pitch && clock - lookT > 2.5) pitch += (pitchHint - pitch)*Math.min(1, dt*.7);   // 퍼즐 나무 밑에 서 있으면 천천히 올려다봄
+  pitchHint = 0;
+  camera.lookAt(P.x + fx*3, 1.05 + elevP + Math.tan(pitch)*(3 + CAM_D)*.8, P.y + fz*3);   // 위로 55도쯤까지 올려다볼 수 있음
   const actors = (P.upH || 0) > .5 ? [] : [{ x:P.x, y:P.y, w:1 - e }]; for (const o of others.values()) actors.push({ x:o.rx, y:o.ry });
   updateBushes(actors, dt, camX, camZ);
   updateTrees(dt, camX, camZ);
