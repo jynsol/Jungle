@@ -3387,6 +3387,26 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
       const ang = Math.atan2(camX - x, camZ - z); sc.post.forEach((m, j) => { m.position.set(x + Math.cos(ang)*(j ? 1.4 : -1.4), 0, z - Math.sin(ang)*(j ? 1.4 : -1.4)); m.rotation.y = ang; m.visible = true; }); }); };
     PUZZLES.push(GT); }
 
+  /* 숲의 소리 표지: 길에서 벗어난 것들은 다가가면 그쪽에서 소리가 남 (어? 저기 뭐가 있나?) — 왼쪽·오른쪽으로 들림 */
+  { const panOf = (x, z) => { const dx = wd(x - P.x, W), dz = wd(z - P.y, H), l = Math.hypot(dx, dz) || 1; return Math.max(-1, Math.min(1, (dx*Math.cos(yaw) - dz*Math.sin(yaw))/l)); };
+    const tone = (f, dur, v, type, pan, f2) => sfx((ac, t) => { const o = ac.createOscillator(), g = ac.createGain(), pn = ac.createStereoPanner ? ac.createStereoPanner() : null; o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + Math.min(.05, dur/4)); g.gain.exponentialRampToValueAtTime(.0001, t + dur); o.connect(g); if (pn) { pn.pan.value = pan; g.connect(pn); pn.connect(ac.destination); pn.connect(reverb(ac)); } else { g.connect(ac.destination); } o.start(t); o.stop(t + dur + .05); });
+    const hush = (dur, v, pan, freq) => sfx((ac, t) => { const src = ac.createBufferSource(), lp = ac.createBiquadFilter(), g = ac.createGain(), pn = ac.createStereoPanner ? ac.createStereoPanner() : null; src.buffer = noiseBuf(ac, dur + .1); lp.type = 'lowpass'; lp.frequency.value = freq;
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + dur*.4); g.gain.exponentialRampToValueAtTime(.0001, t + dur); src.connect(lp).connect(g); if (pn) { pn.pan.value = pan; g.connect(pn); pn.connect(ac.destination); } else g.connect(ac.destination); src.start(t); src.stop(t + dur + .1); });
+    const bs = SITE.butterflies, gs = spot('galleon'), th = REGIONS[0].hub, T3 = REGIONS[3].temple;
+    const AMB = [
+      { x:bs.cx, z:bs.cy, r:13, every:4, play:(v, p) => [1568, 2093, 2637].forEach((f, i) => setTimeout(() => tone(f, .9, .05*v, 'sine', p), i*140)) },   // 나비 공터: 맑은 방울 소리
+      { x:th.x - 1.9, z:th.y + .6, r:16, every:9, play:(v, p) => [0, .2].forEach(d => setTimeout(() => tone(360, .14, .05*v, 'square', p, 300), d*1000)) },   // 큰부리새 둥지
+      { x:gs.x, z:gs.z, r:15, every:5.5, play:(v, p) => tone(95, 1.2, .07*v, 'sawtooth', p, 70) },   // 범선: 나무가 삐걱
+      { x:WATERFALL.x, z:WATERFALL.y - 2, r:17, every:1.1, play:(v, p) => hush(1.5, .06*v, p, 500) },   // 폭포: 물 쏟아지는 소리
+      { x:window.CAVE.X + 4, z:window.CAVE.Y - 4, r:9, every:2.4, play:(v, p) => tone(1700 + Math.random()*500, .5, .04*v, 'sine', p, 900) },   // 동굴 입구: 안에서 울리는 물방울
+      { x:BUD_SPOT.x, z:BUD_SPOT.y, r:16, every:6, play:(v, p) => [392, 494, 587].forEach(f => tone(f, 2.4, .025*v, 'sine', p)) },   // 꽃봉오리: 은은한 화음
+      ...(T3 ? [{ x:T3.cx + 6.2, z:T3.cy + 1.9, r:9, every:1.4, play:(v, p) => { for (let i = 0; i < 4; i++) setTimeout(() => tone(1800 + Math.random()*1400, .03, .03*v, 'square', p), i*90 + Math.random()*60); } }] : [])   // 신전 앞 돌 화로: 타닥
+    ].map(a => ({ ...a, t:Math.random()*a.every }));
+    const AM = { id:'ambient', optional:true, x:FIRE.x, y:FIRE.y, done:9, thumb:() => null, targets:() => [] };
+    AM.update = dt => { for (const a of AMB) { const d = wdist(P.x, P.y, a.x, a.z); if (d > a.r) continue; if ((a.t -= dt) > 0) continue; a.t = a.every*(.8 + Math.random()*.4); const v = Math.pow(1 - d/a.r, 1.3); if (v > .02) a.play(v, panOf(a.x, a.z)); } };
+    PUZZLES.push(AM); }
+
   /* 9. 끝맺음: 모닥불 곁에 빛나는 씨앗을 심으면 숲에 밤이 내리고, 도와준 동물들이 하나씩 모닥불 둘레에 모여 앉음.
         다 모이면 노래를 다섯 번 부르면 모두 따라 부르며 씨앗이 커다란 꽃으로 피어오르고 끝맺음 그림 */
   { const C = { x:FIRE.x, z:FIRE.y }, SPOT = { x:FIRE.x, z:wrapY(FIRE.y - 2.1) }, CH = { id:'chorus', x:FIRE.x, y:FIRE.y, done:2, t0:-9, sung:0, endT:-9, thumb:() => SEED_T2.image };
