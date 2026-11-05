@@ -2278,7 +2278,7 @@ function draw(dt = .016){
     ctx.stroke();
   }
   if (flash > .01) { ctx.fillStyle = `rgba(255,255,240,${flash*.55})`; ctx.fillRect(0, 0, vw, vh); }
-  drawTwinkles(); drawFireOverlay(); drawEnergyOverlay(); drawTouchHelp(dt); drawFireArrow(); drawHintOverlay();
+  drawTwinkles(); drawFireOverlay(); drawEnergyOverlay(); drawTouchHelp(dt); drawHintOverlay();
   if (sketchFlash > 0) { ctx.fillStyle = `rgba(255,250,235,${sketchFlash*1.6})`; ctx.fillRect(0, 0, vw, vh); sketchFlash -= dt; }
   drawObsOverlay(1, dt);
   ctx.font = '11px system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
