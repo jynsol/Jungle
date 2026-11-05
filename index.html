@@ -2476,12 +2476,12 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     g.fillStyle = '#7a5a36'; g.strokeStyle = RG.line; g.lineWidth = 3; g.fillRect(24, 70, 112, 104); g.strokeRect(24, 70, 112, 104);
     g.fillStyle = '#c8a860'; g.beginPath(); g.moveTo(6, 78); g.lineTo(80, 6); g.lineTo(154, 78); g.closePath(); g.fill(); g.stroke();
     g.strokeStyle = '#a08040'; g.lineWidth = 2; for (let i = 0; i < 10; i++) { g.beginPath(); g.moveTo(14 + i*14, 74); g.lineTo(80, 10); g.stroke(); }
-    g.fillStyle = '#5a3c22'; g.fillRect(58, 86, 44, 20); g.strokeStyle = '#3a2618'; g.strokeRect(58, 86, 44, 20);   // 문 위 나무판의 새김 그림
-    LOCK_ANS.forEach((si, n) => drawSym(g, SYMS[si], 66 + n*14, 96, 6, '#e8d2a0'));
+    g.fillStyle = '#5a3c22'; g.fillRect(34, 76, 92, 34); g.strokeStyle = '#3a2618'; g.lineWidth = 3; g.strokeRect(34, 76, 92, 34);   // 문 위 나무판의 새김 그림 (멀리서도 셋이 보이게 크게)
+    LOCK_ANS.forEach((si, n) => drawSym(g, SYMS[si], 52 + n*28, 93, 12, '#f3e2b0'));
     g.fillStyle = '#2a1c12'; g.fillRect(64, 112, 32, 62);
     if (peek) { g.fillStyle = '#0a0604'; g.fillRect(64, 112, 32, 62); g.fillStyle = '#ffe36a'; for (const x of [74, 86]) { g.beginPath(); g.ellipse(x, 132, 3.5, 2.2, 0, 0, Math.PI*2); g.fill(); } }
     else { g.fillStyle = '#5a3c22'; g.fillRect(66, 114, 28, 58); g.fillStyle = '#c9a046'; g.beginPath(); g.arc(88, 144, 2.5, 0, Math.PI*2); g.fill(); }
-    g.fillStyle = '#ffd87a'; g.fillRect(36, 98, 18, 16); g.strokeStyle = '#4a3220'; g.strokeRect(36, 98, 18, 16);
+    g.fillStyle = '#ffd87a'; g.fillRect(106, 124, 18, 16); g.strokeStyle = '#4a3220'; g.lineWidth = 2; g.strokeRect(106, 124, 18, 16);
   });
   const HUT_T = hutPaint(false), HUT_PEEK_T = hutPaint(true);
   const LENS_T = ctex(48, 48, (g) => { g.fillStyle = 'rgba(190,230,240,.85)'; g.strokeStyle = '#b08a3a'; g.lineWidth = 5; g.beginPath(); g.arc(24, 24, 18, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = 'rgba(255,255,255,.9)'; g.beginPath(); g.ellipse(17, 17, 5, 3, -.6, 0, Math.PI*2); g.fill(); });
