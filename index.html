@@ -137,7 +137,7 @@ const clean = s => String(s).replace(BAD, '').trim().slice(0, 80);
 
 /* ---- 기적의 자리들 ---- */
 const SITES = [
-  { key:'labels', name:'이름표 마을', text:'온 마을이 잠을 잃고, 그다음엔 이름을 잃었다. 사람들은 나무에 ‘나무’라고 써 붙이고서야 겨우 안심했다.' },
+  { key:'labels', name:'꽃비 속의 빈 해먹', text:'온 마을이 한꺼번에 낮잠에 들었다가 어디론가 가 버렸다. 해먹마다 사람 모양으로 쌓인 노란 꽃잎만 남았다. 꽃비는 그날부터 그치지 않았다.' },
   { key:'rising', name:'빨래를 걷던 자리', text:'흰 이불을 개던 여자가 이불째 하늘로 올라갔다. 남은 사람들은 잠깐 올려다보고는 나머지 빨래를 마저 갰다.' },
   { key:'butterflies', name:'노란 나비 공터', text:'이 공터를 지난 사람 뒤로는 노란 나비가 따라붙는다. 아무도 이유를 묻지 않았고, 나비도 말하지 않았다.' },
   { key:'fork', name:'두 갈래 돌', text:'이 돌에서 길은 둘로 갈라진다. 어느 쪽을 골라도, 다른 쪽을 고른 내가 그 숲을 걷고 있다.' },
@@ -426,11 +426,10 @@ function paintRetablo(c, s){
   const S = w/280;
   // 장면
   if (s.key === 'labels') {
-    g.fillStyle = '#6b3f22'; g.fillRect(w*.42, h*.36, 14*S, h*.36);
-    g.fillStyle = '#2f8f4e'; g.beginPath(); g.arc(w*.42 + 7*S, h*.33, 42*S, 0, Math.PI*2); g.fill();
-    g.fillStyle = '#fff8e6'; g.fillRect(w*.42 - 14*S, h*.5, 42*S, 18*S);
-    g.fillStyle = '#4a2a16'; g.font = `${13*S}px "Nanum Pen Script", cursive`; g.textBaseline = 'middle'; g.fillText('나무', w*.42 - 8*S, h*.5 + 9*S);
-    g.fillStyle = '#7a4b8f'; g.beginPath(); g.arc(w*.68, h*.56, 8*S, 0, Math.PI*2); g.fill(); g.fillRect(w*.68 - 9*S, h*.58, 18*S, 30*S);
+    g.strokeStyle = '#5b3a22'; g.lineWidth = 5*S; for (const x of [.2, .8]) { g.beginPath(); g.moveTo(w*x, h*.95); g.lineTo(w*x, h*.32); g.stroke(); }
+    g.fillStyle = '#c96a4a'; g.strokeStyle = '#3a2410'; g.lineWidth = 2*S; g.beginPath(); g.moveTo(w*.24, h*.42); g.quadraticCurveTo(w*.5, h*.78, w*.76, h*.42); g.quadraticCurveTo(w*.5, h*.6, w*.24, h*.42); g.fill(); g.stroke();
+    g.fillStyle = '#f2cf3a'; for (let i = 0; i < 160; i++) { const x = w*(.08 + r()*.84), y = h*(.05 + r()*.6); g.fillRect(x, y, 3*S, 2*S); }
+    for (let i = 0; i < 90; i++) g.fillRect(w*(.33 + r()*.34), h*(.5 + r()*.06), 3*S, 2*S);
   } else if (s.key === 'rising') {
     g.strokeStyle = '#6b3f22'; g.lineWidth = 3*S; g.beginPath(); g.moveTo(w*.15, h*.6); g.lineTo(w*.6, h*.62); g.stroke();
     g.fillStyle = '#fffaf0'; g.save(); g.translate(w*.5, h*.22); g.rotate(-.15);
@@ -1780,6 +1779,7 @@ function updateEnergy(dt){
   if (P.moving) d -= tileAt(P.x, P.y) === BUSH ? .4 : .12;
   if (wet) d -= .45;
   if (nearF) d += P.sit ? 4 : 1.2;
+  if (P.lie) d += 3;
   if (faint === 0) energy = Math.max(0, Math.min(100, energy + d*dt));
   speedMul = faint > 0 ? 0 : energy < 30 ? .55 + .45*energy/30 : 1;
   if (energy <= 0 && faint === 0) { faint = .001; fainted = false; }
@@ -2072,6 +2072,137 @@ addEventListener('keydown', e => {
   else if (e.code === 'KeyC' || k === 'ㅊ') takeSketch();
 });
 
+/* ---- 꽃비 속의 빈 해먹: 멀리선 누가 잠든 듯, 가까이 가면 꽃잎뿐. 누우면 쉼 ---- */
+const HM = SITE.labels;
+const PETAL = '#f2cf3a';
+function hammockTex(full){
+  return ctex(256, 128, (g, w, h) => {
+    g.strokeStyle = '#5b3a22'; g.lineWidth = 7; g.beginPath(); g.moveTo(14, 128); g.lineTo(18, 12); g.moveTo(242, 128); g.lineTo(238, 12); g.stroke();
+    g.strokeStyle = '#d8c8a0'; g.lineWidth = 2; g.beginPath(); g.moveTo(18, 30); g.lineTo(50, 52); g.moveTo(238, 30); g.lineTo(206, 52); g.stroke();
+    g.fillStyle = '#c96a4a'; g.strokeStyle = RG.line; g.lineWidth = 2.5;
+    g.beginPath(); g.moveTo(48, 50); g.quadraticCurveTo(128, 120, 208, 50); g.quadraticCurveTo(128, 84, 48, 50); g.fill(); g.stroke();
+    g.strokeStyle = '#f2ead2'; g.lineWidth = 3; g.beginPath(); g.moveTo(60, 60); g.quadraticCurveTo(128, 112, 196, 60); g.stroke();
+    if (full) { g.fillStyle = '#6e5a7a'; g.beginPath(); g.ellipse(128, 64, 62, 16, 0, Math.PI, 0); g.fill(); g.beginPath(); g.arc(78, 56, 12, 0, Math.PI*2); g.fill(); }   // 누가 잠든 듯
+    else { g.fillStyle = PETAL; for (let i = 0; i < 120; i++) { const a = Math.random()*Math.PI, r = Math.random(); const x = 70 + (i < 20 ? Math.cos(i)*10 : 20 + r*100), y = (i < 20 ? 56 + Math.sin(i)*9 : 66 - Math.sin(a)*14*Math.random()); g.fillRect(x, y, 3, 2); } }
+  });
+}
+const HM_FULL = hammockTex(true), HM_EMPTY = hammockTex(false);
+const HAMMOCKS = [0, 1, 2, 3].map(i => {
+  const a = i*1.57 + .6, x = HM.cx + Math.cos(a)*2.1, z = HM.cy + Math.sin(a)*2.1;
+  const m = mat(HM_FULL); const me = cutout(plane(2, 1), m); me.position.set(x, .1, z); return { x, z, me, m, full:true };
+});
+const PETAL_TEX = ctex(12, 8, (g) => { g.fillStyle = PETAL; g.beginPath(); g.ellipse(6, 4, 5, 3, 0, 0, Math.PI*2); g.fill(); });
+const petalMat = new THREE.MeshBasicMaterial({ map:PETAL_TEX, transparent:true, alphaTest:.3, side:THREE.DoubleSide, fog:true });
+const petals = Array.from({ length:70 }, (_, i) => { const me = cutout(plane(.07, .05, false), petalMat); me.visible = false; return { me, i, x:0, z:0, h:Math.random()*7, far:i >= 50 }; });
+{ const g = gcv.getContext('2d'); g.fillStyle = PETAL; const r = rng(919);   // 땅에 쌓인 꽃잎
+  for (let i = 0; i < 900; i++) { const a = r()*Math.PI*2, d = Math.sqrt(r())*3.4; g.globalAlpha = .5 + r()*.5; g.fillRect((HM.cx + Math.cos(a)*d)*GPX, (HM.cy + Math.sin(a)*d)*GPX, 1.5, 1); }
+  g.globalAlpha = 1; groundTex.needsUpdate = true; }
+let hushLevel = 0;
+function updateHammocks(dt, camX, camZ){
+  const d0 = wdist(P.x, P.y, HM.cx, HM.cy);
+  hushLevel = Math.max(0, Math.min(1, 1 - (d0 - 2)/12));
+  for (const h of HAMMOCKS) {
+    const full = wdist(P.x, P.y, h.x, h.z) > 6;
+    if (full !== h.full) { h.full = full; h.m.map = full ? HM_FULL : HM_EMPTY; h.m.needsUpdate = true; }
+    h.me.rotation.y = Math.atan2(camX - h.x, camZ - h.z); h.me.rotation.z = Math.sin(clock*.7 + h.x)*.03;
+  }
+  for (const p of petals) {   // 공터엔 꽃비, 멀리서는 내 둘레에 한두 장
+    if (p.far) {
+      p.me.visible = d0 < 18 && d0 > 4;
+      if (!p.me.visible) continue;
+      p.h -= dt*.35; if (p.h < 0) { p.h = 2.6; const a = Math.random()*Math.PI*2; p.x = P.x + Math.cos(a)*(1 + Math.random()*3); p.z = P.y + Math.sin(a)*(1 + Math.random()*3); }
+      if (Math.random() > hushLevel*1.5 + .15) { p.me.visible = false; continue; }
+    } else {
+      p.me.visible = d0 < 22;
+      p.h -= dt*.45; if (p.h < 0 || !p.x) { p.h = 4 + Math.random()*3; const a = Math.random()*Math.PI*2, r = Math.sqrt(Math.random())*3.2; p.x = HM.cx + Math.cos(a)*r; p.z = HM.cy + Math.sin(a)*r; }
+    }
+    p.me.position.set(p.x + Math.sin(clock*1.3 + p.i)*.25, p.h, p.z + Math.cos(clock*1.1 + p.i)*.2);
+    p.me.rotation.set(clock*2 + p.i, Math.atan2(camX - p.x, camZ - p.z), clock*1.5 + p.i);
+  }
+}
+/* 해먹에 눕기 */
+const hammockBar = document.createElement('button'); hammockBar.type = 'button'; hammockBar.hidden = true;
+hammockBar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 16px);background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:10px 18px;font:600 14px var(--body);cursor:pointer';
+document.body.append(hammockBar);
+const nearHammock = () => HAMMOCKS.find(h => wdist(P.x, P.y, h.x, h.z) < 1.4);
+function toggleLie(){
+  if (P.lie) { P.lie = false; return; }
+  const h = nearHammock(); if (!h) return;
+  P.x = h.x + (P.x - h.x)*.2; P.y = h.z + (P.y - h.z)*.2; P.lie = true; pitch = .55;
+}
+hammockBar.addEventListener('click', () => { toggleLie(); cv.focus(); });
+addEventListener('keydown', e => { if (e.target === $say || modalOpen() || hammockBar.hidden) return; if (e.code === 'KeyF' || (e.key || '') === 'ㄹ') toggleLie(); });
+function updateLie(){
+  if (P.lie && P.moving) P.lie = false;
+  const can = P.lie || !!nearHammock();
+  hammockBar.hidden = !can;
+  if (can) hammockBar.textContent = P.lie ? '일어나기' + (MOBILE ? '' : ' (F)') : '해먹에 눕기' + (MOBILE ? '' : ' (F)');
+  if (P.lie) pitch += (.55 - pitch)*.05;
+}
+
+/* ---- 정글 소리: 매미 울음, 열대 새, 멀리 짖는원숭이, 밤엔 개구리. 해먹 공터에 가까울수록 조용해짐 ---- */
+let amb = null, birdT = 2, howlT = 18, frogT = 1, toucanT = 9;
+function noiseBuf(ac, sec){ const b = ac.createBuffer(1, ac.sampleRate*sec | 0, ac.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1; return b; }
+function tone(ac, type, f0, f1, t, dur, vol, filt){
+  const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur*.8);
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + Math.min(.03, dur*.3)); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  let node = o.connect(g); if (filt) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = filt; node = g.connect(f); node.connect(ac.destination); } else g.connect(ac.destination);
+  o.start(t); o.stop(t + dur + .02);
+}
+function updateAmbience(dt, nt){
+  if (!audio) return;
+  const { ac } = audio, quiet = (1 - hushLevel)*(soundOn ? 1 : 0), t = ac.currentTime, day = 1 - nt;
+  if (!amb) try {
+    const mk = (fq, q, rate, depth) => { const src = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain(), lfo = ac.createOscillator(), lg = ac.createGain();
+      src.buffer = noiseBuf(ac, 2); src.loop = true; bp.type = 'bandpass'; bp.frequency.value = fq; bp.Q.value = q; g.gain.value = 0;
+      lfo.frequency.value = rate; lg.gain.value = depth; lfo.connect(lg).connect(g.gain); lfo.start(); src.connect(bp).connect(g).connect(ac.destination); src.start(); return g; };
+    amb = { cicada:mk(4300, 9, 19, .006), insects:mk(6800, 4, 5, .002) };
+  } catch (e) { amb = {}; }
+  if (amb.cicada) { amb.cicada.gain.setTargetAtTime(.02*quiet*(.4 + day*.8), t, .5); amb.insects.gain.setTargetAtTime(.01*quiet*(.4 + nt), t, .5); }
+  if (quiet < .05) return;
+  try {
+    if ((birdT -= dt) <= 0) {   // 열대 새의 휘파람
+      birdT = 3 + Math.random()*6; if (day > .3) { const f = 1600 + Math.random()*1400; [0, .18, .36].slice(0, 1 + (Math.random()*3 | 0)).forEach(o => tone(ac, 'sine', f, f*(1.4 + Math.random()*.3), t + o, .14, .02*quiet*day)); }
+    }
+    if ((toucanT -= dt) <= 0) {   // 큰부리새의 쉰 울음
+      toucanT = 10 + Math.random()*14; if (day > .3) for (let i = 0; i < 3; i++) tone(ac, 'square', 360, 300, t + i*.22, .12, .012*quiet*day, 900);
+    }
+    if ((howlT -= dt) <= 0) {   // 멀리서 짖는원숭이 (해 뜰 무렵과 해질녘에 잦음)
+      howlT = 30 + Math.random()*40;
+      const src = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = noiseBuf(ac, 3); bp.type = 'bandpass'; bp.frequency.value = 420; bp.Q.value = 3;
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.05*quiet, t + 1.1); g.gain.exponentialRampToValueAtTime(.0001, t + 2.8);
+      src.connect(bp).connect(g).connect(ac.destination); src.start(t); src.stop(t + 3);
+    }
+    if (nt > .5 && (frogT -= dt) <= 0) {   // 밤의 개구리 "코-키"
+      frogT = .6 + Math.random()*2.2; const v = .02*quiet*(nt - .5)*2*(.4 + Math.random()*.6);
+      tone(ac, 'sine', 1150, 1150, t, .09, v); tone(ac, 'sine', 1750, 2100, t + .12, .14, v);
+    }
+  } catch (e) {}
+}
+
+/* ---- 밤이 되면 범선 창에 불이 켜짐 ---- */
+const LAMP_TEX = ctex(32, 32, (g) => { g.fillStyle = '#ffd87a'; g.fillRect(6, 6, 20, 20); g.strokeStyle = '#5b3a22'; g.lineWidth = 3; g.strokeRect(6, 6, 20, 20); g.beginPath(); g.moveTo(16, 6); g.lineTo(16, 26); g.moveTo(6, 16); g.lineTo(26, 16); g.stroke(); });
+const lamp = cutout(plane(.32, .32, false), new THREE.MeshBasicMaterial({ map:LAMP_TEX, alphaTest:.3, side:THREE.DoubleSide, fog:false }));
+const lampGlow = cutout(plane(1.6, 1.6, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, fog:false, opacity:.6 }));
+function updateLamp(nt, camX, camZ){
+  const g = STORIES.find(s => s.key === 'galleon'); if (!g) return;
+  const on = nt > .55; lamp.visible = lampGlow.visible = on; if (!on) return;
+  const ang = g.me.rotation.y, lx = Math.cos(ang), lz = -Math.sin(ang), nx = Math.sin(ang), nz = Math.cos(ang);
+  const x = g.x + lx*.7 + nx*.06, z = g.y + lz*.7 + nz*.06;
+  lamp.position.set(x, 2.0, z); lamp.rotation.y = ang;
+  lampGlow.position.set(x + nx*.05, 2.0, z + nz*.05); lampGlow.rotation.y = ang; lampGlow.material.opacity = .45 + Math.sin(clock*3)*.08;
+}
+
+/* ---- 흔들의자: 바라보면 멈춤 ---- */
+let chairRock = 1;
+function updateChair(dt){
+  const st = STORIES.find(s => s.key === 'chair'); if (!st) return;
+  const sc = toScreen(st.x, .6, st.y), d = wdist(P.x, P.y, st.x, st.y);
+  const watched = sc && d < 9 && Math.hypot(sc[0] - vw/2, sc[1] - vh/2) < Math.min(vw, vh)*.22;
+  chairRock += ((watched ? 0 : 1) - chairRock)*Math.min(1, dt*(watched ? 9 : .8));
+  st.me.rotation.z = Math.sin(clock*1.6)*.14*chairRock;
+}
+
 function draw(dt = .016){
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
   updateObs(dt); const e = 0;   // 시점은 늘 같음. 멈춰 있으면 동물만 나옴
@@ -2117,6 +2248,7 @@ function draw(dt = .016){
   const face = me => { me.rotation.y = Math.atan2(camX - me.position.x, camZ - me.position.z); };
   ALTARS.forEach(face); TIGERS.forEach(face); MONKEYS.forEach(face); critters.forEach(c => face(c.me));
   for (const st of STORIES) { face(st.me); if (st.key === 'swing') st.me.rotation.z = Math.sin(clock*.8)*.12; }
+  updateChair(dt); updateLamp(nt, camX, camZ);
   // 이불, 나비, 흩날리는 잎, 반딧불, 재규어 눈
   sheetMeshes.forEach((me, i) => { const s = sheets[i]; me.visible = !!s; if (s) { me.position.set(s.x + Math.sin(clock + i)*.3 + (s.h - 1)*.15, s.h, s.z); me.rotation.set(0, yaw, Math.sin(clock*2 + i)*.25); me.material.depthTest = s.h < 5.5; me.scale.setScalar(1 + s.h*.05); } });
   const bf = [];
@@ -2133,7 +2265,7 @@ function draw(dt = .016){
     e.me.visible = nt > .55 && d > 3 && d < 16 && Math.sin(clock*.8 + e.k) < .9;
     e.mk.visible = nt < .45 && d > 4 && d < 14 && Math.sin(clock*.3 + e.k) > -.2;   // 낮엔 원숭이가 수풀 사이로 내다봄
   }
-  updateFire(dt, camX, camZ); updatePicks(camX, camZ); updateSmoke(dt, nt); updateWaterfall(dt, camX, camZ); updateLookout(camX, camZ); updateEnergy(dt); updateHints(dt, camX, camZ, nt); updateRibbons(camX, camZ);
+  updateFire(dt, camX, camZ); updatePicks(camX, camZ); updateSmoke(dt, nt); updateWaterfall(dt, camX, camZ); updateLookout(camX, camZ); updateEnergy(dt); updateHints(dt, camX, camZ, nt); updateRibbons(camX, camZ); updateHammocks(dt, camX, camZ); updateLie(); updateAmbience(dt, nt);
   for (const o of scene.children) if (o.isMesh && !o.isInstancedMesh && o !== ground && o !== sky) { o.position.x = camX + wd(o.position.x - camX, W); o.position.z = camZ + wd(o.position.z - camZ, H); }
   renderer.render(scene, camera);
   if (sketchReq) { sketchReq = false; try { composeSketch(cv.toDataURL('image/jpeg', .9)); } catch (er) {} }
