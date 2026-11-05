@@ -114,7 +114,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
    모두 정면에서 본 모습, 투명 배경, 아래가 땅에 닿게. */
 const ASSET_NAMES = ['agave','grass','broadleaf','fern','lily','whitespike','heartleaf','banana','sansevieria','palm','tree','orangetree','lotus','flamingo','tiger','monkey','ruin','player','parrot','leaf','player_walk','butterfly','fire','log','cliff','waterfall_flow'];
 // 아직 기본 그림인 것들: 파일을 넣으면 바로 바뀜 (목록과 크기는 ART_LIST.md)
-ASSET_NAMES.push('galleon', 'galleon_front', 'piano', 'clock', 'gramophone', 'bicycle', 'mailbox', 'swing', 'chair', 'monkeys', 'whitebird', 'toucan', 'oldman', 'rock', 'fruit_banana', 'fruit_mango', 'fruit_cacao', 'bigtree', 'sloth_idle', 'sloth_eat', 'sloth_sleep', 'basket', 'vine', 'item_sail', 'sail_full', 'ladder', 'ladder_rolled', 'treehut', 'chest', 'chest_open', 'spyglass', 'deck', 'lens', 'treehut_peek', 'frog', 'dam', 'otter', 'lilypad', 'mask_ocelot_front', 'mask_ocelot_side', 'mask_ocelot_back', 'mask_otter_front', 'mask_otter_side', 'mask_otter_back', 'mask_wood_front', 'mask_wood_side', 'mask_wood_back', 'mask_capybara_front', 'mask_capybara_side', 'mask_capybara_back', 'temple_wall', 'temple_door', 'pillar', 'bat', 'idol', 'idol_open', 'mirrors', 'statue_headless', 'statue_head');
+ASSET_NAMES.push('galleon', 'galleon_front', 'piano', 'clock', 'gramophone', 'bicycle', 'mailbox', 'swing', 'chair', 'monkeys', 'whitebird', 'toucan', 'oldman', 'rock', 'fruit_banana', 'fruit_mango', 'fruit_cacao', 'bigtree', 'sloth_idle', 'sloth_eat', 'sloth_sleep', 'basket', 'vine', 'item_sail', 'sail_full', 'ladder', 'ladder_rolled', 'treehut', 'chest', 'chest_open', 'spyglass', 'deck', 'lens', 'treehut_peek', 'frog', 'dam', 'otter', 'lilypad', 'mask_ocelot_front', 'mask_ocelot_side', 'mask_ocelot_back', 'mask_otter_front', 'mask_otter_side', 'mask_otter_back', 'mask_wood_front', 'mask_wood_side', 'mask_wood_back', 'mask_capybara_front', 'mask_capybara_side', 'mask_capybara_back', 'temple_wall', 'temple_door', 'pillar', 'bat', 'idol', 'idol_open', 'mirrors', 'statue_headless', 'statue_head', 'postcard', 'bead', 'nest', 'crank', 'net', 'cave', 'cave_inside', 'capy_statue', 'ending');
 const ASSETS = Object.fromEntries(ASSET_NAMES.map(n => [n, 'assets/' + n + '.png']));
 const ART = {};   // 그림 이름 → 그림이 오면 할 일 (그림판 바꾸고 비율 맞추기)
 const onArt = (k, fn) => (ART[k] || (ART[k] = [])).push(fn);
@@ -700,6 +700,7 @@ function step(dt){
 }
 
 function dayState(){
+  if (pzSave.nightUntil > Date.now()) return { dark:.78, label:'밤' };   // 괘종시계를 열두 시에 맞추면 한동안 한밤
   const ph = ((Date.now()/1000) % DAY) / DAY, dark = .12 + .66*(.5 - .5*Math.cos(ph*Math.PI*2));
   return { dark, label: dark < .3 ? '낮' : dark > .62 ? '밤' : ph < .5 ? '해질녘' : '새벽' };
 }
@@ -1844,6 +1845,7 @@ const $bag = document.createElement('div'); $bag.className = 'bagi'; $bag.setAtt
 function paintBag(){   // 바구니: 든 열매만 그림과 숫자로
   $bag.replaceChildren(...ITEM_KEYS.filter(k => bag[k] > 0).map(k => { const sp = document.createElement('span'), im = new Image(); im.src = ITEMS[k].tex.userData.canvas.toDataURL(); im.alt = ITEMS[k].name; sp.append(im, String(bag[k])); return sp; }));
   if (pzSave.head === 1 && window.HEAD_T) { const sp = document.createElement('span'), im = new Image(); im.src = window.HEAD_T.userData.canvas.toDataURL(); im.alt = '돌 머리'; sp.append(im); $bag.append(sp); }
+  for (const it of (window.PZ_ITEMS || [])) if (it.has()) { const sp = document.createElement('span'), im = new Image(); im.src = it.tex.userData.canvas.toDataURL(); im.alt = it.name; sp.append(im); $bag.append(sp); }
   if (pzSave.lens === 1 && window.LENS_T) { const sp = document.createElement('span'), im = new Image(); im.src = window.LENS_T.userData.canvas.toDataURL(); im.alt = '렌즈'; sp.append(im); $bag.append(sp); }
   if (pzSave.carry > 0 && window.SAIL_ROLL_T) { const sp = document.createElement('span'), im = new Image(); im.src = window.SAIL_ROLL_T.userData.canvas.toDataURL(); im.alt = '돛 두루마리'; im.style.width = '40px'; sp.append(im); if (pzSave.carry > 1) sp.append(String(pzSave.carry)); $bag.append(sp); }
 }
@@ -2791,6 +2793,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     .map(p => { const m = cutout(new THREE.PlaneGeometry(.95, .95), mat(PAD_T, true, { alphaTest:.4 })); m.rotation.x = -Math.PI/2; return { ...p, m }; });
   const pour = cutout(plane(1.1, .9), mat(FLOW_TEX, true, { alphaTest:.3 })); pour.visible = false;
   const roll = cutout(plane(.5, .5), mat(MASK_TEX.ocelot[1]));   // 섬의 돌 위에 놓인 오셀롯 탈
+  window.POND_MEL = MEL; window.FROG_T = FROG_T; window.OTTER_T = OTTER_T;
   const WP = { id:'pond', x:hub.x, y:hub.y, done:3, t:0, last:-1, prog:0, snd:false, wrongT:-9, melT:4, melI:-1, flee:0, thumb:() => FROG_T.image };
   const setPath = on => { for (const s of rg.stones) setT(s.tx, s.ty, on ? FLOOR : WATER); };
   if (pzStep(WP) >= 2) setPath(true);
@@ -2919,7 +2922,8 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     if (st === 1 && s.mask === 'ocelot' && wdist(s.x, s.y, ROOM.x, ROOM.z) < 3.2) setPzStep(TP, 2);   // 그르렁 소리에 박쥐가 놀라 날아감
   });
   // 거울 세 개 (가까이 들여다보는 퍼즐): 빛은 위에서 아래로. 거울은 / 또는 \ 로 돌아감
-  const MIR = [{ c:2, r:2, v:1 }, { c:0, r:2, v:1 }, { c:0, r:4, v:0 }], IDOL_C = { c:4, r:4 };   // v: 0은 /, 1은 \ (처음엔 다 틀림)
+  const MIR = [{ c:2, r:2, v:1 }, { c:0, r:2, v:1 }, { c:0, r:4, v:0 }], IDOL_C = { c:4, r:4 };
+  const mirOn = i => i === 0 || (pzSave.mirSet || 0) >= i;   // 처음엔 거울 하나뿐. 나머지 둘은 동굴과 피아노에서 찾아와 끼움   // v: 0은 /, 1은 \ (처음엔 다 틀림)
   const mirBox = document.createElement('div'); mirBox.hidden = true; mirBox.setAttribute('role', 'dialog'); mirBox.setAttribute('aria-label', '거울 돌리기');
   mirBox.style.cssText = 'position:fixed;inset:0;z-index:20;background:rgba(8,6,4,.78);display:flex;align-items:center;justify-content:center';
   mirBox.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;gap:12px"><canvas id="mirCv" width="300" height="300" style="width:min(80vw,300px);height:auto;border:6px solid #3a2618;border-radius:10px;background:#4a4636;touch-action:none"></canvas><button type="button" id="mirX" aria-label="닫기" style="background:none;border:0;cursor:pointer"></button></div>';
@@ -2930,25 +2934,31 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
   function traceBeam(){ let c = 2, r = -1, dx = 0, dy = 1; const path = [[c, r]];
     for (let n = 0; n < 30; n++) { c += dx; r += dy; path.push([c, r]); if (c < 0 || c > 4 || r < 0 || r > 4) return { path, hit:false };
       if (c === IDOL_C.c && r === IDOL_C.r) return { path, hit:true };
-      const m = MIR.find(q => q.c === c && q.r === r); if (m) { if (m.v === 0) [dx, dy] = [-dy, -dx]; else [dx, dy] = [dy, dx]; } }
+      const m = MIR.find((q, i) => mirOn(i) && q.c === c && q.r === r); if (m) { if (m.v === 0) [dx, dy] = [-dy, -dx]; else [dx, dy] = [dy, dx]; } }
     return { path, hit:false }; }
   function paintMir(){ if (!mg) return; const S = 60; mg.fillStyle = '#4a4636'; mg.fillRect(0, 0, 300, 300);
     mg.strokeStyle = 'rgba(0,0,0,.25)'; for (let i = 1; i < 5; i++) { mg.beginPath(); mg.moveTo(i*S, 0); mg.lineTo(i*S, 300); mg.moveTo(0, i*S); mg.lineTo(300, i*S); mg.stroke(); }
     const { path, hit } = traceBeam(); mg.strokeStyle = 'rgba(255,240,180,.9)'; mg.lineWidth = 8; mg.lineCap = 'round'; mg.beginPath();
     path.forEach(([c, r], i) => { const x = c*S + S/2, y = Math.max(-10, r*S + S/2); i ? mg.lineTo(Math.max(-10, Math.min(310, x)), Math.min(310, y)) : mg.moveTo(x, y); }); mg.stroke();
     mg.fillStyle = hit ? '#ffe680' : '#9a8a5a'; mg.beginPath(); mg.arc(IDOL_C.c*S + S/2, IDOL_C.r*S + S/2, 20, 0, Math.PI*2); mg.fill(); mg.fillStyle = '#3a3220'; for (const dx of [-7, 7]) { mg.beginPath(); mg.arc(IDOL_C.c*S + S/2 + dx, IDOL_C.r*S + S/2 - 4, 3, 0, Math.PI*2); mg.fill(); }
-    for (const m of MIR) { const x = m.c*S + S/2, y = m.r*S + S/2; mg.fillStyle = '#6a5a3a'; mg.beginPath(); mg.arc(x, y, 24, 0, Math.PI*2); mg.fill(); mg.strokeStyle = '#d8e8ec'; mg.lineWidth = 7; mg.beginPath();
+    for (const [mi, m] of MIR.entries()) { const x = m.c*S + S/2, y = m.r*S + S/2; if (!mirOn(mi)) { mg.strokeStyle = '#2a2418'; mg.lineWidth = 3; mg.beginPath(); mg.arc(x, y, 20, 0, Math.PI*2); mg.stroke(); continue; } mg.fillStyle = '#6a5a3a'; mg.beginPath(); mg.arc(x, y, 24, 0, Math.PI*2); mg.fill(); mg.strokeStyle = '#d8e8ec'; mg.lineWidth = 7; mg.beginPath();
       if (m.v === 0) { mg.moveTo(x + 16, y - 16); mg.lineTo(x - 16, y + 16); } else { mg.moveTo(x - 16, y - 16); mg.lineTo(x + 16, y + 16); } mg.stroke(); }
     return hit; }
   $mc.addEventListener('click', e => { const r = $mc.getBoundingClientRect(), c = Math.floor((e.clientX - r.left)/r.width*5), rr = Math.floor((e.clientY - r.top)/r.height*5);
-    const m = MIR.find(q => q.c === c && q.r === rr); if (!m) return; m.v = 1 - m.v; tick(700 + c*80, .08, .07, 'square');
+    const m = MIR.find((q, i) => mirOn(i) && q.c === c && q.r === rr); if (!m) return; m.v = 1 - m.v; tick(700 + c*80, .08, .07, 'square');
     if (paintMir() && pzStep(TP) === 2) { [784, 988, 1175, 1568].forEach((f, i) => setTimeout(() => tick(f, .4, .07), 200 + i*120)); setTimeout(() => { closeMir(); setPzStep(TP, 3); }, 900); } });
+  // 우상 입 안의 돌 시계판: 초승달이 뜬 열두 시를 가리킴 (괘종시계의 답)
+  const paintDial = g => { g.fillStyle = '#2a2418'; g.fillRect(0, 0, 300, 300); g.fillStyle = '#8a8670'; g.beginPath(); g.arc(150, 150, 124, 0, Math.PI*2); g.fill(); g.strokeStyle = '#4e4c40'; g.lineWidth = 6; g.stroke();
+    g.fillStyle = '#5e5c4e'; for (let i = 0; i < 12; i++) { const a = i/12*Math.PI*2; g.beginPath(); g.arc(150 + Math.sin(a)*100, 150 - Math.cos(a)*100, i % 3 ? 4 : 8, 0, Math.PI*2); g.fill(); }
+    g.fillStyle = '#f2e6a0'; g.beginPath(); g.arc(150, 64, 16, 0, Math.PI*2); g.fill(); g.fillStyle = '#8a8670'; g.beginPath(); g.arc(157, 59, 14, 0, Math.PI*2); g.fill();
+    g.strokeStyle = '#3e3c30'; g.lineCap = 'round'; g.lineWidth = 10; g.beginPath(); g.moveTo(150, 150); g.lineTo(150, 82); g.stroke(); g.fillStyle = '#3e3c30'; g.beginPath(); g.arc(150, 150, 10, 0, Math.PI*2); g.fill(); };
   TP.targets = () => {
     const st = pzStep(TP), L = [];
+    if (st >= 4) L.push({ key:'pz-dial', noSeen:true, x:ROOM.x - .9, h:.9, z:ROOM.z, reach:3, act:() => window.PZ_CARD.open(paintDial) });
     L.push({ key:'pz-door', noSeen:true, x:cx + 5.1, h:1.3, h0:.2, h1:2.5, z:C.z, me:door });
-    if (st >= 2) L.push({ key:'pz-mirrors', noSeen:true, x:ROOM.x + .9, h:.5, z:ROOM.z + .9, reach:3, act:() => { paintMir(); mirBox.hidden = false; keys.clear(); joy = null; } });
+    if (st >= 2) L.push({ key:'pz-mirrors', noSeen:true, x:ROOM.x + .9, h:.5, z:ROOM.z + .9, reach:3, act:() => { let put = 0; for (const k of ['mirA', 'mirB']) if (pzSave[k] === 1) { pzSave[k] = 2; pzSave.mirSet = (pzSave.mirSet || 0) + 1; put++; } if (put) { savePz(); paintBag(); pzSfx.chime(.07); } paintMir(); mirBox.hidden = false; keys.clear(); joy = null; P.goto = null; } });
     L.push({ key:'pz-idol', noSeen:true, x:ROOM.x - .9, h:.8, h0:.1, h1:1.4, z:ROOM.z, me:idol, reach:3,
-      act:() => { if (st === 3) { giveMask('capybara'); pickFx.push({ img:MASK_TEX.capybara[1].userData.canvas, x:ROOM.x - .9, z:ROOM.z, t:clock }); pzSfx.chime(.1); setPzStep(TP, 4); } else tick(240, .2, .08, 'triangle'); } });
+      act:() => { if (st === 3) { giveMask('capybara'); pickFx.push({ img:MASK_TEX.capybara[1].userData.canvas, x:ROOM.x - .9, z:ROOM.z, t:clock }); pzSfx.chime(.1); setPzStep(TP, 4); setTimeout(() => window.PZ_CARD && window.PZ_CARD.open(paintDial), 1600); } else tick(240, .2, .08, 'triangle'); } });
     if (st === 1) L.push({ key:'pz-bats', noSeen:true, x:ROOM.x, h:2.4, z:ROOM.z, reach:5, act:() => { POKE_SND.peek(1); for (const b of bats) b.a += .4; } });
     L.push({ key:'pz-statue', noSeen:true, x:STATUE.x, h:.6, h0:0, h1:1.2, z:STATUE.z, me:statue, reach:3,
       act:() => { if (pzSave.head === 1) { pzSave.head = 2; savePz(); paintBag(); pzSfx.chime(.08); setTimeout(() => { for (const k of ITEM_KEYS) bag[k] = Math.min(BAG_MAX, (bag[k] || 0) + 2); saveBag(); paintBag(); pickChime(); }, 1400); } else tick(300, .15, .06, 'triangle'); } });
@@ -2989,6 +2999,195 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     g.addColorStop(0, oc ? 'rgba(10,30,14,.15)' : 'rgba(4,4,8,0)'); g.addColorStop(1, oc ? 'rgba(4,14,8,.82)' : 'rgba(2,2,4,.96)'); ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
   };
   PUZZLES.push(TP);
+}
+
+/* ---- 이어진 작은 퍼즐들 (퍼즐 연결도) ----
+   우체통 엽서 → 오두막 / 나비 공터의 구슬 → 큰부리새 → 태엽 손잡이 → 축음기 → 새우 그물 → 폭포 플라밍고 → 동굴(오셀롯 밤눈) → 거울
+   피아노(개구리 노래) → 거울 / 신전 거울 셋 → 카피바라 탈 + 돌 시계판 / 괘종시계 12시 → 한밤 / 꽃숲 한밤에 카피바라 탈 → 밤의 합창 */
+{
+  // 가까이 보기 카드: 그림 한 장, 누르면 반응
+  const cardV = document.createElement('div'); cardV.hidden = true; cardV.setAttribute('role', 'dialog'); cardV.setAttribute('aria-label', '가까이 보기');
+  cardV.style.cssText = 'position:fixed;inset:0;z-index:20;background:rgba(8,6,4,.78);display:flex;align-items:center;justify-content:center';
+  cardV.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;gap:12px"><canvas width="300" height="300" style="width:min(80vw,300px);height:auto;border:6px solid #3a2618;border-radius:10px;touch-action:none;background:#2a2218"></canvas><button type="button" class="ic" aria-label="닫기"></button></div>';
+  document.body.append(cardV);
+  const cardC = cardV.querySelector('canvas'), cg = cardC.getContext('2d'), cardX = cardV.querySelector('button'); cardX.innerHTML = ICON(IC.close);
+  let cardPaint = null, cardTap = null;
+  const closeCard = () => { cardV.hidden = true; cardTap = null; cv.focus(); };
+  cardX.addEventListener('click', closeCard); cardV.addEventListener('click', e => { if (e.target === cardV) closeCard(); });
+  cardC.addEventListener('click', e => { if (!cardTap) return; const r = cardC.getBoundingClientRect(); cardTap((e.clientX - r.left)/r.width*300, (e.clientY - r.top)/r.height*300); });
+  const CARD = { open(paint, tap){ cardPaint = paint; cardTap = tap || null; cardV.hidden = false; keys.clear(); joy = null; P.goto = null; CARD.paint(); }, paint(){ if (cg && cardPaint) { cg.save(); cg.clearRect(0, 0, 300, 300); cardPaint(cg); cg.restore(); } }, close:closeCard };
+  window.PZ_CARD = CARD;
+
+  // 들고 다니는 작은 물건 (바구니에 그림으로)
+  const itemT = paint => { const t = ctex(64, 64, (g) => { g.lineJoin = 'round'; g.strokeStyle = RG.line; g.lineWidth = 2; paint(g); }); t.userData.keep = true; return t; };
+  const BEAD_T = itemT(g => { const r = g.createRadialGradient(28, 26, 2, 32, 32, 16); r.addColorStop(0, '#cfe8ff'); r.addColorStop(.5, '#3e7ac8'); r.addColorStop(1, '#1c3a78'); g.fillStyle = r; g.beginPath(); g.arc(32, 32, 15, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = '#fff'; g.beginPath(); g.arc(27, 26, 3.5, 0, Math.PI*2); g.fill(); });
+  const CRANK_T = itemT(g => { g.strokeStyle = '#8a6a2a'; g.lineWidth = 6; g.lineCap = 'round'; g.beginPath(); g.moveTo(12, 48); g.lineTo(36, 24); g.lineTo(52, 32); g.stroke(); g.fillStyle = '#5a3a1a'; g.beginPath(); g.ellipse(52, 34, 6, 9, .4, 0, Math.PI*2); g.fill(); g.strokeStyle = RG.line; g.lineWidth = 2; g.stroke(); g.fillStyle = '#c8a24a'; g.beginPath(); g.arc(12, 48, 5, 0, Math.PI*2); g.fill(); g.stroke(); });
+  const NET_T = itemT(g => { g.strokeStyle = '#7a5a30'; g.lineWidth = 4; g.beginPath(); g.moveTo(8, 58); g.lineTo(30, 30); g.stroke(); g.fillStyle = 'rgba(230,220,190,.35)'; g.strokeStyle = '#e8dcc0'; g.lineWidth = 2; g.beginPath(); g.ellipse(42, 20, 16, 12, -.5, 0, Math.PI*2); g.fill(); g.stroke();
+    g.lineWidth = 1; for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(34 + i*6, 8); g.lineTo(42 + i*4, 32); g.stroke(); } });
+  const SHRIMP_T = itemT(g => { g.fillStyle = '#f08a6a'; g.beginPath(); g.moveTo(14, 40); g.quadraticCurveTo(20, 14, 46, 18); g.quadraticCurveTo(56, 26, 48, 34); g.quadraticCurveTo(30, 30, 24, 46); g.closePath(); g.fill(); g.stroke(); g.strokeStyle = '#c85a3a'; g.lineWidth = 1.5; for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(26 + i*6, 22 + i); g.lineTo(24 + i*5, 34); g.stroke(); } g.fillStyle = '#111'; g.beginPath(); g.arc(46, 22, 2, 0, Math.PI*2); g.fill(); });
+  const SHARD_T = itemT(g => { g.fillStyle = '#c8d8dc'; g.strokeStyle = '#8a6a2a'; g.lineWidth = 3; g.beginPath(); g.ellipse(32, 32, 14, 20, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 2; g.beginPath(); g.moveTo(26, 20); g.lineTo(36, 36); g.stroke(); });
+  window.PZ_ITEMS = [
+    { tex:BEAD_T, name:'구슬', has:() => pzSave.bead === 1 }, { tex:CRANK_T, name:'태엽 손잡이', has:() => pzSave.crank === 1 },
+    { tex:NET_T, name:'새우 그물', has:() => pzSave.net === 1 }, { tex:SHRIMP_T, name:'새우', has:() => pzSave.shrimp === 1 },
+    { tex:SHARD_T, name:'거울', has:() => pzSave.mirA === 1 }, { tex:SHARD_T, name:'거울', has:() => pzSave.mirB === 1 }];
+  paintBag();
+  const take = (k, tex, x, z) => { pzSave[k] = 1; savePz(); paintBag(); pickFx.push({ img:tex.userData.canvas, x, z, t:clock }); pickChime(); };
+  const want = (tex, x, h, z) => { if (!wants.some(w => w.img === tex.userData.canvas)) wants.push({ img:tex.userData.canvas, x, h, z, until:clock + 3 }); pzSfx.hm(.06); };
+  const face = (me, x, z, camX, camZ) => { me.rotation.y = Math.atan2(camX - x, camZ - z); };
+  const place = (me, p, y, camX, camZ) => { const [x, z] = wrapNear(p.x, p.z, camX, camZ); me.position.set(x, y, z); face(me, x, z, camX, camZ); };
+  const spot = k => { const s = STORY_SPOTS.find(q => q.key === k); return { x:s.x, z:s.y }; };
+  const noteF = n => 392*2**(SING_SCALE[n]/12);
+  const MEL = window.POND_MEL || [4, 3, 2, 0, 1];
+  const KEY_COL = ['#f2d84a', '#f2a93b', '#e8706a', '#a0d0a0', '#9fb8e8'];   // 노래 단추와 같은 색
+
+  /* 1. 우체통 엽서: 큰 나무 위 오두막과 등불, 북쪽을 가리키는 바람꽃 */
+  { const at = spot('mailbox'), LT = { id:'letter', x:at.x, y:at.z, done:1, thumb:() => STORIES.find(q => q.key === 'mailbox').me.material.map.image };
+    let postArt = null; onArt('postcard', im => { postArt = im; });
+    const paintPost = g => { if (postArt) { g.drawImage(postArt, 0, 0, 300, 300); return; }
+      g.fillStyle = '#efe4c8'; g.fillRect(10, 30, 280, 240); g.strokeStyle = '#8a6a3a'; g.lineWidth = 3; g.strokeRect(10, 30, 280, 240);
+      g.fillStyle = '#3e5a3a'; for (let i = 0; i < 9; i++) { g.beginPath(); g.ellipse(30 + i*30, 230, 26, 20, 0, 0, Math.PI*2); g.fill(); }
+      g.fillStyle = '#5a3c22'; g.fillRect(140, 90, 20, 150); g.fillStyle = '#2f4a2e'; g.beginPath(); g.ellipse(150, 90, 70, 34, 0, 0, Math.PI*2); g.fill();
+      g.fillStyle = '#8a6438'; g.fillRect(118, 110, 64, 8); g.fillStyle = '#c9a060'; g.beginPath(); g.moveTo(126, 110); g.lineTo(150, 88); g.lineTo(174, 110); g.closePath(); g.fill(); g.stroke();
+      const r = g.createRadialGradient(150, 102, 2, 150, 102, 26); r.addColorStop(0, 'rgba(255,220,120,.95)'); r.addColorStop(1, 'rgba(255,220,120,0)'); g.fillStyle = r; g.beginPath(); g.arc(150, 102, 26, 0, Math.PI*2); g.fill();
+      g.save(); g.translate(250, 72); g.fillStyle = '#b8402a'; g.beginPath(); g.moveTo(0, -24); g.lineTo(6, 0); g.lineTo(-6, 0); g.closePath(); g.fill(); g.fillStyle = '#6a5a3a'; g.beginPath(); g.moveTo(0, 24); g.lineTo(6, 0); g.lineTo(-6, 0); g.closePath(); g.fill(); g.beginPath(); g.moveTo(-18, 0); g.lineTo(0, 5); g.lineTo(0, -5); g.closePath(); g.fill(); g.beginPath(); g.moveTo(18, 0); g.lineTo(0, 5); g.lineTo(0, -5); g.closePath(); g.fill(); g.restore();
+      g.strokeStyle = '#b8402a'; g.lineWidth = 2; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(40, 262); g.quadraticCurveTo(90, 200, 140, 240); g.stroke(); g.setLineDash([]); };
+    LT.targets = () => [{ key:'pz-letter', noSeen:true, x:at.x, h:.95, z:at.z, reach:3, act:() => { pzSfx.rope(.03); CARD.open(paintPost); setPzStep(LT, 1); } }];
+    LT.update = () => {}; PUZZLES.push(LT); }
+
+  /* 2. 노란 나비 공터: 가만히 서 있으면 나비가 내려앉고, 그 자리에서 파란 구슬 */
+  { const bs = SITE.butterflies, B = { x:wrapX(bs.cx + 1.2), z:wrapY(bs.cy + .6) }, BD = { id:'butterfly', x:bs.cx, y:bs.cy, done:2, still:0, thumb:() => BEAD_T.image };
+    const FLY_T = ctex(48, 32, (g) => { g.fillStyle = '#f2d84a'; g.strokeStyle = RG.line; g.lineWidth = 1.5; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(24 + s*10, 12, 10, 9, s*.4, 0, Math.PI*2); g.fill(); g.stroke(); g.beginPath(); g.ellipse(24 + s*8, 24, 6, 6, s*.3, 0, Math.PI*2); g.fill(); g.stroke(); } g.fillStyle = '#3a2410'; g.fillRect(23, 6, 2, 22); });
+    const flies = Array.from({ length:5 }, (_, i) => ({ m:cutout(plane(.22, .15, false), mat(FLY_T)), a:i*1.26 }));
+    const bead = cutout(plane(.18, .18), mat(BEAD_T)); onArt('bead', im => swapTex(BEAD_T, im));
+    BD.targets = () => pzStep(BD) === 1 ? [{ key:'pz-bead', noSeen:true, x:B.x, h:.1, z:B.z, reach:2.5, act:() => { take('bead', BEAD_T, B.x, B.z); setPzStep(BD, 2); } }] : [];
+    BD.update = (dt, camX, camZ) => { const st = pzStep(BD), d = wdist(P.x, P.y, bs.cx, bs.cy);
+      if (st === 0) { BD.still = d < 3.2 && !P.moving ? BD.still + dt : Math.max(0, BD.still - dt*2); if (BD.still > 4.5) setPzStep(BD, 1); }
+      const land = st === 0 ? Math.min(1, BD.still/4.5) : st === 1 ? 1 : 0;
+      flies.forEach((f, i) => { f.a += dt*(1.2 + i*.2); const r = (1 - land)*(1.4 + i*.2) + land*.18, y = (1 - land)*(1.3 + Math.sin(f.a*2)*.3) + land*.16;
+        const [x, z] = wrapNear(B.x + Math.cos(f.a)*r, B.z + Math.sin(f.a)*r, camX, camZ); f.m.position.set(x, y, z); f.m.lookAt(camera.position); f.m.scale.set(1, .6 + Math.abs(Math.sin(clock*(land > .9 ? 3 : 14) + i))*.4, 1); f.m.visible = st < 2 && d < 16; });
+      bead.visible = st === 1; if (bead.visible) place(bead, B, .02, camX, camZ); };
+    PUZZLES.push(BD); }
+
+  /* 3. 큰부리새 둥지: 오두막 발판 곁 가지. 구슬을 주면 부리로 받고, 둥지에서 태엽 손잡이가 땅으로 떨어짐 */
+  { const hub = REGIONS[0].hub, DECK = 7, NEST = { x:wrapX(hub.x - 1.9), z:wrapY(hub.y + .6) }, DROP = { x:wrapX(hub.x - 2.7), z:wrapY(hub.y + 1.4) };
+    const TC = { id:'toucan', x:NEST.x, y:NEST.z, done:2, gotT:-9, thumb:() => TOUCAN_TEX.image };
+    const NEST_T = ctex(128, 64, (g) => { g.fillStyle = '#6b4a2a'; g.strokeStyle = RG.line; g.lineWidth = 2; g.beginPath(); g.ellipse(64, 40, 56, 20, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.strokeStyle = '#a07a48'; g.lineWidth = 2.5; for (let i = 0; i < 14; i++) { g.beginPath(); g.moveTo(12 + i*7, 30 + (i % 3)*6); g.lineTo(28 + i*7, 50 - (i % 2)*8); g.stroke(); }
+      g.fillStyle = '#e8d24a'; g.beginPath(); g.arc(40, 30, 4, 0, Math.PI*2); g.fill(); g.fillStyle = '#c8d8dc'; g.beginPath(); g.arc(86, 28, 4, 0, Math.PI*2); g.fill(); });
+    const nest = cutout(plane(.9, .45), mat(NEST_T)), bird = cutout(plane(.7, .5), mat(TOUCAN_TEX)), crank = cutout(plane(.34, .34), mat(CRANK_T));
+    const branch = cutout(plane(2.4, .22, false), mat(LOG_TEX)); onArt('nest', im => swapTex(NEST_T, im)); onArt('crank', im => swapTex(CRANK_T, im));
+    const high = () => (P.upH || 0) > 4;
+    TC.targets = () => { const st = pzStep(TC), L = [];
+      L.push({ key:'pz-toucan', noSeen:true, x:NEST.x, h:DECK + 1.1, z:NEST.z, reach:3, me:bird, act:() => {
+        if (!high()) { POKE_SND.toucan(1); return; }
+        if (st === 0 && pzSave.bead === 1) { pzSave.bead = 2; savePz(); paintBag(); POKE_SND.toucan(1); TC.gotT = clock; setTimeout(() => { tick(500, .3, .06, 'triangle'); setPzStep(TC, 1); }, 900); }
+        else if (st === 0) want(BEAD_T, NEST.x, DECK + 1.7, NEST.z); else POKE_SND.toucan(1); } });
+      if (st === 1) L.push({ key:'pz-crank', noSeen:true, x:DROP.x, h:.15, z:DROP.z, reach:2.5, act:() => { if ((P.upH || 0) > 1) return; take('crank', CRANK_T, DROP.x, DROP.z); setPzStep(TC, 2); } });
+      return L; };
+    TC.update = (dt, camX, camZ) => { const st = pzStep(TC), g = clock - TC.gotT;
+      place(nest, NEST, DECK + .7, camX, camZ); { const [x, z] = wrapNear(NEST.x + .9, NEST.z, camX, camZ); branch.position.set(x, DECK + .72, z); face(branch, x, z, camX, camZ); }
+      place(bird, NEST, DECK + .95 + (g < 1 ? Math.sin(g*Math.PI)*.25 : 0), camX, camZ); bird.rotation.z = g < 1.5 ? Math.sin(g*12)*.15 : Math.sin(clock*.7)*.05;
+      crank.visible = st === 1; if (crank.visible) { const f = Math.min(1, (clock - (TC.dropT || (TC.dropT = clock)))/.9); const [x, z] = wrapNear(NEST.x + (DROP.x - NEST.x)*f, NEST.z + (DROP.z - NEST.z)*f, camX, camZ); crank.position.set(x, (DECK + .7)*(1 - f*f) + .02, z); face(crank, x, z, camX, camZ); if (f >= 1 && !TC.thud) { TC.thud = true; pzSfx.thump(.12); } } };
+    PUZZLES.push(TC); }
+
+  /* 4. 축음기: 태엽 손잡이를 끼우고 돌리면 개구리 노래를 천천히 틀어 줌. 나팔 아래 서랍에서 새우 그물 */
+  { const at = spot('gramophone'), GR = { id:'gramo', x:at.x, y:at.z, done:2, playT:-99, thumb:() => CRANK_T.image }, NETP = { x:wrapX(at.x + .7), z:wrapY(at.z + .4) };
+    const netM = cutout(plane(.5, .5), mat(NET_T)), handle = cutout(plane(.3, .3, false), mat(CRANK_T)); onArt('net', im => swapTex(NET_T, im));
+    const play = () => { GR.playT = clock; MEL.forEach((n, i) => setTimeout(() => pianoNote(noteF(n)/2, .12*Math.max(.2, 1 - wdist(P.x, P.y, at.x, at.z)/14)), 600 + i*1100)); };
+    GR.targets = () => { const st = pzStep(GR), L = [{ key:'pz-gramo', noSeen:true, x:at.x, h:.8, z:at.z, reach:3, act:() => {
+        if (st === 0 && pzSave.crank === 1) { pzSave.crank = 2; savePz(); paintBag(); tick(300, .4, .06, 'square'); play(); setTimeout(() => setPzStep(GR, 1), 6400); }
+        else if (st === 0) want(CRANK_T, at.x, 1.6, at.z); else play(); } }];
+      if (st === 1) L.push({ key:'pz-net', noSeen:true, x:NETP.x, h:.3, z:NETP.z, reach:2.5, act:() => { take('net', NET_T, NETP.x, NETP.z); setPzStep(GR, 2); } });
+      return L; };
+    GR.update = (dt, camX, camZ) => { const st = pzStep(GR); netM.visible = st === 1; if (netM.visible) place(netM, NETP, 0, camX, camZ);
+      handle.visible = st >= 1 || pzSave.crank === 2; if (handle.visible) { const [x, z] = wrapNear(at.x + .35, at.z, camX, camZ); handle.position.set(x, .55, z); face(handle, x, z, camX, camZ); handle.rotation.z = clock - GR.playT < 6 ? clock*4 : 0; } };
+    PUZZLES.push(GR); }
+
+  /* 5. 폭포: 플라밍고 셋이 폭포 뒤 동굴 입구를 막고 섬. 그물로 웅덩이에서 새우를 건져 던지면 비킴.
+        동굴 안은 깜깜. 오셀롯 밤눈으로 보면 바위 틈의 거울이 보임 */
+  { const WF = { id:'cave', x:WATERFALL.x, y:WATERFALL.y, done:2, movedT:-9, thumb:() => FLAMINGO_TEX.image }, POOL = { x:WATERFALL.x, z:WATERFALL.y - 1 }, MOUTH = { x:WATERFALL.x, z:WATERFALL.y - 2.9 };
+    const flam = [-.7, 0, .7].map(() => cutout(plane(.5, 1.0), mat(FLAMINGO_TEX)));
+    const CAVE_T = ctex(128, 96, (g) => { g.fillStyle = '#4a5246'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.beginPath(); g.ellipse(64, 70, 62, 40, 0, Math.PI, 0); g.lineTo(126, 96); g.lineTo(2, 96); g.closePath(); g.fill(); g.stroke(); g.fillStyle = '#0c0e0a'; g.beginPath(); g.ellipse(64, 96, 40, 48, 0, Math.PI, 0); g.fill(); });
+    const mouth = cutout(plane(1.4, 1.05), mat(CAVE_T)); onArt('cave', im => swapTex(CAVE_T, im));
+    let caveArt = null; onArt('cave_inside', im => { caveArt = im; });
+    const SH = { x:205, y:196 };
+    const paintCave = g => { const oc = pzSave.mask === 'ocelot';
+      g.fillStyle = '#050605'; g.fillRect(0, 0, 300, 300);
+      if (!oc) { g.fillStyle = 'rgba(120,140,150,.5)'; for (const [x, y] of [[80, 60], [190, 40], [240, 120]]) { g.beginPath(); g.ellipse(x, y + (clock*30 % 40), 1.5, 3, 0, 0, Math.PI*2); g.fill(); } return; }
+      if (caveArt) g.drawImage(caveArt, 0, 0, 300, 300);
+      else { g.fillStyle = '#1e2a22'; g.beginPath(); g.moveTo(0, 300); g.lineTo(0, 120); g.quadraticCurveTo(60, 40, 150, 50); g.quadraticCurveTo(250, 40, 300, 130); g.lineTo(300, 300); g.closePath(); g.fill();
+        g.fillStyle = '#2e3a30'; for (const [x, y, rx, ry] of [[60, 250, 70, 40], [230, 240, 80, 46], [150, 280, 90, 30]]) { g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, Math.PI*2); g.fill(); }
+        g.fillStyle = 'rgba(160,220,170,.18)'; g.fillRect(0, 0, 300, 300); }
+      if (pzSave.mirA !== 1 && pzSave.mirA !== 2) { g.drawImage(SHARD_T.userData.canvas, SH.x - 22, SH.y - 22, 44, 44); g.fillStyle = 'rgba(255,255,255,.5)'; g.beginPath(); g.arc(SH.x - 6, SH.y - 10, 3, 0, Math.PI*2); g.fill(); } };
+    const tapCave = (x, y) => { if (pzSave.mask !== 'ocelot' || pzSave.mirA) return; if (Math.hypot(x - SH.x, y - SH.y) < 34) { pzSave.mirA = 1; savePz(); paintBag(); pickChime(); CARD.paint(); setPzStep(WF, 2); } };
+    WF.targets = () => { const st = pzStep(WF), L = [];
+      if (pzSave.net === 1 && !pzSave.shrimp) L.push({ key:'pz-pool', noSeen:true, x:POOL.x + 1.2, h:.05, z:POOL.z, reach:3, act:() => { tick(600, .2, .05); take('shrimp', SHRIMP_T, POOL.x + 1.2, POOL.z); } });
+      if (st === 0) L.push({ key:'pz-flamingo', noSeen:true, x:POOL.x, h:.8, h0:.2, h1:1.0, z:POOL.z + 1.1, reach:3.5, me:flam[1], act:() => {
+        if (pzSave.shrimp === 1) { pzSave.shrimp = 2; savePz(); paintBag(); tick(900, .15, .05); WF.movedT = clock; setPzStep(WF, 1); } else want(SHRIMP_T, POOL.x, 1.5, POOL.z + 1.1); } });
+      if (st >= 1) L.push({ key:'pz-cave', noSeen:true, x:MOUTH.x, h:.5, z:MOUTH.z, reach:4, act:() => { tick(160, .8, .05); CARD.open(paintCave, tapCave); } });
+      return L; };
+    WF.update = (dt, camX, camZ) => { const st = pzStep(WF), m = st >= 1 ? Math.min(1, (clock - WF.movedT)/3) : 0, mm = WF.movedT < 0 && st >= 1 ? 1 : m;
+      flam.forEach((f, i) => { const p = { x:POOL.x + (i - 1)*.7 + mm*(3.2 + i*.5), z:POOL.z + 1.1 + mm*.8 }; place(f, p, Math.abs(Math.sin(clock*6 + i))*.04*(m > 0 && m < 1 ? 1 : 0), camX, camZ); if (i === 1 && st === 0) f.scale.set(1, 1 + Math.sin(clock*.8)*.02, 1); });
+      mouth.visible = st >= 1 || wdist(P.x, P.y, MOUTH.x, MOUTH.z) < 30; place(mouth, MOUTH, 0, camX, camZ); mouth.material.opacity = 1; };
+    PUZZLES.push(WF); }
+
+  /* 6. 이끼 덮인 피아노: 다섯 건반(노래 단추와 같은 색). 개구리 노래를 치면 뚜껑이 열리고 거울 */
+  { const at = spot('piano'), PN = { id:'piano', x:at.x, y:at.z, done:1, seq:[], thumb:() => STORIES.find(q => q.key === 'piano').me.material.map.image };
+    const KX = k => 40 + k*48, open = () => PN.seq.join() === MEL.join();
+    const paintKeys = g => { g.fillStyle = '#3a2618'; g.fillRect(0, 0, 300, 300);
+      g.fillStyle = open() || pzSave.mirB ? '#1a120a' : '#5a3c22'; g.fillRect(20, 30, 260, 110); g.strokeStyle = '#1a120a'; g.lineWidth = 3; g.strokeRect(20, 30, 260, 110);
+      if (open() && !pzSave.mirB) g.drawImage(SHARD_T.userData.canvas, 128, 52, 44, 66);
+      if (!open() && !pzSave.mirB) { g.fillStyle = 'rgba(90,120,70,.8)'; for (let i = 0; i < 9; i++) { g.beginPath(); g.ellipse(40 + i*28, 140, 18, 8, 0, 0, Math.PI*2); g.fill(); } }
+      for (let k = 0; k < 5; k++) { const lit = PN.litK === k && clock - PN.litT < .3; g.fillStyle = lit ? '#fff6c8' : '#efe6d2'; g.fillRect(KX(k) - 20, 170, 40, 110); g.strokeStyle = '#3a2618'; g.strokeRect(KX(k) - 20, 170, 40, 110); g.fillStyle = KEY_COL[k]; g.beginPath(); g.arc(KX(k), 256, 8, 0, Math.PI*2); g.fill(); } };
+    const tapKeys = (x, y) => {
+      if (y > 170) { const k = Math.floor((x - 20)/48); if (k < 0 || k > 4) return; pianoNote(noteF(k), .16); PN.litK = k; PN.litT = clock; if (!open()) { PN.seq.push(k); PN.seq = PN.seq.slice(-5); if (open()) { [0, 1, 2].forEach(i => setTimeout(() => tick(200 + i*40, .3, .05, 'square'), 400 + i*150)); } } CARD.paint(); setTimeout(() => CARD.paint(), 320); return; }
+      if (open() && !pzSave.mirB && y > 40 && y < 140 && Math.abs(x - 150) < 40) { pzSave.mirB = 1; savePz(); paintBag(); pickChime(); setPzStep(PN, 1); CARD.paint(); } };
+    PN.targets = () => [{ key:'pz-piano', noSeen:true, x:at.x, h:.6, z:at.z, reach:3, act:() => { if (pzSave.mirB) PN.seq = MEL.slice(); CARD.open(paintKeys, tapKeys); } }];
+    PN.update = () => {}; PUZZLES.push(PN); }
+
+  /* 7. 멈춘 괘종시계: 시곗바늘을 신전 돌 시계판의 시각(달이 뜬 열두 시)에 맞추면 숲에 한밤이 옴 */
+  { const at = spot('clock'), CK = { id:'clock', x:at.x, y:at.z, done:1, h:3, thumb:() => STORIES.find(q => q.key === 'clock').me.material.map.image };
+    const paintClock = g => { g.fillStyle = '#3a2618'; g.fillRect(0, 0, 300, 300); g.fillStyle = '#efe4c8'; g.beginPath(); g.arc(150, 150, 120, 0, Math.PI*2); g.fill(); g.strokeStyle = '#5a3c22'; g.lineWidth = 8; g.stroke();
+      g.fillStyle = '#3a2618'; for (let i = 0; i < 12; i++) { const a = i/12*Math.PI*2; g.beginPath(); g.arc(150 + Math.sin(a)*100, 150 - Math.cos(a)*100, i % 3 ? 4 : 7, 0, Math.PI*2); g.fill(); }
+      g.fillStyle = '#f2e6a0'; g.beginPath(); g.arc(150, 70, 14, 0, Math.PI*2); g.fill(); g.fillStyle = '#efe4c8'; g.beginPath(); g.arc(156, 66, 12, 0, Math.PI*2); g.fill();   // 열두 시 자리의 초승달
+      const ha = CK.h/12*Math.PI*2, ma = CK.moved ? 0 : 10/60*Math.PI*2; g.strokeStyle = '#1a120a'; g.lineCap = 'round';
+      g.lineWidth = 9; g.beginPath(); g.moveTo(150, 150); g.lineTo(150 + Math.sin(ha)*62, 150 - Math.cos(ha)*62); g.stroke();
+      g.lineWidth = 5; g.beginPath(); g.moveTo(150, 150); g.lineTo(150 + Math.sin(ma)*92, 150 - Math.cos(ma)*92); g.stroke(); g.fillStyle = '#1a120a'; g.beginPath(); g.arc(150, 150, 8, 0, Math.PI*2); g.fill(); };
+    const midnight = () => { pzSave.nightUntil = Date.now() + 6*60*1000; savePz(); for (let i = 0; i < 12; i++) setTimeout(() => pianoNote(196, .14), 500 + i*700); setTimeout(() => { CARD.close(); setPzStep(CK, 1); }, 1800); };
+    const tapClock = x => { CK.moved = true; CK.h = (CK.h + (x > 150 ? 1 : 11)) % 12; tick(1200, .06, .06, 'square'); CARD.paint(); if (CK.h === 0) midnight(); };
+    CK.targets = () => [{ key:'pz-clock', noSeen:true, x:at.x, h:1.2, z:at.z, reach:3, act:() => { if (pzStep(CK) >= 1) { CK.h = 0; CK.moved = true; } CARD.open(paintClock, tapClock); } }];
+    CK.update = () => {}; PUZZLES.push(CK); }
+
+  /* 8. 꽃숲 밤의 합창: 한밤에 카피바라 탈을 쓰고 공터에 서면, 도와준 동물들이 하나씩 모여 둥글게 섬.
+        다 모이면 노래를 다섯 번 부르면 모두 따라 부르며 꽃이 빛나고 끝맺음 그림 */
+  { const hub = REGIONS[1].hub, C = { x:hub.x, z:hub.y }, CH = { id:'chorus', x:hub.x, y:hub.y, done:2, t0:-9, sung:0, endT:-9, thumb:() => STATUE_T.image };
+    const STATUE_T = ctex(128, 112, (g) => { g.fillStyle = '#8a8670'; g.strokeStyle = RG.line; g.lineWidth = 3; g.beginPath(); g.ellipse(64, 76, 52, 30, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.beginPath(); g.roundRect ? g.roundRect(70, 30, 46, 40, 14) : g.rect(70, 30, 46, 40); g.fill(); g.stroke();
+      g.fillStyle = '#3e3c30'; g.beginPath(); g.arc(92, 42, 4, 0, Math.PI*2); g.fill(); g.beginPath(); g.arc(80, 30, 6, 0, Math.PI*2); g.fill(); for (let i = 0; i < 7; i++) { g.fillStyle = ['#e8706a', '#f2d84a', '#f6f0e0'][i % 3]; g.beginPath(); g.arc(70 + i*7, 26 - Math.sin(i/6*Math.PI)*6, 5, 0, Math.PI*2); g.fill(); } });
+    const statue = cutout(plane(1.4, 1.2), mat(STATUE_T)); onArt('capy_statue', im => swapTex(STATUE_T, im));
+    const ANI = [[SLOTH_TEX, .6, .68], [JESTERS_TEX, 1.1, .7], [TOUCAN_TEX, .6, .43], [window.OTTER_T || TOUCAN_TEX, .45, .45], [window.FROG_T || TOUCAN_TEX, .45, .34], [FLAMINGO_TEX, .5, 1.0]].map(([t, w, h], i) => ({ m:cutout(plane(w, h), mat(t)), a:-Math.PI/2 + (i - 2.5)*.62, sing:-9 }));
+    const glows = Array.from({ length:24 }, (_, i) => ({ m:cutout(plane(.3, .3, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0, color:'#fff2b0' })), a:i*.26, r:1.5 + (i % 5)*.6 }));
+    const night = () => dayState().dark > .62;
+    let endArt = null; onArt('ending', im => { endArt = im; });
+    const paintEnd = g => { if (endArt) { g.drawImage(endArt, 0, 0, 300, 300); return; }
+      const bg = g.createLinearGradient(0, 0, 0, 300); bg.addColorStop(0, '#141a38'); bg.addColorStop(1, '#22382a'); g.fillStyle = bg; g.fillRect(0, 0, 300, 300);
+      g.fillStyle = '#fff3c4'; g.beginPath(); g.arc(150, 70, 30, 0, Math.PI*2); g.fill();
+      for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(255,240,170,${.3 + (i % 4)*.15})`; g.beginPath(); g.arc((i*67) % 300, 100 + (i*41) % 140, 2, 0, Math.PI*2); g.fill(); }
+      ANI.forEach((a, i) => { const im = a.m.material.map.image, x = 40 + i*44, y = 220 - Math.abs(i - 2.5)*10; try { const s = 40/Math.max(im.width, im.height); g.drawImage(im, x - im.width*s/2, y - im.height*s, im.width*s, im.height*s); } catch (e) {} });
+      try { g.drawImage(STATUE_T.image || STATUE_T.userData.canvas, 110, 210, 80, 70); } catch (e) {}
+      for (let i = 0; i < 14; i++) leafShape(g, (i*23) % 300, 300, 40 + (i % 3)*10, -Math.PI/2 + (i % 5 - 2)*.3, COLORS.leaves[i % 4], .3); };
+    SING_HOOKS.push(s => { if (pzStep(CH) !== 1 || clock - CH.t0 < ANI.length*1.4 || wdist(s.x, s.y, C.x, C.z) > 6) return;
+      const a = ANI[CH.sung % ANI.length]; a.sing = clock; setTimeout(() => voice(null, s.n, .1), 260); CH.sung++;
+      if (CH.sung >= 5) { CH.endT = clock; setTimeout(() => { MEL.forEach((n, i) => setTimeout(() => { ANI.forEach(q => q.sing = clock); pianoNote(noteF(n), .14); voice('capybara', n, .1); }, i*650)); }, 600); setTimeout(() => { setPzStep(CH, 2); CARD.open(paintEnd); }, 4800); } });
+    CH.targets = () => [{ key:'pz-capystatue', noSeen:true, x:C.x, h:.6, z:C.z, reach:3, me:statue, act:() => { if (pzStep(CH) >= 2) CARD.open(paintEnd); else voice('capybara', 2, .1); } }];
+    CH.update = (dt, camX, camZ) => { const st = pzStep(CH), d = wdist(P.x, P.y, C.x, C.z);
+      if (st === 0 && night() && pzSave.mask === 'capybara' && d < 4.5) { CH.t0 = clock; CH.sung = 0; setPzStep(CH, 1); }
+      if (st === 1 && CH.t0 < 0) CH.t0 = clock - 99;   // 다시 들어온 경우 바로 모여 있음
+      place(statue, C, 0, camX, camZ);
+      ANI.forEach((a, i) => { const on = st >= 1 && clock - CH.t0 > i*1.4, k = on ? Math.min(1, (clock - CH.t0 - i*1.4)/1.2) : 0, r = 2.6 + (1 - k)*6, p = { x:C.x + Math.cos(a.a)*r, z:C.z + Math.sin(a.a)*r };
+        a.m.visible = on && d < 30; if (!a.m.visible) return; const hop = clock - a.sing < .5 ? Math.sin((clock - a.sing)/.5*Math.PI)*.2 : 0; place(a.m, p, hop + (k < 1 ? Math.abs(Math.sin(clock*8))*.06 : 0), camX, camZ);
+        if (on && k > .99 && !a.came) { a.came = true; voice(null, i % 5, .06); } });
+      const glow = st >= 2 ? 1 : st === 1 && CH.endT > 0 ? Math.min(1, (clock - CH.endT)/3) : 0;
+      glows.forEach((q, i) => { q.m.visible = glow > 0; if (!q.m.visible) return; q.a += dt*.2; const [x, z] = wrapNear(C.x + Math.cos(q.a)*q.r, C.z + Math.sin(q.a)*q.r, camX, camZ); q.m.position.set(x, .3 + (i % 4)*.35 + Math.sin(clock + i)*.15, z); q.m.material.opacity = glow*(.5 + Math.sin(clock*2 + i)*.3); }); };
+    PUZZLES.push(CH); }
 }
 
 /* ---- 범선에 돛 걸기: 두루마리를 들고 범선을 누르면 돛이 펼쳐져 올라감 ---- */
