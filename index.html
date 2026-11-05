@@ -766,13 +766,19 @@ function mat(tex, tint = true, extra = {}){
 }
 /* 판이 늘 카메라 쪽으로 몸을 돌림(360도 회전 가능) + 바람에 윗부분이 흔들림. 그래픽 카드에서 계산 */
 const U = { uTime:{ value:0 }, uWind:{ value:.03 }, uCurve:{ value:.003 }, uSize:{ value:new THREE.Vector2(W, H) }, uCull:{ value:20 } };
-function billboard(m, stiff = 0){   // stiff: 큰 나무는 줄기가 휘지 않고 우듬지만 살짝
-  if (stiff) m.customProgramCacheKey = () => 'bb-stiff';
+function billboard(m, stiff = 0, fade = 0){   // stiff: 큰 나무는 줄기가 휘지 않고 우듬지만 살짝. fade: 판마다 비쳐 보이게 할 수 있음(카메라와 나 사이)
+  if (stiff || fade) m.customProgramCacheKey = () => 'bb' + (stiff ? '-stiff' : '') + (fade ? '-fade' : '');
   m.onBeforeCompile = sh => {
     if (stiff) sh.vertexShader = '#define STIFF\n' + sh.vertexShader;
+    if (fade) { sh.vertexShader = '#define FADE\nattribute float aFade;\n' + sh.vertexShader; sh.fragmentShader = '#define FADE\n' + sh.fragmentShader; }
     Object.assign(sh.uniforms, U);
-    sh.vertexShader = 'uniform float uTime;\nuniform float uWind;\nuniform float uCurve;\nuniform vec2 uSize;\nuniform float uCull;\nvarying float vCalm;\n' + sh.vertexShader.replace('#include <project_vertex>', `
+    sh.vertexShader = 'uniform float uTime;\nuniform float uWind;\nuniform float uCurve;\nuniform vec2 uSize;\nuniform float uCull;\nvarying float vCalm;\nvarying float vFade;\n' + sh.vertexShader.replace('#include <project_vertex>', `
       vec4 mvPosition = vec4( transformed, 1.0 );
+      #ifdef FADE
+        vFade = aFade;
+      #else
+        vFade = 1.0;
+      #endif
       #ifdef USE_INSTANCING
         vec3 ipos = instanceMatrix[3].xyz;
         vec2 rel = ipos.xz - cameraPosition.xz;
@@ -799,7 +805,7 @@ function billboard(m, stiff = 0){   // stiff: 큰 나무는 줄기가 휘지 않
         mvPosition = modelViewMatrix * mvPosition;
       #endif
       gl_Position = projectionMatrix * mvPosition;`);
-    sh.fragmentShader = 'varying float vCalm;\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n      float lum = dot( diffuseColor.rgb, vec3( .3, .59, .11 ) ); diffuseColor.rgb = mix( diffuseColor.rgb, vec3( lum ), vCalm * .45 );');   // 먼 겹은 색이 차분해짐
+    sh.fragmentShader = 'varying float vCalm;\nvarying float vFade;\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n      if ( vFade < .999 && fract( 52.9829189 * fract( dot( gl_FragCoord.xy, vec2( .06711056, .00583715 ) ) ) ) > vFade ) discard;\n      float lum = dot( diffuseColor.rgb, vec3( .3, .59, .11 ) ); diffuseColor.rgb = mix( diffuseColor.rgb, vec3( lum ), vCalm * .45 );');   // 먼 겹은 색이 차분해짐
   };
   return m;
 }
@@ -1211,11 +1217,12 @@ for (let k = 0; k < W*H; k++) {
   }
 }
 const counts = SPECIES.map(() => 0); for (const b of BP) b.idx = counts[b.sp]++;
-const bushMeshes = SPECIES.map((p, i) => { const m = new THREE.InstancedMesh(plane(p.w, p.h), billboard(mat(SP_TEX[i])), Math.max(1, counts[i])); m.frustumCulled = false; scene.add(m); return m; });
+const fadeGeo = (g, n) => { g.setAttribute('aFade', new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, n)).fill(1), 1)); return g; };
+const bushMeshes = SPECIES.map((p, i) => { const m = new THREE.InstancedMesh(fadeGeo(plane(p.w, p.h), counts[i]), billboard(mat(SP_TEX[i]), 0, 1), Math.max(1, counts[i])); m.frustumCulled = false; scene.add(m); return m; });
 function placeBush(b, lean = 0, squash = 1){
-  const hy = b.s*squash*b.f;
+  const hy = b.s*squash;
   dummy.position.set(b.x, b.flip ? SPECIES[b.sp].h*hy : 0, b.z); dummy.rotation.set(0, 0, lean); dummy.scale.set(b.s*b.m, b.flip ? -hy : hy, 1); dummy.updateMatrix();
-  bushMeshes[b.sp].setMatrixAt(b.idx, dummy.matrix);
+  const m = bushMeshes[b.sp]; m.setMatrixAt(b.idx, dummy.matrix); const fa = m.geometry.attributes.aFade; if (fa) { fa.array[b.idx] = b.f ?? 1; fa.needsUpdate = true; }   // 카메라와 나 사이의 풀은 눕히지 않고 비쳐 보이게
 }
 BP.forEach(b => placeBush(b));
 
@@ -1226,7 +1233,7 @@ for (let k = 0; k < W*H; k++) if (type[k] === TREE) {
   TP.push(b); treeByTile.set(k, b);
 }
 const tcounts = TREES.map(() => 0); for (const b of TP) b.idx = tcounts[b.v]++;
-const treeMeshes = TREES.map((p, v) => { const m = new THREE.InstancedMesh(plane(p.w, p.h), billboard(mat(TREE_TEX[v]), true), Math.max(1, tcounts[v])); m.frustumCulled = false; scene.add(m); return m; });
+const treeMeshes = TREES.map((p, v) => { const m = new THREE.InstancedMesh(fadeGeo(plane(p.w, p.h), tcounts[v]), billboard(mat(TREE_TEX[v]), true, 1), Math.max(1, tcounts[v])); m.frustumCulled = false; scene.add(m); return m; });
 /* 나무는 줄기만 작은 원으로 막고, 부딪히면 둘레를 따라 미끄러짐(정면으로 부딪혀도 옆으로 비켜 감) */
 function pushOutTrees(){
   { const dx = wd(P.x - FIRE.x, W), dz = wd(P.y - FIRE.y, H), d = Math.hypot(dx, dz), min = .55;   // 모닥불도 둘레로 미끄러짐
@@ -1237,7 +1244,7 @@ function pushOutTrees(){
     if (d < min) { const k = (min - d)/(d || 1); P.x += ((d ? dx : 1) - dz*.35)*k; P.y += ((d ? dz : 0) + dx*.35)*k; }
   }
 }
-function placeTree(b){ dummy.position.set(b.x, 0, b.z); dummy.rotation.set(0, 0, 0); dummy.scale.set(b.s*b.m, b.s*b.f, 1); dummy.updateMatrix(); treeMeshes[b.v].setMatrixAt(b.idx, dummy.matrix); }
+function placeTree(b){ dummy.position.set(b.x, 0, b.z); dummy.rotation.set(0, 0, 0); dummy.scale.set(b.s*b.m, b.s, 1); dummy.updateMatrix(); const m = treeMeshes[b.v]; m.setMatrixAt(b.idx, dummy.matrix); const fa = m.geometry.attributes.aFade; if (fa) { fa.array[b.idx] = b.f ?? 1; fa.needsUpdate = true; } }   // 카메라를 가리면 눕히지 않고 비쳐 보이게
 TP.forEach(placeTree);
 
 /* 물가의 연꽃과 홍학, 수풀 속 호랑이, 나무 위 오렌지 든 원숭이 */
@@ -1363,7 +1370,7 @@ function updateBushes(actors, dt, camX, camZ){
       if (d > 1.2) continue;
       const f = (1.2 - d)/1.2*(a.w ?? 1); if (f < .002) continue;
       const cur = lean.get(b) || [0, 1];
-      cur[0] += (side >= 0 ? -1 : 1) * f * .85; cur[1] = Math.min(cur[1], 1 - .3*f);
+      cur[0] += (side >= 0 ? -1 : 1) * f * .3; cur[1] = Math.min(cur[1], 1 - .08*f);   // 헤치고 지나가면 살짝만 비킴 (넘어지지 않게)
       lean.set(b, cur); active.add(b);
     }
   }
@@ -1384,7 +1391,7 @@ function updateBushes(actors, dt, camX, camZ){
   for (const b of relaxB) active.add(b);
   const dirtyMeshes = new Set();
   for (const b of active) {
-    b.ft = folding.has(b) ? .14 : 1;
+    b.ft = folding.has(b) ? .25 : 1;
     b.f += (b.ft - b.f)*Math.min(1, dt*6); if (b.ft === 1 && b.f > .995) b.f = 1;
     if (b.f < 1) foldedB.add(b); else foldedB.delete(b);
     const [tl, tq] = lean.get(b) || [0, 1], l0 = b.ln || 0, q0 = b.sq ?? 1;
@@ -1407,7 +1414,7 @@ function updateTrees(dt, camX, camZ){
   const ax = camX - P.x, az = camZ - P.y, L2 = ax*ax + az*az, dirty = new Set();
   for (const b of near) {
     const bx = wd(b.x - P.x, W), bz = wd(b.z - P.y, H), u = (bx*ax + bz*az)/L2, perp = Math.abs(bx*az - bz*ax)/Math.sqrt(L2);
-    const target = u > .05 && u < 1.3 && perp < 1.5 ? .1 : 1;
+    const target = u > .05 && u < 1.3 && perp < 1.5 ? .22 : 1;
     const nf = b.f + (target - b.f)*Math.min(1, dt*8);
     if (Math.abs(nf - b.f) > .001) { b.f = nf; placeTree(b); dirty.add(b.v); }
     if (b.f < .999) foldedT.add(b); else foldedT.delete(b);
