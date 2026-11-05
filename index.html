@@ -3149,7 +3149,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     const FLY_T = ctex(48, 32, (g) => { g.fillStyle = '#f2d84a'; g.strokeStyle = RG.line; g.lineWidth = 1.5; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(24 + s*10, 12, 10, 9, s*.4, 0, Math.PI*2); g.fill(); g.stroke(); g.beginPath(); g.ellipse(24 + s*8, 24, 6, 6, s*.3, 0, Math.PI*2); g.fill(); g.stroke(); } g.fillStyle = '#3a2410'; g.fillRect(23, 6, 2, 22); });
     const STUMP_T = ctex(96, 48, (g) => { g.fillStyle = '#8a6438'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.fillRect(14, 16, 68, 30); g.strokeRect(14, 16, 68, 30); g.fillStyle = '#c9a060'; g.beginPath(); g.ellipse(48, 16, 34, 9, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.strokeStyle = '#8a6438'; g.lineWidth = 1.5; for (const r of [8, 16, 24]) { g.beginPath(); g.ellipse(48, 16, r, r*.26, 0, 0, Math.PI*2); g.stroke(); } });
     const flies = Array.from({ length:6 }, (_, i) => ({ m:cutout(plane(i === 0 ? .34 : .24, i === 0 ? .23 : .16, false), mat(FLY_T)), a:i*1.05 }));   // 구슬 위에 앉은 나비는 좀 더 크게
-    const bead = cutout(plane(.16, .16), mat(BEAD_T)), stump = cutout(plane(.75, .38), mat(STUMP_T)), fruitM = cutout(plane(.24, .24), mat(ITEMS.banana.tex)); onArt('bead', im => swapTex(BEAD_T, im)); onArt('stump', im => swapTex(STUMP_T, im));
+    const bead = cutout(plane(.3, .3), mat(BEAD_T)), beadGlow = cutout(plane(.9, .9, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.5, color:'#9fd0ff' })), stump = cutout(plane(.75, .38), mat(STUMP_T)), fruitM = cutout(plane(.24, .24), mat(ITEMS.banana.tex)); onArt('bead', im => swapTex(BEAD_T, im)); onArt('stump', im => swapTex(STUMP_T, im));
     const LURE_C = document.createElement('canvas'); LURE_C.width = 96; LURE_C.height = 72; { const g = LURE_C.getContext('2d'); if (g) { try { g.drawImage(STUMP_T.userData.canvas, 4, 30, 88, 44); g.drawImage(ITEMS.mango.tex.userData.canvas, 30, 6, 36, 36); g.drawImage(FLY_T.userData.canvas, 60, 0, 30, 20); } catch (e) {} } }   // 생각 풍선: 열매 놓인 그루터기와 나비
     const fed = () => clock - BD.fedT < 25;   // 열매가 놓인 동안(25초쯤) 나비들은 그루터기에
     BD.targets = () => { if (pzStep(BD) >= 2) return []; const L = [];
@@ -3168,7 +3168,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
         if (F || (visit && i > 1)) { cx = STUMP.x; cz = STUMP.z; r = .14 + (i % 3)*.06; y = .45 + (i % 2)*.05; flap = 3; }
         else if (i === 0 && st < 2) { const up = clock - BD.shooT < 1.6 ? Math.sin((clock - BD.shooT)/1.6*Math.PI) : 0; r = .02 + up*.9; y = .2 + up*1.2; flap = up > .05 ? 14 : 2.5; }   // 구슬 위에 앉은 한 마리
         const [x, z] = wrapNear(cx + Math.cos(f.a)*r, cz + Math.sin(f.a)*r, camX, camZ); f.m.position.set(x, y, z); f.m.lookAt(camera.position); f.m.scale.set(1, .6 + Math.abs(Math.sin(clock*flap + i))*.4, 1); f.m.visible = d < 18; });
-      bead.visible = st < 2; if (bead.visible) { place(bead, B, .03, camX, camZ); bead.scale.setScalar(1 + Math.max(0, Math.sin(clock*3))*.15); } };
+      bead.visible = beadGlow.visible = st < 2; if (bead.visible) { place(bead, B, .03, camX, camZ); bead.scale.setScalar(1 + Math.max(0, Math.sin(clock*3))*.15); beadGlow.position.set(bead.position.x, .18, bead.position.z); beadGlow.lookAt(camera.position); beadGlow.material.opacity = .25 + Math.max(0, Math.sin(clock*3))*.35; } };   // 풀숲에서 파랗게 반짝
     PUZZLES.push(BD); }
 
   /* 3. 큰부리새 둥지: 오두막 발판 곁 가지. 구슬을 주면 부리로 받고, 둥지에서 태엽 손잡이가 땅으로 떨어짐 */
