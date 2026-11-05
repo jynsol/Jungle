@@ -101,6 +101,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--marigold);outli
 
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// 문제가 생기면 화면 아래에 오류를 보여 줌 (원인 찾기용)
+(function(){ const show = m => { let d = document.getElementById('errbox'); if (!d) { d = document.createElement('div'); d.id = 'errbox'; d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:70px;z-index:99;background:rgba(120,20,20,.9);color:#fff;font:12px monospace;padding:8px;border-radius:6px;white-space:pre-wrap;max-height:40vh;overflow:auto'; document.body.append(d); } d.textContent += m + '\n'; };
+  addEventListener('error', e => show('오류: ' + e.message + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno + ':' + e.colno));
+  addEventListener('unhandledrejection', e => show('오류: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason))); })();
+</script>
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 /* ================= 그래픽 교체용 =================
