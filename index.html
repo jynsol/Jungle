@@ -36,6 +36,7 @@ canvas#o{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
 .tools:not(.open) > button:not(.leaf){display:none}
 .tools button.leaf{order:-1;width:40px;height:40px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(20,18,40,.55);border:1px solid rgba(243,230,200,.25)}
 .tools.open button.leaf{background:rgba(20,18,40,.85)}
+.tools button.ic{width:40px;height:40px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(20,18,40,.7);border:1px solid rgba(243,230,200,.25)}
 .tools button{background:var(--panel);color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:8px 12px;font:12px var(--body);cursor:pointer}
 .tools button:hover,.tools button:focus-visible{color:var(--ink);border-color:var(--dim)}
 .tools #albumBtn{color:var(--marigold);border-color:rgba(242,169,59,.5)}
@@ -110,6 +111,23 @@ ASSET_NAMES.push('galleon', 'galleon_front', 'piano', 'clock', 'gramophone', 'bi
 const ASSETS = Object.fromEntries(ASSET_NAMES.map(n => [n, 'assets/' + n + '.png']));
 const ART = {};   // 그림 이름 → 그림이 오면 할 일 (그림판 바꾸고 비율 맞추기)
 const onArt = (k, fn) => (ART[k] || (ART[k] = [])).push(fn);
+// 글 대신 쓰는 작은 그림 아이콘
+const ICON = (d, col = '#f3e6c8', sz = 22) => `<svg viewBox="0 0 24 24" width="${sz}" height="${sz}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const IC = {
+  ribbon:'<path d="M12 9c-3-4-7-4-7-1s4 3 7 1zm0 0c3-4 7-4 7-1s-4 3-7 1z"/><path d="M12 9l-3 11M12 9l3 11"/>',
+  person:'<circle cx="12" cy="7" r="3"/><path d="M6 20c0-4 3-7 6-7s6 3 6 7"/>',
+  book:'<path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1z"/><path d="M12 6v14"/>',
+  soundOn:'<path d="M4 10h3l5-4v12l-5-4H4z"/><path d="M16 9c1.5 1.5 1.5 4.5 0 6M18.5 7c3 3 3 7 0 10"/>',
+  soundOff:'<path d="M4 10h3l5-4v12l-5-4H4z"/><path d="M16 10l4 4M20 10l-4 4"/>',
+  reset:'<path d="M5 12a7 7 0 1 0 2-5"/><path d="M5 4v4h4"/>',
+  close:'<path d="M6 6l12 12M18 6L6 18"/>',
+  sit:'<circle cx="9" cy="5" r="2"/><path d="M9 8v5h5l2 6M9 13l-2 6M4 19h16"/>',
+  stand:'<circle cx="12" cy="4.5" r="2"/><path d="M12 7v7M12 14l-3 6M12 14l3 6M8 10h8"/>',
+  hammock:'<path d="M2 7h2M20 7h2M4 7c3 7 13 7 16 0"/><path d="M4 7l1-3M20 7l-1-3"/>',
+  arrow:'<path d="M12 4l5 7h-3v9h-4v-9H7z"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  flame:'<path d="M12 21c-4 0-6-3-5-6 1-2 2-3 2-6 2 2 3 3 3 5 1-1 1-2 1-3 2 2 4 4 3 7-1 2-2 3-4 3z"/>'
+};
 const COLORS = {
   // 앙리 루소 「적도의 정글」(1909)에서 고른 색
   rousseau:{ deep:'#1c3428', dark:'#26443a', mid:'#355a45', sage:'#4d7356', moss:'#6a8a5a', pale:'#9db07a', agave:'#b9c98a', cream:'#ece6b4',
@@ -126,10 +144,10 @@ const IMG = {};
 // 그림이 다 올 때까지 숲을 가려 둠(기본 그림이 보였다가 바뀌지 않게). 그림은 늘 새로 확인해서 받음
 { const veil = document.createElement('div');
   veil.style.cssText = 'position:fixed;inset:0;z-index:50;background:#13201a;display:flex;align-items:center;justify-content:center;color:#cfc6a8;font:17px "Gowun Batang",serif;letter-spacing:.08em;transition:opacity .9s';
-  veil.textContent = '숲으로 들어가는 중…'; document.body.append(veil);
+  veil.innerHTML = '<svg width="180" height="60" viewBox="0 0 180 60" aria-hidden="true"><path id="vineLoad" d="M6 46 C 40 6, 80 56, 120 22 S 170 30, 174 12" pathLength="100" stroke="#cfc6a8" stroke-width="2" fill="none" stroke-linecap="round" stroke-dasharray="100" stroke-dashoffset="100" style="transition:stroke-dashoffset .4s"/></svg>'; veil.setAttribute('aria-label', '숲으로 들어가는 중'); document.body.append(veil);
   let left = 0, total = 0, done = false;
   const finish = () => { if (done) return; done = true; repaintRings(); veil.style.opacity = 0; veil.style.pointerEvents = 'none'; setTimeout(() => veil.remove(), 1000); };
-  const one = () => { left--; veil.textContent = `숲으로 들어가는 중… ${total - left} / ${total}`; if (left <= 0) finish(); };
+  const one = () => { left--; const vp = veil.querySelector('#vineLoad'); if (vp) vp.style.strokeDashoffset = 100*left/Math.max(1, total); if (left <= 0) finish(); };
   for (const [k, src] of Object.entries(ASSETS)) if (src) { left++; total++;
     fetch(src, { cache:'no-cache' }).then(r => r.ok ? r.blob() : Promise.reject()).then(b => {
       const im = new Image(); im.onload = () => { IMG[k] = im; try { onAsset(k, im); } catch (e) {} one(); }; im.onerror = one; im.src = URL.createObjectURL(b);
@@ -318,7 +336,7 @@ cv.addEventListener('pointerup', endJoy); cv.addEventListener('pointercancel', e
 let audio = null, soundOn = true;
 try { soundOn = localStorage.getItem('denggul-sound') !== '0'; } catch (e) {}
 const $sound = document.getElementById('sound');
-const paintSound = () => $sound.textContent = soundOn ? '소리 끄기' : '소리 켜기';
+const paintSound = () => { $sound.innerHTML = ICON(soundOn ? IC.soundOn : IC.soundOff); $sound.setAttribute('aria-label', soundOn ? '소리 끄기' : '소리 켜기'); $sound.classList.add('ic'); };
 paintSound();
 function startAudio(){
   if (audio || !soundOn) { if (audio && audio.ac.state === 'suspended') audio.ac.resume(); return; }
@@ -406,15 +424,15 @@ function parrotTalk(p, i, dt){
     if (d > 8) p.away = true;
     if (p.away !== false && d < 5 && !modalOpen() && clock - (p.guideT ?? -99) > 30) {
       const h = parrotHint(true);
-      if (h) { p.bubble = { text:h, until:clock + 8 }; p.guideT = clock; p.away = false; p.cool = 14; lastParrot = clock; squawk(); return; }
+      if (h) { parrotShow(p, h); p.guideT = clock; p.away = false; p.cool = 14; lastParrot = clock; squawk(); return; }
     }
   }
   if (p.cool > 0 || P.moving || clock - lastParrot < 10 || wdist(p.x, p.y, P.x, P.y) > 3.2) return;
   let ni = 0, nd = 1e9; PARROTS.forEach((q, j) => { const d = wdist(q.x, q.y, P.x, P.y); if (d < nd) { nd = d; ni = j; } });
   if (ni !== i) return;   // 가장 가까운 한 마리만
   const hint = Math.random() < .35 ? parrotHint() : null, learned = parrotLine(i);
-  const t = hint || (learned && Math.random() < .8 ? learned : PARROT_SEED[Math.random()*PARROT_SEED.length | 0]);
-  p.bubble = { text:t, until:clock + 5 }; p.cool = 16 + Math.random()*14; lastParrot = clock; squawk();
+  if (hint) parrotShow(p, hint); else if (learned) p.bubble = { text:learned, until:clock + 5 };   // 사람에게 배운 말만 따라 함
+  p.cool = 16 + Math.random()*14; lastParrot = clock; squawk();
 }
 
 
@@ -552,7 +570,7 @@ function paintRetablo(c, s){
 }
 function card(s){
   const f = found[s.key], fig = document.createElement('figure');
-  if (!f) { fig.className = 'retablo empty'; fig.textContent = '아직 보지 못한 기적'; return fig; }
+  if (!f) { fig.className = 'retablo empty'; return fig; }
   fig.className = 'retablo';
   const c = document.createElement('canvas'); c.width = 560; c.height = 340; paintRetablo(c, s);
   const cap = document.createElement('figcaption');
@@ -565,7 +583,7 @@ function card(s){
 }
 const $popVeil = document.getElementById('popVeil'), $albumVeil = document.getElementById('albumVeil'), $albumBtn = document.getElementById('albumBtn');
 const foundCount = () => SITES.filter(s => found[s.key]).length;
-const paintAlbumBtn = () => $albumBtn.textContent = `그림첩 ${foundCount()}/${SITES.length}`;
+const paintAlbumBtn = () => { $albumBtn.innerHTML = ICON(IC.book, '#f2a93b'); $albumBtn.setAttribute('aria-label', '그림첩'); $albumBtn.classList.add('ic'); };
 function showFound(s){
   document.querySelector('#popVeil .tag').textContent = '새로운 기적';
   const box = document.getElementById('popCard'); box.replaceChildren(card(s));
@@ -578,7 +596,7 @@ function openAlbum(){
 }
 function closeModals(){ if (!ME.name) return; $popVeil.hidden = true; $albumVeil.hidden = true; $nameVeil.hidden = true; cv.focus(); }
 const $nameVeil = document.getElementById('nameVeil'), $nameInput = document.getElementById('nameInput'), $nameBtn = document.getElementById('nameBtn');
-const paintName = () => $nameBtn.textContent = ME.name ? '이름: ' + ME.name : '이름';
+const paintName = () => { $nameBtn.innerHTML = ICON(IC.person); $nameBtn.setAttribute('aria-label', '이름' + (ME.name ? ': ' + ME.name : '')); $nameBtn.classList.add('ic'); };
 function openName(){ $nameInput.value = ME.name; $nameVeil.hidden = false; keys.clear(); joy = null; $nameInput.focus(); }
 $nameBtn.addEventListener('click', openName);
 document.getElementById('nameForm').addEventListener('submit', e => {
@@ -634,7 +652,7 @@ function step(dt){
   for (let i = sheets.length-1; i >= 0; i--) { const s = sheets[i]; s.life -= dt; s.h += dt*.85; if (s.life <= 0) sheets.splice(i,1); }
   PARROTS.forEach((p,i) => parrotTalk(p, i, dt));
   const om = SITE.oldman;
-  if (wdist(P.x, P.y, om.cx + 1.6, om.cy) < 3) { if ((oldmanT -= dt) <= 0) { om.bubble = { text:OLDMAN_LINES[Math.random()*OLDMAN_LINES.length | 0], until:clock + 6 }; oldmanT = 8; } }
+  if (wdist(P.x, P.y, om.cx + 1.6, om.cy) < 3) { if ((oldmanT -= dt) <= 0) { if (typeof POKE_SND !== 'undefined') POKE_SND.oldman(.8); oldmanT = 12; } }   // 말 대신 흥얼거림
   for (const s of SITES) if (!found[s.key] && wdist(P.x, P.y, s.cx, s.cy) < 2.6) {
     found[s.key] = { date:today(), with:[...others.values()].map(o => o.name) };
     save(); paintAlbumBtn(); showFound(s); sendPresence(true);
@@ -1076,7 +1094,7 @@ const GPX = 8, gcv = document.createElement('canvas'); gcv.width = W*GPX; gcv.he
   const RGF = ['#2f4a34', '#4b5a3a', '#35574c', '#545646'].map(hex), RGB_ = ['#1b3626', '#2f4029', '#1d3c34', '#36392c'].map(hex), BF = hex(COLORS.floor), BB = hex('#24402e');
   const tint = (b, tbl, rw) => { const c = b.slice(); rw.forEach((w, i) => { for (let j = 0; j < 3; j++) c[j] += (tbl[i][j] - b[j])*w; }); return `rgb(${c.map(v => v | 0).join(',')})`; };
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const k = id(x,y), t = type[k], rw = (t === FLOOR || t === BUSH) ? regionW(x + .5, y + .5) : null;
+    const k = id(x,y), t0 = type[k], t = t0 === BUSH && TRAIL_EDGE[k] ? FLOOR : t0, rw = (t === FLOOR || t === BUSH) ? regionW(x + .5, y + .5) : null;
     g.fillStyle = t === FLOOR && TRAIL[k] ? '#8a744c' : t === FLOOR ? tint(BF, RGF, rw) : t === BUSH ? tint(BB, RGB_, rw) : base[t]; g.fillRect(x*GPX, y*GPX, GPX, GPX);
     if (t === FLOOR && TRAIL[k]) { g.fillStyle = 'rgba(40,30,18,.3)'; if (hash(k*41) < .5) g.fillRect(x*GPX + 2, y*GPX + 2, 2, 2); if (hash(k*43) < .22) { g.fillStyle = '#b3aa90'; g.beginPath(); g.ellipse(x*GPX + 4, y*GPX + 4, 2.6, 1.8, hash(k*45)*3, 0, Math.PI*2); g.fill(); } continue; }
     if (t === FLOOR && rw && rw[1] > .4 && hash(k*47) < .45) { g.fillStyle = '#e8a0b4'; g.fillRect(x*GPX + 3, y*GPX + 2, 2, 2); }   // 꽃숲: 떨어진 꽃잎
@@ -1089,7 +1107,7 @@ const GPX = 8, gcv = document.createElement('canvas'); gcv.width = W*GPX; gcv.he
   g.setLineDash([]);
   const m = SITE.mirror; g.fillStyle = '#fff3c4'; g.beginPath(); g.ellipse(m.cx*GPX, m.cy*GPX, GPX*.6, GPX*.35, 0, 0, Math.PI*2); g.fill();
 }
-const groundTex = new THREE.CanvasTexture(gcv); groundTex.colorSpace = THREE.SRGBColorSpace; groundTex.magFilter = THREE.NearestFilter; groundTex.anisotropy = 8;
+const groundTex = new THREE.CanvasTexture(gcv); groundTex.colorSpace = THREE.SRGBColorSpace; groundTex.magFilter = THREE.LinearFilter;   // 칸 경계가 각지지 않게 groundTex.anisotropy = 8;
 groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping; groundTex.repeat.set(3, 3);
 const ground = cutout(new THREE.PlaneGeometry(W*3, H*3, 144, 144), mat(groundTex, true, { alphaTest:0, side:THREE.FrontSide }));
 ground.rotation.x = -Math.PI/2; ground.position.set(W/2, 0, H/2);
@@ -1450,15 +1468,15 @@ function updateObs(dt){
 }
 function lookTargets(){
   const L = [];
-  for (const c of critters) if (c.a > .6) L.push({ key:c.key, x:c.x, h:c.h + CR_TYPES[c.key].h*.5, z:c.z });
-  for (const me of TIGERS) L.push({ key:'tiger', x:me.position.x, h:.45, z:me.position.z });
-  for (const me of MONKEYS) L.push({ key:'orangemonkey', x:me.position.x, h:me.position.y + .3, z:me.position.z });
-  for (const p of PARROTS) L.push({ key:'parrot', x:p.x, h:.6, z:p.y });
+  for (const c of critters) if (c.a > .6) L.push({ key:c.key, x:c.x, h:c.h + CR_TYPES[c.key].h*.5, z:c.z, me:c.me });
+  for (const me of TIGERS) L.push({ key:'tiger', x:me.position.x, h:.45, z:me.position.z, me });
+  for (const me of MONKEYS) L.push({ key:'orangemonkey', x:me.position.x, h:me.position.y + .3, z:me.position.z, me });
+  for (const p of PARROTS) L.push({ key:'parrot', x:p.x, h:.6, z:p.y, me:p.mesh });
   for (const e of EYES) if (e.mk.visible) L.push({ key:'peek', x:e.mk.position.x, h:e.mk.position.y + .18, z:e.mk.position.z });
-  L.push({ key:'oldman', x:oldman.position.x, h:.7, z:oldman.position.z });
-  for (const st of STORIES) L.push({ key:st.key, x:st.x, h:st.h, z:st.y });
+  L.push({ key:'oldman', x:oldman.position.x, h:.7, z:oldman.position.z, me:oldman });
+  for (const st of STORIES) L.push({ key:st.key, x:st.x, h:st.h, z:st.y, me:st.me });
   L.push({ key:'waterfall', x:WATERFALL.x, h:2.6, z:WATERFALL.y - 3.1 }, { key:'lookout', x:LOOKOUT.x, h:elevAt(LOOKOUT.x, LOOKOUT.y) + .6, z:LOOKOUT.y });
-  for (const r of ribbons) L.push({ key:'ribbon', x:r.me.position.x, h:1.2, z:r.me.position.z, noSeen:true,
+  for (const r of ribbons) L.push({ key:'ribbon', x:r.me.position.x, h:1.2, z:r.me.position.z, noSeen:true, me:r.me,
     info:{ name:r.mine ? '내 리본' : `${r.name || '누군가'}의 리본`, text:'여기까지 왔었다는 표시예요. 리본을 따라가면 그 사람이 걸은 길이에요.' } });
   for (const pz of PUZZLES) L.push(...pz.targets());
   return L;
@@ -1479,46 +1497,57 @@ function handleTap(x, y){
     const s = toScreen(t.x, t.h, t.z); if (!s) continue;
     const d = (s[0] - x)**2 + (s[1] - y)**2; if (d < bd) { bd = d; best = t; }
   }
-  if (!best) { selected = null; return; }
-  if (best.act && wdist(best.x, best.z, P.x, P.y) < (best.reach || 4)) { best.act(); selected = null; return; }   // 가까이서 누르면 손을 댐
-  selected = { ...best, until:clock + 8, isNew:!best.noSeen && !seen[best.key] };
+  if (!best) return;
+  if (best.act && wdist(best.x, best.z, P.x, P.y) < (best.reach || 4)) { best.act(); return; }   // 가까이서 누르면 손을 댐
+  poke(best);   // 멀리서, 또는 손댈 게 없으면: 그 자리에서 움찔하고 소리
   if (!best.noSeen && !seen[best.key]) { seen[best.key] = today(); try { localStorage.setItem('denggul-seen', JSON.stringify(seen)); } catch (er) {} }
 }
+// 누르면 반응: 그림이 움찔하고, 저마다 다른 소리
+const pokes = [];
+function poke(t){
+  if (t.me) pokes.push({ me:t.me, t:clock });
+  rings.push({ x:t.x, h:t.h, z:t.z, t:clock });
+  const v = Math.max(.25, 1 - wdist(t.x, t.z, P.x, P.y)/13);
+  const snd = POKE_SND[t.key] || POKE_SND.default; snd(v);
+}
+const rings = [];   // 누른 자리에 번지는 작은 빛 고리
+function drawPokes(){
+  for (let i = pokes.length - 1; i >= 0; i--) { const p = pokes[i], k = (clock - p.t)/.7; if (k >= 1) { p.me.rotation.z = 0; pokes.splice(i, 1); continue; } p.me.rotation.z = Math.sin(k*Math.PI*4)*.09*(1 - k); }
+  for (let i = rings.length - 1; i >= 0; i--) { const r = rings[i], k = (clock - r.t)/.9; if (k >= 1) { rings.splice(i, 1); continue; }
+    const sc = toScreen(r.x, r.h, r.z); if (!sc) continue; ctx.strokeStyle = `rgba(255,246,200,${.7*(1 - k)})`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(sc[0], sc[1], 8 + k*26, 0, Math.PI*2); ctx.stroke(); }
+}
+const tick = (f, dur, v, type = 'sine') => sfx((ac, t) => { const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f*.7, t + dur);
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur); o.connect(g); g.connect(ac.destination); g.connect(reverb(ac)); o.start(t); o.stop(t + dur + .02); });
+const POKE_SND = {
+  default:v => tick(1400, .25, .05*v),
+  parrot:v => squawk(),
+  tiger:v => sfx((ac, t) => { const src = ac.createBufferSource(), lp = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = noiseBuf(ac, 1.2); lp.type = 'lowpass'; lp.frequency.value = 220; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.25*v, t + .25); g.gain.exponentialRampToValueAtTime(.0001, t + 1.1); src.connect(lp).connect(g).connect(ac.destination); src.start(t); src.stop(t + 1.2); }),
+  jesters:v => [0, .09, .2, .27].forEach((d, i) => setTimeout(() => tick(900 + i*160, .07, .05*v, 'square'), d*1000)),
+  orangemonkey:v => [0, .1, .22].forEach((d, i) => setTimeout(() => tick(1000 + i*120, .07, .05*v, 'square'), d*1000)),
+  peek:v => tick(1200, .1, .04*v, 'square'),
+  whitebird:v => { tick(700, .35, .05*v); setTimeout(() => tick(620, .4, .04*v), 380); },
+  toucan:v => [0, .22].forEach(d => setTimeout(() => tick(360, .12, .04*v, 'square'), d*1000)),
+  sloth:v => pzSfx.hm(.07*v),
+  oldman:v => [196, 220, 196].forEach((f, i) => setTimeout(() => tick(f, .5, .05*v, 'triangle'), i*420)),
+  piano:v => pianoNote([440, 523.3, 659.3][Math.random()*3 | 0], .12*v),
+  clock:v => [0, .5].forEach((d, i) => setTimeout(() => tick(i ? 1500 : 1900, .05, .08*v, 'square'), d*1000)),
+  gramophone:v => [329.6, 392, 349.2, 293.7].forEach((f, i) => setTimeout(() => pianoNote(f, .08*v), i*260)),
+  bicycle:v => [0, .14].forEach(d => setTimeout(() => { tick(2100, .5, .06*v); tick(2650, .45, .04*v); }, d*1000)),
+  mailbox:v => { tick(820, .18, .08*v, 'triangle'); tick(410, .3, .06*v, 'triangle'); },
+  swing:v => pzSfx.rope(.06*v), chair:v => pzSfx.rope(.06*v), galleon:v => pzSfx.rope(.08*v),
+  waterfall:v => tick(300, .6, .05*v), lookout:v => { tick(260, .3, .08*v, 'triangle'); setTimeout(() => tick(260, .3, .04*v, 'triangle'), 420); },
+  ribbon:v => tick(1760, .4, .05*v)
+};
 function drawObsOverlay(e, dt){
   ctx.fillStyle = 'rgba(246,234,210,.4)';   // 누를 수 있는 것 위에 아주 작은 점
   for (const t of lookTargets()) {
     if (wdist(t.x, t.z, P.x, P.y) > 6) continue;
     const s = toScreen(t.x, t.h + .35, t.z); if (s) { ctx.beginPath(); ctx.arc(s[0], s[1], 2.5, 0, Math.PI*2); ctx.fill(); }
   }
-  if (!selected) return;
-  if (selected.until < clock || wdist(selected.x, selected.z, P.x, P.y) > 15) { selected = null; return; }
-  const a = Math.min(1, selected.until - clock), s = toScreen(selected.x, selected.h, selected.z);
-  ctx.globalAlpha = a;
-  if (s) { ctx.strokeStyle = 'rgba(242,169,59,.9)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(s[0], s[1], 24, 0, Math.PI*2); ctx.stroke(); }
-  const info = selected.info || OBS_INFO[selected.key];
-  ctx.font = '19px "Nanum Pen Script", cursive';
-  const w = Math.min(330, vw - 24), lines = wrapText(info.text, w - 28), h = 50 + lines.length*21;
-  const bx = 12, by = (hudEl.getBoundingClientRect().bottom || 80) + 8;
-  ctx.fillStyle = '#f3e6c8'; ctx.fillRect(bx, by, w, h); ctx.strokeStyle = '#3a2410'; ctx.lineWidth = 3; ctx.strokeRect(bx, by, w, h);
-  ctx.fillStyle = '#4a2a16'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.font = '26px "Nanum Pen Script", cursive'; ctx.fillText(info.name, bx + 14, by + 9);
-  if (selected.isNew) { ctx.fillStyle = '#c96a12'; ctx.textAlign = 'right'; ctx.font = '17px "Nanum Pen Script", cursive'; ctx.fillText('관찰 기록에 남김', bx + w - 12, by + 14); ctx.textAlign = 'left'; ctx.fillStyle = '#4a2a16'; }
-  ctx.font = '19px "Nanum Pen Script", cursive'; lines.forEach((l, i) => ctx.fillText(l, bx + 14, by + 42 + i*21));
-  ctx.globalAlpha = 1;
+  drawPokes();
 }
-/* 그림첩 아래에 관찰 기록 */
-const seenBox = document.createElement('div');
-seenBox.style.cssText = 'display:flex;flex-direction:column;gap:6px;font-family:var(--hand);color:var(--ink);padding:4px';
-document.getElementById('grid').after(seenBox);
-$albumBtn.addEventListener('click', () => {
-  const keys = Object.keys(OBS_INFO), n = keys.filter(k => seen[k]).length;
-  seenBox.replaceChildren();
-  const h = document.createElement('h3'); h.style.cssText = 'margin:8px 0 0;font:700 18px var(--display)'; h.textContent = `관찰 기록 ${n} / ${keys.length}`;
-  const list = document.createElement('div'); list.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px 18px;font-size:21px';
-  for (const k of keys) { const s = document.createElement('span'); s.textContent = seen[k] ? OBS_INFO[k].name : '???'; s.style.opacity = seen[k] ? 1 : .45; list.append(s); }
-  const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font:13px var(--body);color:var(--dim)'; tip.textContent = '동물이나 물건을 누르면 이야기가 뜨고 기록돼요. 가만히 서 있으면 숨어 있던 동물들이 나와요.';
-  seenBox.append(h, list, tip);
-});
+const seenBox = document.createElement('div');   // 관찰 기록 목록은 뺌 (누른 것은 조용히 기억만)
+
 
 /* ---- 모닥불 공터: 둘러앉고, 같이 구워 먹고, 같이 연주하기 ---- */
 const FIRE_TEX = ctex(64, 96, (g) => {
@@ -1609,7 +1638,6 @@ NET_HOOKS.push(ch => {
   ch.on('broadcast', { event:'feast' }, ({ payload:p }) => {
     if (!p || p.id === ME.id) return;
     const o = others.get(p.id), food = RECIPES[p.r | 0]; if (!o || !food) return;
-    addLog(o.name, o.color, food.msg);
     if (nearFire(P.x, P.y)) gainEnergy(25);
   });
 });
@@ -1625,20 +1653,20 @@ fireStyle.textContent = `.firebar{position:fixed;right:calc(env(safe-area-inset-
 @media (max-width:640px){.firebar{bottom:calc(env(safe-area-inset-bottom,0px) + 110px)}}`;
 document.head.append(fireStyle);
 const fireBar = document.createElement('div'); fireBar.className = 'firebar'; fireBar.hidden = true;
-fireBar.innerHTML = `<span class="title">모닥불</span><div class="row2 keys" id="keys" hidden></div><div class="row2" id="instRow" hidden></div><div class="row2" id="cookRow"></div><div class="row2"><button id="sitBtn" type="button">앉기 (F)</button></div>`;
+fireBar.innerHTML = `<span class="title" hidden></span><div class="row2 keys" id="keys" hidden></div><div class="row2" id="instRow" hidden></div><div class="row2" id="cookRow"></div><div class="row2"><button id="sitBtn" type="button">앉기 (F)</button></div>`;
 document.body.append(fireBar);
 const $keys = fireBar.querySelector('#keys'), $instRow = fireBar.querySelector('#instRow'), $sitBtn = fireBar.querySelector('#sitBtn'), $cookRow = fireBar.querySelector('#cookRow');
 for (let i = 0; i < 8; i++) { const b = document.createElement('button'); b.type = 'button'; b.textContent = i + 1; b.addEventListener('pointerdown', e => { e.preventDefault(); myPlay(i); }); $keys.append(b); }
 for (const [k, name] of Object.entries(INSTRUMENTS)) { const b = document.createElement('button'); b.type = 'button'; b.textContent = name; b.dataset.k = k;
   b.addEventListener('click', () => { pickInstrument(k); cv.focus(); }); $instRow.append(b); }
 function paintFire(){
-  $sitBtn.textContent = (P.sit ? '일어서기' : '앉기') + (MOBILE ? '' : ' (F)');
+  $sitBtn.innerHTML = ICON(P.sit ? IC.stand : IC.sit); $sitBtn.setAttribute('aria-label', P.sit ? '일어서기' : '앉기');
   $cookRow.replaceChildren();
   const note = t => { const sp = document.createElement('span'); sp.style.cssText = 'font:13px var(--body);color:var(--dim);padding:6px 4px'; sp.textContent = t; $cookRow.append(sp); };
-  if (cooking) note(`${RECIPES[cooking.r].name} 굽는 중…`);
+  if (cooking) {}
   else {
     const can = RECIPES.map((r, i) => [r, i]).filter(([r]) => canMake(r));
-    can.forEach(([r, i], j) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = r.name + (j === 0 && !MOBILE ? ' (G)' : ''); b.addEventListener('click', () => { startCook(i); cv.focus(); }); $cookRow.append(b); });
+    can.forEach(([r, i], j) => { const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', r.name + ' 굽기'); b.style.cssText = 'display:flex;align-items:center;gap:2px;padding:4px 8px'; { const im = new Image(); im.src = ITEMS[Object.keys(r.need)[0]].tex.userData.canvas.toDataURL(); im.width = im.height = 30; im.alt = ''; b.append(im); b.insertAdjacentHTML('beforeend', ICON(IC.flame, '#f2a93b', 18)); } b.addEventListener('click', () => { startCook(i); cv.focus(); }); $cookRow.append(b); });
   }
   for (const b of $instRow.children) { const k = b.dataset.k, h = instHolder(k), taken = !!h && h.id !== ME.id;
     b.classList.toggle('on', k === instrument); b.disabled = taken; b.style.opacity = taken ? .55 : 1;
@@ -1693,7 +1721,7 @@ function updateFire(dt, camX, camZ){
     if (k >= 1 || !near) {
       const r = RECIPES[cooking.r];
       if (k >= 1) {
-        addLog(ME.name || '나', myColor, r.msg); pickChime();
+        pickChime();
         gainEnergy(35);
         if (chan) chan.send({ type:'broadcast', event:'feast', payload:{ id:ME.id, r:cooking.r } });
       } else { for (const [kk, n] of Object.entries(r.need)) bag[kk] = (bag[kk] || 0) + n; saveBag(); paintBag(); }   // 불을 떠나면 재료는 돌려받음
@@ -2189,7 +2217,8 @@ function drawPuzzleOverlay(){
     ctx.fillStyle = 'rgba(255,250,236,.95)'; ctx.strokeStyle = '#3a2410'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.ellipse(s[0] + 34, s[1] - 40, 26, 22, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
     for (const [dx, dy, r] of [[12, -14, 5], [4, -4, 3]]) { ctx.beginPath(); ctx.arc(s[0] + dx, s[1] + dy, r, 0, Math.PI*2); ctx.fill(); ctx.stroke(); }
-    ctx.drawImage(ITEMS[w.key].tex.userData.canvas, s[0] + 16, s[1] - 58, 36, 36);
+    const im = w.img || ITEMS[w.key].tex.userData.canvas, iw = im.width || 1, ih = im.height || 1, sc = Math.min(36/iw, 30/ih);
+    try { ctx.drawImage(im, s[0] + 34 - iw*sc/2, s[1] - 40 - ih*sc/2, iw*sc, ih*sc); } catch (e) {}
   }
   ctx.globalAlpha = 1;
   for (const pz of PUZZLES) pz.overlay && pz.overlay();
@@ -2333,7 +2362,7 @@ function updatePuzzles(dt, camX, camZ){
   for (const pz of PUZZLES) pz.update(dt, camX, camZ);
   updateFeedBar();
   const ri = regionAt(P.x, P.y);
-  if (ri >= 0 && ri !== lastRegion) { regionTag.textContent = REGIONS[ri].name; regionTag.style.opacity = 1; regionTimer = 3; lastRegion = ri; }
+  if (false && ri >= 0 && ri !== lastRegion) { regionTag.textContent = REGIONS[ri].name; regionTag.style.opacity = 1; regionTimer = 3; lastRegion = ri; }   // 지역 이름은 띄우지 않음
   if (wdist(P.x, P.y, FIRE.x, FIRE.y) < 7) lastRegion = -1;   // 모닥불에 돌아왔다 다시 나가면 또 뜸
   if (regionTimer > 0 && (regionTimer -= dt) <= 0) regionTag.style.opacity = 0;
 }
@@ -2403,13 +2432,6 @@ function drawEnergyOverlay(){
   }
   if (wet) { ctx.fillStyle = 'rgba(120,150,170,.08)'; ctx.fillRect(0, 0, vw, vh); }
   if (faint > 0) { ctx.fillStyle = `rgba(6,4,14,${faint < 1.6 ? faint/1.6 : Math.max(0, 1 - (faint - 1.6)/1.6)})`; ctx.fillRect(0, 0, vw, vh); }
-  if (faintMsg && faintMsg.until > clock) {
-    const a = Math.min(1, (faintMsg.until - clock)/1.5);
-    ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#f6ead2';
-    ctx.font = '30px "Nanum Pen Script", cursive'; ctx.fillText('누군가 당신을 모닥불 곁에 데려다 놓았다.', vw/2, vh*.3);
-    if (faintMsg.lost) { ctx.font = '21px "Nanum Pen Script", cursive'; ctx.fillText(`바구니에서 ${faintMsg.lost}가 하나 사라졌다.`, vw/2, vh*.3 + 34); }
-    ctx.globalAlpha = 1;
-  }
 }
 
 /* ---- 휴대폰: 채팅은 버튼으로 접고, 왼쪽은 걷기·오른쪽은 둘러보기 안내 ---- */
@@ -2556,20 +2578,29 @@ function drawHintOverlay(){   // 이름표 마을 근처엔 식물에 이름표�
   ctx.globalAlpha = 1;
 }
 /* 앵무새가 가까운 곳을 귀띔 */
+function placeThumb(kind, key){   // 앵무새 그림 풍선에 넣을 장소 그림
+  try {
+    if (kind === 'site') { const c = document.createElement('canvas'); c.width = 168; c.height = 102; paintRetablo(c, SITE[key]); return c; }
+    if (kind === 'story') return STORIES.find(q => q.key === key).me.material.map.image;
+    if (kind === 'waterfall') return CLIFF_TEX.image; if (kind === 'lookout') return ROCK_TEX.image;
+    if (kind === 'pz') return PUZZLES.find(q => q.id === key).thumb();
+  } catch (e) {} return null;
+}
 function parrotHint(best){
   const c = [
-    ...SITES.filter(s => !found[s.key]).map(s => ({ name:s.name, x:s.cx, y:s.cy })),
-    ...STORY_SPOTS.filter(s => !seen[s.key]).map(s => ({ name:STORY_INFO[s.key].name, x:s.x, y:s.y })),
-    ...(seen.waterfall ? [] : [{ name:'숲속 폭포', x:WATERFALL.x, y:WATERFALL.y }]),
-    ...(seen.lookout ? [] : [{ name:'전망 바위', x:LOOKOUT.x, y:LOOKOUT.y }]),
-    ...PUZZLES.filter(p => pzStep(p) < p.done).map(p => ({ name:p.name, x:p.x, y:p.y }))
+    ...SITES.filter(s => !found[s.key]).map(s => ({ kind:'site', key:s.key, x:s.cx, y:s.cy })),
+    ...STORY_SPOTS.filter(s => !seen[s.key]).map(s => ({ kind:'story', key:s.key, x:s.x, y:s.y })),
+    ...(seen.waterfall ? [] : [{ kind:'waterfall', x:WATERFALL.x, y:WATERFALL.y }]),
+    ...(seen.lookout ? [] : [{ kind:'lookout', x:LOOKOUT.x, y:LOOKOUT.y }]),
+    ...PUZZLES.filter(p => pzStep(p) < p.done).map(p => ({ kind:'pz', key:p.id, x:p.x, y:p.y }))
   ].sort((a, b) => wdist(P.x, P.y, a.x, a.y) - wdist(P.x, P.y, b.x, b.y));
   if (!c.length) return null;
   const t = c[best || Math.random() < .7 ? 0 : Math.min(c.length - 1, 1)];
-  const rx = wd(t.x - P.x, W), rz = wd(t.y - P.y, H), fx = rx*Math.cos(yaw) - rz*Math.sin(yaw), fz = -rx*Math.sin(yaw) - rz*Math.cos(yaw);
-  const a = Math.atan2(fx, fz)*180/Math.PI, d = Math.hypot(rx, rz);
-  const dir = Math.abs(a) < 35 ? '앞쪽' : Math.abs(a) > 145 ? '뒤쪽' : a > 0 ? '오른쪽' : '왼쪽';
-  return `${t.name}, ${dir} ${d < 10 ? '가까이' : d < 22 ? '조금 멀리' : '아주 멀리'}!`;
+  t.img = placeThumb(t.kind, t.key); return t.img ? t : null;
+}
+function parrotShow(p, t){   // 그림 풍선을 띄우고 그쪽으로 고개를 돌림
+  wants.push({ x:p.x, h:1.15, z:p.y, img:t.img, until:clock + 7 });
+  p.lookAt = { x:t.x, y:t.y, until:clock + 7 };
 }
 /* ---- 나침반: 북쪽만 가리킴 ---- */
 const compass = document.createElement('div');
@@ -2631,35 +2662,35 @@ function updateRibbons(camX, camZ){
 /* 리본 메뉴: 여기 묶기 + 내 리본 목록(풀기) */
 const ribbonPanel = document.createElement('div');
 ribbonPanel.className = 'panel'; ribbonPanel.hidden = true;
-ribbonPanel.style.cssText = 'position:fixed;top:calc(env(safe-area-inset-top,0px) + 58px);right:calc(env(safe-area-inset-right,0px) + 12px);width:min(280px,calc(100vw - 24px));padding:12px;display:flex;flex-direction:column;gap:8px;z-index:4';
+ribbonPanel.style.cssText = 'position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:calc(env(safe-area-inset-right,0px) + 60px);width:min(240px,calc(100vw - 24px));padding:12px;display:flex;flex-direction:column;gap:8px;z-index:4';
 document.body.append(ribbonPanel);
 function dirText(x, y){
   const rx = wd(x - P.x, W), rz = wd(y - P.y, H), fx = rx*Math.cos(yaw) - rz*Math.sin(yaw), fz = -rx*Math.sin(yaw) - rz*Math.cos(yaw);
   const a = Math.atan2(fx, fz)*180/Math.PI, d = Math.round(Math.hypot(rx, rz));
   return `${Math.abs(a) < 35 ? '앞쪽' : Math.abs(a) > 145 ? '뒤쪽' : a > 0 ? '오른쪽' : '왼쪽'} ${d}걸음`;
 }
-function openRibbons(){
+function openRibbons(){   // 글 없이: 남은 리본, 묶기, 내 리본들이 있는 쪽 화살표와 풀기
   ribbonPanel.replaceChildren(); ribbonPanel.hidden = false;
+  const btn = (html, label, fn, extra = '') => { const b = document.createElement('button'); b.type = 'button'; b.innerHTML = html; b.setAttribute('aria-label', label);
+    b.style.cssText = 'width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(20,18,40,.7);border:1px solid rgba(243,230,200,.25);cursor:pointer;padding:0' + extra; b.addEventListener('click', fn); return b; };
   const head = document.createElement('div'); head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px';
-  const t = document.createElement('b'); t.style.cssText = 'font:700 15px var(--display)'; t.textContent = `내 리본 ${myRibbons.length} / ${RIBBON_MAX}`;
-  const close = document.createElement('button'); close.type = 'button'; close.textContent = '닫기'; close.style.cssText = 'background:none;border:0;color:var(--dim);font:12px var(--body);cursor:pointer';
-  close.addEventListener('click', () => { ribbonPanel.hidden = true; cv.focus(); });
-  head.append(t, close); ribbonPanel.append(head);
-  const tie = document.createElement('button'); tie.type = 'button'; tie.textContent = '여기에 묶기' + (MOBILE ? '' : ' (R)'); tie.disabled = myRibbons.length >= RIBBON_MAX;
-  tie.style.cssText = 'background:var(--marigold);color:#3a2206;border:0;border-radius:6px;padding:9px;font:600 13px var(--body);cursor:pointer' + (tie.disabled ? ';opacity:.45;cursor:default' : '');
-  tie.addEventListener('click', () => { tieRibbon(); cv.focus(); }); ribbonPanel.append(tie);
-  if (!myRibbons.length) { const p = document.createElement('p'); p.style.cssText = 'margin:0;font:12px var(--body);color:var(--dim)'; p.textContent = '나무에 리본을 묶으면 같이 있는 사람 화면에도 보여요. 길을 표시해 두세요.'; ribbonPanel.append(p); }
-  myRibbons.forEach((r, i) => {
-    const row = document.createElement('div'); row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;font:13px var(--body)';
-    const sw = document.createElement('span'); sw.textContent = `${i + 1}. ${dirText(r.x, r.y)}`;
-    const un = document.createElement('button'); un.type = 'button'; un.textContent = '풀기'; un.style.cssText = 'background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font:12px var(--body);cursor:pointer';
-    un.addEventListener('click', () => untieRibbon(r.id)); row.append(sw, un); ribbonPanel.append(row);
+  const left = document.createElement('div'); left.style.cssText = 'display:flex;gap:4px';
+  for (let i = 0; i < RIBBON_MAX; i++) left.insertAdjacentHTML('beforeend', ICON(IC.ribbon, i < RIBBON_MAX - myRibbons.length ? myColor : 'rgba(243,230,200,.25)', 20));   // 남은 리본
+  const full = myRibbons.length >= RIBBON_MAX;
+  const tie = btn(ICON(IC.plus, full ? 'rgba(243,230,200,.3)' : '#f2a93b'), '여기에 리본 묶기', () => { if (!full) { tieRibbon(); cv.focus(); } }, full ? ';cursor:default' : '');
+  head.append(left, tie, btn(ICON(IC.close), '닫기', () => { ribbonPanel.hidden = true; cv.focus(); })); ribbonPanel.append(head);
+  myRibbons.forEach(r => {
+    const row = document.createElement('div'); row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px';
+    const rx = wd(r.x - P.x, W), rz = wd(r.y - P.y, H), a = Math.atan2(rx*Math.cos(yaw) - rz*Math.sin(yaw), -rx*Math.sin(yaw) - rz*Math.cos(yaw))*180/Math.PI;
+    const sw = document.createElement('span'); sw.style.cssText = 'display:flex;align-items:center;gap:6px';
+    sw.innerHTML = ICON(IC.ribbon, r.color || myColor, 20) + `<span style="display:inline-flex;transform:rotate(${a.toFixed(0)}deg)">${ICON(IC.arrow, '#f3e6c8', 18)}</span>`;
+    row.append(sw, btn(ICON(IC.close, '#e8a090', 16), '이 리본 풀기', () => untieRibbon(r.id))); ribbonPanel.append(row);
   });
 }
 /* 오른쪽 위 리본 버튼과 단축키 (R) */
 const $ribbonBtn = document.createElement('button'); $ribbonBtn.type = 'button';
 $ribbonBtn.addEventListener('click', () => { if (ribbonPanel.hidden) openRibbons(); else ribbonPanel.hidden = true; });
-function paintRibbonBtn(){ $ribbonBtn.textContent = `리본 ${myRibbons.length}/${RIBBON_MAX}`; }
+function paintRibbonBtn(){ $ribbonBtn.innerHTML = ICON(IC.ribbon); $ribbonBtn.setAttribute('aria-label', '리본'); $ribbonBtn.classList.add('ic'); }
 paintRibbonBtn();
 document.querySelector('.tools').prepend($ribbonBtn);
 { const tools = document.querySelector('.tools'), leaf = document.createElement('button'); leaf.type = 'button'; leaf.className = 'leaf'; leaf.setAttribute('aria-label', '메뉴'); leaf.setAttribute('aria-expanded', 'false');
@@ -2739,7 +2770,7 @@ function updateLie(){
   if (P.lie && P.moving) P.lie = false;
   const can = P.lie || !!nearHammock();
   hammockBar.hidden = !can;
-  if (can) hammockBar.textContent = P.lie ? '일어나기' + (MOBILE ? '' : ' (F)') : '해먹에 눕기' + (MOBILE ? '' : ' (F)');
+  if (can) { const want = P.lie ? 'up' : 'lie'; if (hammockBar.dataset.s !== want) { hammockBar.dataset.s = want; hammockBar.innerHTML = ICON(P.lie ? IC.stand : IC.hammock); hammockBar.setAttribute('aria-label', P.lie ? '일어나기' : '해먹에 눕기'); } }
   if (P.lie) pitch += (.55 - pitch)*.05;
 }
 
@@ -2885,7 +2916,8 @@ function draw(dt = .016){
   const rxv = Math.cos(yaw), rzv = -Math.sin(yaw);
   const turnTo = (me, ax, az, native, st) => { const sx = wd(ax - P.x, W)*rxv + wd(az - P.y, H)*rzv, d = wdist(ax, az, P.x, P.y);
     if (d < 10 && Math.abs(sx) > .3) st.dir = sx > 0 ? -1 : 1; me.scale.x = Math.abs(me.scale.x)*((st.dir || native)*native); };
-  PARROTS.forEach((p, i) => { p.mesh.rotation.y = yaw; p.mesh.position.y = Math.abs(Math.sin(clock*3 + i))*.03; turnTo(p.mesh, p.x, p.y, -1, p); });
+  PARROTS.forEach((p, i) => { p.mesh.rotation.y = yaw; p.mesh.position.y = Math.abs(Math.sin(clock*3 + i))*.03;
+    if (p.lookAt && p.lookAt.until > clock) { const sx = wd(p.lookAt.x - p.x, W)*rxv + wd(p.lookAt.y - p.y, H)*rzv; p.dir = sx > 0 ? 1 : -1; p.mesh.scale.x = Math.abs(p.mesh.scale.x)*p.dir*-1; } else turnTo(p.mesh, p.x, p.y, -1, p); });
   TIGERS.forEach(me => turnTo(me, me.position.x, me.position.z, 1, me.userData));
   oldman.rotation.y = yaw;
   const face = me => { me.rotation.y = Math.atan2(camX - me.position.x, camZ - me.position.z); };
@@ -2969,10 +3001,10 @@ paintAlbumBtn();
 setInterval(save, 4000);
 addEventListener('pagehide', save);
 
-const $reset = document.getElementById('reset'); let armed = 0;
+const $reset = document.getElementById('reset'); let armed = 0; $reset.innerHTML = ICON(IC.reset); $reset.classList.add('ic'); $reset.setAttribute('aria-label', '처음부터');
 $reset.addEventListener('click', () => {
-  if (!armed) { armed = setTimeout(() => { armed = 0; $reset.textContent = '처음부터'; }, 3000); $reset.textContent = '한 번 더 누르면 초기화'; return; }
-  clearTimeout(armed); armed = 0; $reset.textContent = '처음부터';
+  if (!armed) { armed = setTimeout(() => { armed = 0; $reset.innerHTML = ICON(IC.reset); }, 3000); $reset.innerHTML = ICON(IC.reset, '#e8402f'); return; }   // 빨개진 걸 한 번 더 누르면 처음부터
+  clearTimeout(armed); armed = 0; $reset.innerHTML = ICON(IC.reset);
   P.x = SX + .5; P.y = SY + 2.4; found = {}; clock = 0; save(); paintAlbumBtn(); sendPresence(true); cv.focus();
 });
 
