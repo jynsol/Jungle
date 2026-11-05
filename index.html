@@ -108,7 +108,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
    모두 정면에서 본 모습, 투명 배경, 아래가 땅에 닿게. */
 const ASSET_NAMES = ['agave','grass','broadleaf','fern','lily','whitespike','heartleaf','banana','sansevieria','palm','tree','orangetree','lotus','flamingo','tiger','monkey','ruin','player','parrot','leaf','player_walk','butterfly','fire','log','cliff','waterfall_flow'];
 // 아직 기본 그림인 것들: 파일을 넣으면 바로 바뀜 (목록과 크기는 ART_LIST.md)
-ASSET_NAMES.push('galleon', 'galleon_front', 'piano', 'clock', 'gramophone', 'bicycle', 'mailbox', 'swing', 'chair', 'monkeys', 'whitebird', 'toucan', 'oldman', 'rock', 'fruit_banana', 'fruit_mango', 'fruit_cacao', 'bigtree', 'sloth_idle', 'sloth_eat', 'sloth_sleep', 'basket', 'basket_open', 'vine');
+ASSET_NAMES.push('galleon', 'galleon_front', 'piano', 'clock', 'gramophone', 'bicycle', 'mailbox', 'swing', 'chair', 'monkeys', 'whitebird', 'toucan', 'oldman', 'rock', 'fruit_banana', 'fruit_mango', 'fruit_cacao', 'bigtree', 'sloth_idle', 'sloth_eat', 'sloth_sleep', 'basket', 'vine', 'item_sail', 'sail_full', 'ladder', 'ladder_rolled', 'treehut', 'chest', 'chest_open', 'spyglass', 'deck');
 const ASSETS = Object.fromEntries(ASSET_NAMES.map(n => [n, 'assets/' + n + '.png']));
 const ART = {};   // 그림 이름 → 그림이 오면 할 일 (그림판 바꾸고 비율 맞추기)
 const onArt = (k, fn) => (ART[k] || (ART[k] = [])).push(fn);
@@ -2448,7 +2448,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
       if (k > 3) { SL.orange = null; orange.visible = false; } }
     // 망원경: 다음 갈 곳 쪽을 크게 (움직이면 끝)
     if (spyOn) { if (P.moving || clock - spyOn.t > 7) { spyOn = null; fitRenderer(); }
-      else { const tgt = parrotHint(true) || { x:FIRE.x, y:FIRE.y }; const ty = Math.atan2(-wd(tgt.x - P.x, W), -wd(tgt.y - P.y, H)); yaw += wd(ty - yaw, Math.PI*2)*Math.min(1, dt*3); camera.fov = 16; camera.updateProjectionMatrix(); myMesh.visible = false; } }
+      else { const tgt = parrotHint(true) || { x:FIRE.x, y:FIRE.y }; const ty = Math.atan2(-wd(tgt.x - P.x, W), -wd(tgt.y - P.y, H)); yaw += wd(ty - yaw, Math.PI*2)*Math.min(1, dt*3); camera.fov = 16; camera.updateProjectionMatrix(); myMesh.visible = false; scene.fog.near = 25; scene.fog.far = 90; } }   // 망원경으론 안개 너머까지
   };
   SL.overlay = () => {
     if (stars) { const k = (clock - stars.t)/1.3; if (k >= 1) stars = null; else { const s = toScreen(P.x, 1.6 + (P.upH || 0), P.y); if (s) { ctx.fillStyle = `rgba(255,236,140,${1 - k})`; ctx.font = '14px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; for (let j = 0; j < 4; j++) { const a = clock*5 + j*1.57; ctx.fillText('✦', s[0] + Math.cos(a)*18, s[1] + Math.sin(a)*6); } } } }
