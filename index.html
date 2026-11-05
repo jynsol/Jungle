@@ -113,7 +113,7 @@ const ASSETS = Object.fromEntries(ASSET_NAMES.map(n => [n, 'assets/' + n + '.png
 const ART = {};   // 그림 이름 → 그림이 오면 할 일 (그림판 바꾸고 비율 맞추기)
 const onArt = (k, fn) => (ART[k] || (ART[k] = [])).push(fn);
 let pzSave = {}; try { pzSave = JSON.parse(localStorage.getItem('denggul-puzzles')) || {}; } catch (e) {}   // 퍼즐 진행, 들고 있는 돛, 범선에 건 돛
-if (!pzSave.v) { if (pzSave.sloth && pzSave.sloth.step >= 4) { pzSave.sloth.step = 7; pzSave.carry = (pzSave.carry || 0) + 1; } pzSave.v = 2; try { localStorage.setItem('denggul-puzzles', JSON.stringify(pzSave)); } catch (e) {} }   // 예전 나무늘보를 푼 사람은 두루마리를 들고 시작
+if ((pzSave.v || 0) < 3) { pzSave = { v:3 }; try { localStorage.setItem('denggul-puzzles', JSON.stringify(pzSave)); } catch (e) {} }   // 퍼즐을 새로 만들어서 예전 진행은 비움
 // 글 대신 쓰는 작은 그림 아이콘
 const ICON = (d, col = '#f3e6c8', sz = 22) => `<svg viewBox="0 0 24 24" width="${sz}" height="${sz}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const IC = {
@@ -2382,7 +2382,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     else L.push({ key:'pz-rolled', noSeen:true, x:SPOT.ladder.x, h:DECK + .2, z:SPOT.ladder.z, me:rolled });
     if (up) {
       L.push({ key:'pz-chest', noSeen:true, x:SPOT.chest.x, h:DECK + .3, z:SPOT.chest.z, reach:2.4, me:chest,
-        act:() => { if (pzStep(SL) !== 5) { tick(220, .15, .08, 'triangle'); return; }
+        act:() => { if (pzStep(SL) !== 5) { tick(220, .15, .08, 'triangle'); pokes.push({ me:chest, t:clock }); return; }
           pzSave.carry = (pzSave.carry || 0) + 1; savePz(); paintBag(); pickFx.push({ img:ROLL_T.userData.canvas, x:SPOT.chest.x, z:SPOT.chest.z, t:clock }); pzSfx.chime(.1); setPzStep(SL, 6); } });
       L.push({ key:'pz-spy', noSeen:true, x:SPOT.spy.x, h:DECK + .5, z:SPOT.spy.z, reach:2.4, me:spy, act:() => { spyOn = { t:clock, x:P.x, y:P.y }; tick(880, .2, .05); } });
       L.push({ key:'pz-hut', noSeen:true, x:SPOT.hut.x, h:DECK + 1, z:SPOT.hut.z, me:hut });
