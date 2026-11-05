@@ -313,27 +313,46 @@ function squawk(){
 /* ---- 앵무새: 들은 말을 기억했다가 따라 함. 기억은 Supabase에 남아 다른 사람도 듣게 됨 ---- */
 let sb = null, chan = null;
 const shared = {};   // parrot index -> [말]
-function remember(i, text){
+const BADWORDS = /(씨발|시발|ㅅㅂ|병신|ㅂㅅ|좆|개새|fuck|shit|bitch)/i;
+const learnable = t => t.length <= 20 && !/(https?:|www\.|\.com|\.kr|\d{4,})/i.test(t) && !BADWORDS.test(t);   // 링크·숫자 나열·욕은 배우지 않음
+let knownIds = new Set(); try { knownIds = new Set(JSON.parse(localStorage.getItem('denggul-known')) || []); } catch (e) {}
+function remember(i, text, ts, who){
   if (!(i >= 0 && i < PARROTS.length)) return;
-  const t = clean(text || ''); if (!t) return;
+  const t = clean(text || ''); if (!t || !learnable(t)) return;
   const L = shared[i] || (shared[i] = []);
-  if (!L.includes(t)) { L.push(t); if (L.length > 6) L.shift(); }
+  L.push({ t, ts:ts || Date.now(), who:who || '' }); if (L.length > 40) L.shift();
 }
-function hear(x, y, text, mine){
+
+function hear(x, y, text, mine, who){
+  if (!learnable(text)) return;
   PARROTS.forEach((p, i) => {
     if (wdist(p.x, p.y, x, y) > 6) return;
-    if (!p.heard.includes(text)) { p.heard.push(text); if (p.heard.length > 6) p.heard.shift(); }
-    if (mine && sb) sb.from('parrot_lines').insert({ parrot:i, text }).then(() => {}, () => {});
+    remember(i, text, Date.now(), mine ? ME.id : who);
+    if (mine && sb) sb.from('parrot_lines').insert({ parrot:i, text, speaker:ME.id })
+      .then(({ error }) => { if (error) sb.from('parrot_lines').insert({ parrot:i, text }).then(() => {}, () => {}); }, () => {});
   });
+}
+
+let lastParrot = -99;
+function parrotLine(i){   // 말버릇 1칸 + 최근 2칸 중 하나
+  const now = Date.now(), L = shared[i] || [], known = l => !!l.who && (l.who === ME.id || knownIds.has(l.who));
+  const counts = {}; for (const l of L) counts[l.t] = (counts[l.t] || 0) + 1;
+  const top = Object.entries(counts).filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1])[0], fav = top && top[0];
+  const recent = L.filter(l => l.t !== fav && now - l.ts < 864e5 && (known(l) || Math.random() < .3))
+    .sort((a, b) => (known(b) - known(a)) || (b.ts - a.ts)).slice(0, 2).map(l => l.t);
+  const slots = [fav, ...recent].filter(Boolean);
+  return slots.length ? slots[Math.random()*slots.length | 0] : null;
 }
 function parrotTalk(p, i, dt){
   p.cool -= dt;
-  if (p.cool > 0 || wdist(p.x, p.y, P.x, P.y) > 3.2) return;
-  const pool = [...(shared[i] || []), ...p.heard];
-  const hint = Math.random() < .4 ? parrotHint() : null;
-  const t = hint || pool.length && Math.random() < .8 ? pool[Math.random()*pool.length | 0] : PARROT_SEED[Math.random()*PARROT_SEED.length | 0];
-  p.bubble = { text:t, until:clock + 5 }; p.cool = 16 + Math.random()*14; squawk();
+  if (p.cool > 0 || P.moving || clock - lastParrot < 10 || wdist(p.x, p.y, P.x, P.y) > 3.2) return;
+  let ni = 0, nd = 1e9; PARROTS.forEach((q, j) => { const d = wdist(q.x, q.y, P.x, P.y); if (d < nd) { nd = d; ni = j; } });
+  if (ni !== i) return;   // 가장 가까운 한 마리만
+  const hint = Math.random() < .35 ? parrotHint() : null, learned = parrotLine(i);
+  const t = hint || (learned && Math.random() < .8 ? learned : PARROT_SEED[Math.random()*PARROT_SEED.length | 0]);
+  p.bubble = { text:t, until:clock + 5 }; p.cool = 16 + Math.random()*14; lastParrot = clock; squawk();
 }
+
 
 /* ---- 나 ---- */
 const PALETTE = ['#f2a93b','#ff5f8f','#2aa6a6','#9b6bd8','#e8402f','#4fae4c','#2f6fd8','#ffd23a'];
@@ -361,14 +380,15 @@ function onState(s){
   if (!s || typeof s.id !== 'string' || s.id === ME.id || typeof s.x !== 'number' || typeof s.y !== 'number') return null;
   const x = Math.max(1, Math.min(W-1, s.x)), y = Math.max(1, Math.min(H-1, s.y));
   let o = others.get(s.id);
-  if (!o) { o = { rx:x, ry:y }; others.set(s.id, o); }
+  if (!o) { o = { rx:x, ry:y }; others.set(s.id, o);
+    if (!knownIds.has(s.id)) { knownIds.add(s.id); try { localStorage.setItem('denggul-known', JSON.stringify([...knownIds].slice(-200))); } catch (e) {} } }   // 같이 있었던 사람
   Object.assign(o, { x, y, fx:+s.fx || 0, fy:+s.fy || 0, m:!!s.m, sit:!!s.s, bf:!!s.bf, name:clean(s.n || '').slice(0, 12) || '탐험가', color:safeColor(s.c), seen:performance.now() });
   return o;
 }
 function onSay(s){
   const o = onState(s); const t = clean((s && s.t) || '');
   if (!o || !t) return;
-  o.bubble = { text:t, until:clock + 7 }; hear(o.x, o.y, t, false); addLog(o.name, o.color, t);
+  o.bubble = { text:t, until:clock + 7 }; hear(o.x, o.y, t, false, s.id); addLog(o.name, o.color, t);
 }
 setInterval(() => { const now = performance.now(); for (const [k,o] of others) if (now - o.seen > 10000) others.delete(k); }, 2000);
 async function connect(){
@@ -376,13 +396,14 @@ async function connect(){
   if (!C.supabaseUrl || !C.supabaseAnonKey || !window.supabase) return;
   try {
     sb = window.supabase.createClient(C.supabaseUrl, C.supabaseAnonKey);
-    sb.from('parrot_lines').select('parrot,text').order('id', { ascending:false }).limit(300)
-      .then(({ data }) => (data || []).reverse().forEach(r => remember(r.parrot, r.text)), () => {});
+    const loadLines = cols => sb.from('parrot_lines').select(cols).order('id', { ascending:false }).limit(300);
+    loadLines('parrot,text,created_at,speaker').then(({ data, error }) => error ? loadLines('parrot,text,created_at') : { data })
+      .then(({ data }) => (data || []).reverse().forEach(r => remember(r.parrot, r.text, Date.parse(r.created_at), r.speaker)), () => {});
     chan = sb.channel('denggul', { config:{ broadcast:{ self:false }, presence:{ key:ME.id } } });
     chan.on('broadcast', { event:'st' }, ({ payload }) => onState(payload))
         .on('broadcast', { event:'say' }, ({ payload }) => onSay(payload))
         .on('presence', { event:'leave' }, ({ key }) => others.delete(key))
-        .on('postgres_changes', { event:'INSERT', schema:'public', table:'parrot_lines' }, ({ new:r }) => r && remember(r.parrot, r.text))
+        .on('postgres_changes', { event:'INSERT', schema:'public', table:'parrot_lines' }, ({ new:r }) => r && r.speaker !== ME.id && remember(r.parrot, r.text, Date.parse(r.created_at) || Date.now(), r.speaker))
 ;
     NET_HOOKS.forEach(h => h(chan));
     chan.subscribe(st => { if (st === 'SUBSCRIBED') { chan.track({ on:1 }); sendPresence(true); } });

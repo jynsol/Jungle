@@ -41,3 +41,7 @@ language sql security definer set search_path = public as $$
   delete from public.ribbons where id = rid and owner_hash = encode(sha256(convert_to(owner_key, 'UTF8')), 'hex');
 $$;
 grant execute on function public.untie_ribbon(bigint, text) to anon;
+
+-- ---------------------------------------------------------------
+-- 앵무새가 누구 말인지 기억 (같이 있었던 사람 말을 먼저 따라 하려고)
+alter table public.parrot_lines add column if not exists speaker text not null default '' check (char_length(speaker) <= 40);
