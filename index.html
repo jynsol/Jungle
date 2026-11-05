@@ -344,13 +344,12 @@ $say.addEventListener('focus', () => keys.clear());
 let joy = null, look = null;
 cv.addEventListener('pointerdown', e => {
   startAudio(); $say.blur(); cv.focus();
-  if (e.pointerType === 'mouse' || e.clientX > innerWidth*.6) look = { id:e.pointerId, x:e.clientX };
-  else joy = { id:e.pointerId, sx:e.clientX, sy:e.clientY, x:e.clientX, y:e.clientY };
+  look = { id:e.pointerId, x:e.clientX };   // 어디를 끌어도 둘러봄. 걷기는 누른 곳으로
   try { cv.setPointerCapture(e.pointerId); } catch (er) {}
 });
 cv.addEventListener('pointermove', e => {
   if (joy && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; }
-  if (look && e.pointerId === look.id) { yaw = Math.max(-YAW_MAX, Math.min(YAW_MAX, yaw - (e.clientX - look.x)*.008)); look.x = e.clientX; }
+  if (look && e.pointerId === look.id) { const ddx = e.clientX - look.x; yaw = Math.max(-YAW_MAX, Math.min(YAW_MAX, yaw - ddx*.008)); look.x = e.clientX; if (Math.abs(ddx) > 0) lookT = clock; }
 });
 const endJoy = e => { if (joy && e.pointerId === joy.id) joy = null; if (look && e.pointerId === look.id) look = null; };
 cv.addEventListener('pointerup', endJoy); cv.addEventListener('pointercancel', endJoy);
@@ -644,6 +643,16 @@ function step(dt){
     for (const c of keys) if (KEYMAP[c]) { dx += KEYMAP[c][0]; dy += KEYMAP[c][1]; }
     yaw = Math.max(-YAW_MAX, Math.min(YAW_MAX, yaw + ((keys.has('KeyQ') ? 1 : 0) - (keys.has('KeyE') ? 1 : 0))*dt*1.8));
     if (joy) { const jx = joy.x-joy.sx, jy = joy.y-joy.sy, l = Math.hypot(jx,jy); if (l > 8) { dx = jx/Math.max(l,40); dy = jy/Math.max(l,40); } }
+    if (dx || dy) P.goto = null;   // 손으로 걸으면 누른 곳 걷기는 그만
+    else if (P.goto && !P.climb) {   // 누른 곳으로 걸어감 (물건이면 손닿는 데서 멈추고 손을 댐)
+      const g = P.goto, wx = wd(g.x - P.x, W), wz = wd(g.z - P.y, H), d = Math.hypot(wx, wz);
+      if (d <= g.stop) { P.goto = null; if (g.act) g.act(); }
+      else {
+        if (d < g.best - .05) { g.best = d; g.bestT = clock; } else if (clock - g.bestT > .9) P.goto = null;   // 막혀서 더 못 가면 멈춤
+        const ux = wx/d, uz = wz/d; dx = Math.cos(yaw)*ux - Math.sin(yaw)*uz; dy = Math.sin(yaw)*ux + Math.cos(yaw)*uz;
+        if (clock - lookT > 1.2) { const ty = Math.atan2(-ux, -uz); yaw += wd(ty - yaw, Math.PI*2)*Math.min(1, dt*1.4); }   // 카메라가 천천히 등 뒤로 따라 돎
+      }
+    }
   }
   const len = Math.hypot(dx,dy); if (len > 1) { dx /= len; dy /= len; }
   P.moving = len > .05 && !P.climb;
@@ -1535,6 +1544,13 @@ cv.addEventListener('pointerup', e => {
   const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y), quick = performance.now() - tapStart.t < 400; tapStart = null;
   if (moved < 9 && quick) handleTap(e.clientX, e.clientY);   // 거의 안 움직이고 뗐으면 누른 것
 });
+function walkToScreen(x, y){   // 누른 땅으로 걸어감 (하늘을 누르면 그쪽으로 조금)
+  const r = cv.getBoundingClientRect(), o = camera.position, v = new THREE.Vector3(((x - r.left)/r.width)*2 - 1, -((y - r.top)/r.height)*2 + 1, .5).unproject(camera).sub(o).normalize();
+  const gy = o.y - CAM_H, l = Math.hypot(v.x, v.z) || 1; let hx, hz;
+  if (v.y < -.02) { const k = (gy - o.y)/v.y; hx = wd(o.x + v.x*k - P.x, W); hz = wd(o.z + v.z*k - P.y, H); }
+  if (!(v.y < -.02) || Math.hypot(hx, hz) > 18) { hx = v.x/l*12; hz = v.z/l*12; }
+  P.goto = { x:wrapX(P.x + hx), z:wrapY(P.y + hz), stop:.25, best:1e9, bestT:clock };
+}
 function handleTap(x, y){
   let best = null, bd = (MOBILE ? 80 : 64)**2;
   const segD = (a, b) => { const vx = b[0] - a[0], vy = b[1] - a[1], l = vx*vx + vy*vy || 1, u = Math.max(0, Math.min(1, ((x - a[0])*vx + (y - a[1])*vy)/l)); return (a[0] + vx*u - x)**2 + (a[1] + vy*u - y)**2; };
@@ -1546,8 +1562,9 @@ function handleTap(x, y){
     if (t.act && wdist(t.x, t.z, P.x, P.y) < (t.reach || 4)) d *= .45;   // 손닿는 곳에 있는 건 더 잘 잡힘
     if (d < bd) { bd = d; best = t; }
   }
-  if (!best) return;
+  if (!best) { walkToScreen(x, y); return; }
   if (best.act && wdist(best.x, best.z, P.x, P.y) < (best.reach || 4)) { best.act(); return; }   // 가까이서 누르면 손을 댐
+  if (best.act) { const t = best; P.goto = { x:t.x, z:t.z, stop:Math.max(.8, (t.reach || 4)*.7), act:() => { const f = lookTargets().find(q => q.key === t.key && q.act && wdist(q.x, q.z, P.x, P.y) < (q.reach || 4)); if (f) f.act(); }, best:1e9, bestT:clock }; return; }   // 멀리 있는 물건: 걸어가서 손을 댐
   if (best.key === 'galleon' && pzSave.carry > 0 && wdist(best.x, best.z, P.x, P.y) < 6) { hangSail(); return; }
   poke(best);   // 멀리서, 또는 손댈 게 없으면: 그 자리에서 움찔하고 소리
   if (!best.noSeen && !seen[best.key]) { seen[best.key] = today(); try { localStorage.setItem('denggul-seen', JSON.stringify(seen)); } catch (er) {} }
