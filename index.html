@@ -117,14 +117,14 @@ const IMG = {};
 { const veil = document.createElement('div');
   veil.style.cssText = 'position:fixed;inset:0;z-index:50;background:#13201a;display:flex;align-items:center;justify-content:center;color:#cfc6a8;font:17px "Gowun Batang",serif;letter-spacing:.08em;transition:opacity .9s';
   veil.textContent = '숲으로 들어가는 중…'; document.body.append(veil);
-  let left = 0, done = false;
+  let left = 0, total = 0, done = false;
   const finish = () => { if (done) return; done = true; repaintRings(); veil.style.opacity = 0; veil.style.pointerEvents = 'none'; setTimeout(() => veil.remove(), 1000); };
-  const one = () => { if (--left <= 0) finish(); };
-  for (const [k, src] of Object.entries(ASSETS)) if (src) { left++;
+  const one = () => { left--; veil.textContent = `숲으로 들어가는 중… ${total - left} / ${total}`; if (left <= 0) finish(); };
+  for (const [k, src] of Object.entries(ASSETS)) if (src) { left++; total++;
     fetch(src, { cache:'no-cache' }).then(r => r.ok ? r.blob() : Promise.reject()).then(b => {
       const im = new Image(); im.onload = () => { IMG[k] = im; try { onAsset(k, im); } catch (e) {} one(); }; im.onerror = one; im.src = URL.createObjectURL(b);
     }).catch(one); }
-  if (!left) finish(); setTimeout(finish, 9000);
+  if (!left) finish(); setTimeout(finish, 45000);   // 새 그림이 다 올 때까지 예전 그림은 보이지 않게 (아주 느릴 때만 45초 뒤 열림)
 }
 
 const W = 96, H = 96, T = 28, DAY = 180;
