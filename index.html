@@ -2606,7 +2606,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
   };
   SL.update = (dt, camX, camZ) => {
     const st = pzStep(SL); if (st !== SL.last) { SL.t = clock; SL.last = st; SL.snd = false; }
-    const el = clock - SL.t, d = wdist(P.x, P.y, hub.x, hub.y);
+    const el = (clock - SL.t)*(st >= 2 && st <= 4 ? 2 : 1), d = wdist(P.x, P.y, hub.x, hub.y);   // 먹고 기어가고 사다리 내리는 건 두 배 빠르게 (기다리기 지루하지 않게)
     const at = p => wrapNear(p.x, p.z, camX, camZ), face = (me, x, z) => { me.rotation.y = Math.atan2(camX - x, camZ - z); };
     const [hx, hz] = at({ x:hub.x, z:hub.y }); tree.position.set(hx, 0, hz); face(tree, hx, hz); tree.visible = (P.upH || 0) < DECK - 1.5;   // 발판 위에선 코앞의 큰 나무 그림을 숨김
     deck.position.set(hx, DECK, hz);
@@ -2656,8 +2656,8 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     if (st === 4 && el > 2.4) { setPzStep(SL, 5, { auto:true }); popAt(SPOT.ladder.x, SPOT.ladder.z, 1.2); }   // 사다리가 땅에 닿음: 올라갈 수 있다!
     if (!SL.snd) { SL.snd = true; const v = near();
       if (st === 1 && el < .3) { SL.react = { kind:'wake', t:clock }; pzSfx.hm(.1*v); }
-      if (st === 2 && el < .3) { pzSfx.rope(.09*v); setTimeout(() => pzSfx.munch(.12*near()), 4200); }
-      if (st === 4 && el < .3) { pzSfx.rope(.12*v); setTimeout(() => pzSfx.thump(.2*near()), 2000); setTimeout(() => pzSfx.chime(.08*near()), 2300); } }
+      if (st === 2 && el < .3) { pzSfx.rope(.09*v); setTimeout(() => pzSfx.munch(.12*near()), 2100); }
+      if (st === 4 && el < .3) { pzSfx.rope(.12*v); setTimeout(() => pzSfx.thump(.2*near()), 1000); setTimeout(() => pzSfx.chime(.08*near()), 1150); } }
     // 덩굴(도르래 줄)
     let vw = Math.sin(clock*.9)*.03, vy = 1.3;
     if (r && r.kind === 'vine' && re < 1.4) { vw += Math.sin(re*12)*.08*(1 - re/1.4); vy -= Math.sin(Math.min(1, re/.5)*Math.PI)*.35; }
