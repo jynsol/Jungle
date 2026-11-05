@@ -664,7 +664,7 @@ function step(dt){
       else {
         if (d < g.best - .05) { g.best = d; g.bestT = clock; } else if (clock - g.bestT > .9) P.goto = null;   // 막혀서 더 못 가면 멈춤
         const ux = wx/d, uz = wz/d; dx = Math.cos(yaw)*ux - Math.sin(yaw)*uz; dy = Math.sin(yaw)*ux + Math.cos(yaw)*uz;
-        if (clock - lookT > 1.2) { const ty = Math.atan2(-ux, -uz); yaw += wd(ty - yaw, Math.PI*2)*Math.min(1, dt*1.4); }   // 카메라가 천천히 등 뒤로 따라 돎
+        if (MOBILE && clock - lookT > 2) { const ty = Math.atan2(-ux, -uz), dd = wd(ty - yaw, Math.PI*2); if (Math.abs(dd) < 1.4) yaw += dd*Math.min(1, dt*.6); }   // 폰에서만, 앞쪽으로 걸을 때 카메라가 천천히 따라 돎 (뒤로 홱 돌지 않음)
       }
     }
   }
@@ -1564,13 +1564,13 @@ cv.addEventListener('pointerdown', e => { tapStart = { x:e.clientX, y:e.clientY,
 cv.addEventListener('pointerup', e => {
   if (!tapStart || tapStart.id !== e.pointerId) return;
   const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y), quick = performance.now() - tapStart.t < 400; tapStart = null;
-  if (moved < 9 && quick) handleTap(e.clientX, e.clientY);   // 거의 안 움직이고 뗐으면 누른 것
+  if (moved < 7 && quick) handleTap(e.clientX, e.clientY);   // 거의 안 움직이고 뗐으면 누른 것
 });
 function walkToScreen(x, y){   // 누른 땅으로 걸어감 (하늘을 누르면 그쪽으로 조금)
   const r = cv.getBoundingClientRect(), o = camera.position, v = new THREE.Vector3(((x - r.left)/r.width)*2 - 1, -((y - r.top)/r.height)*2 + 1, .5).unproject(camera).sub(o).normalize();
   const gy = o.y - CAM_H, l = Math.hypot(v.x, v.z) || 1; let hx, hz;
   if (v.y < -.02) { const k = (gy - o.y)/v.y; hx = wd(o.x + v.x*k - P.x, W); hz = wd(o.z + v.z*k - P.y, H); }
-  if (!(v.y < -.02) || Math.hypot(hx, hz) > 18) { hx = v.x/l*12; hz = v.z/l*12; }
+  if (!(v.y < -.02) || Math.hypot(hx, hz) > 14) return;   // 하늘이나 너무 먼 곳을 누르면 걷지 않음
   P.goto = { x:wrapX(P.x + hx), z:wrapY(P.y + hz), stop:.25, best:1e9, bestT:clock };
 }
 function handleTap(x, y){
@@ -1584,7 +1584,7 @@ function handleTap(x, y){
     if (t.act && wdist(t.x, t.z, P.x, P.y) < (t.reach || 4)) d *= .45;   // 손닿는 곳에 있는 건 더 잘 잡힘
     if (d < bd) { bd = d; best = t; }
   }
-  if (!best) { walkToScreen(x, y); return; }
+  if (!best) { if (MOBILE) walkToScreen(x, y); return; }   // 땅을 눌러 걷기는 폰에서만 (컴퓨터는 키보드)
   if (best.act && wdist(best.x, best.z, P.x, P.y) < (best.reach || 4)) { best.act(); return; }   // 가까이서 누르면 손을 댐
   if (best.act) { const t = best; P.goto = { x:t.x, z:t.z, stop:Math.max(.8, (t.reach || 4)*.7), act:() => { const f = lookTargets().find(q => q.key === t.key && q.act && wdist(q.x, q.z, P.x, P.y) < (q.reach || 4)); if (f) f.act(); }, best:1e9, bestT:clock }; return; }   // 멀리 있는 물건: 걸어가서 손을 댐
   if (best.key === 'galleon' && pzSave.carry > 0 && wdist(best.x, best.z, P.x, P.y) < 6) { hangSail(); return; }
