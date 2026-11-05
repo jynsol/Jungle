@@ -164,6 +164,7 @@ for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
 const setT = (x,y,t) => { if (!border(x,y)) type[id(x,y)] = t; };
 function clear(cx,cy,rad){ for (let y = Math.floor(cy-rad); y <= cy+rad; y++) for (let x = Math.floor(cx-rad); x <= cx+rad; x++) if ((x+.5-cx)**2 + (y+.5-cy)**2 <= rad*rad) setT(x,y,FLOOR); }
 const SX = W/2|0, SY = H/2|0;
+const FIRE = { x:SX+.5, y:SY+.5 };   // 출발점의 모닥불
 SITES.forEach((s,i) => {
   let x, y, n = 0;
   do { x = 6 + R()*(W-13) | 0; y = 6 + R()*(H-13) | 0; n++; }
@@ -201,7 +202,7 @@ const PARROTS = [];
   } }
 
 /* ---- 상태 ---- */
-const P = { x:SX+.5, y:SY+.5, fx:0, fy:-1, r:.3, moving:false, flip:1 };
+const P = { x:SX+.5, y:SY+2.4, fx:0, fy:-1, r:.3, moving:false, flip:1, sit:false };
 let yaw = 0;   // 카메라가 바라보는 방향. 판들이 늘 카메라를 향해 돌아서서 360도 돌아볼 수 있음
 const YAW_MAX = Infinity;
 let clock = 0, myColor = COLORS.me, myBubble = null, myId = null, oldmanT = 0;
@@ -210,6 +211,7 @@ let found = {};   // key -> { date, with:[이름] }
 
 const solid = t => t === TREE || t === WATER || t === RUIN;
 function blocked(x,y){
+  if (wdist(x, y, FIRE.x, FIRE.y) < .5) return true;
   for (const [ox,oy] of [[-P.r,-P.r],[P.r,-P.r],[-P.r,P.r],[P.r,P.r]]) {
     const tx = Math.floor(x+ox), ty = Math.floor(y+oy);
     if (solid(type[id(tx,ty)])) return true;
@@ -341,7 +343,7 @@ myColor = ME.color;
 
 /* ---- 함께 하기: Supabase Realtime으로 위치·말·나비를 주고받음 ---- */
 const safeColor = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c : '#9fc4e8';
-const stateObj = () => ({ id:ME.id, n:ME.name, c:ME.color, x:+P.x.toFixed(2), y:+P.y.toFixed(2), fx:+P.fx.toFixed(2), fy:+P.fy.toFixed(2), m:P.moving ? 1 : 0, bf:found.butterflies ? 1 : 0 });
+const stateObj = () => ({ id:ME.id, n:ME.name, c:ME.color, x:+P.x.toFixed(2), y:+P.y.toFixed(2), fx:+P.fx.toFixed(2), fy:+P.fy.toFixed(2), m:P.moving ? 1 : 0, s:P.sit ? 1 : 0, bf:found.butterflies ? 1 : 0 });
 let lastSent = 0, lastJson = '';
 function sendPresence(force){
   if (!chan) return;
@@ -356,7 +358,7 @@ function onState(s){
   const x = Math.max(1, Math.min(W-1, s.x)), y = Math.max(1, Math.min(H-1, s.y));
   let o = others.get(s.id);
   if (!o) { o = { rx:x, ry:y }; others.set(s.id, o); }
-  Object.assign(o, { x, y, fx:+s.fx || 0, fy:+s.fy || 0, m:!!s.m, bf:!!s.bf, name:clean(s.n || '').slice(0, 12) || '탐험가', color:safeColor(s.c), seen:performance.now() });
+  Object.assign(o, { x, y, fx:+s.fx || 0, fy:+s.fy || 0, m:!!s.m, sit:!!s.s, bf:!!s.bf, name:clean(s.n || '').slice(0, 12) || '탐험가', color:safeColor(s.c), seen:performance.now() });
   return o;
 }
 function onSay(s){
@@ -377,7 +379,9 @@ async function connect(){
         .on('broadcast', { event:'say' }, ({ payload }) => onSay(payload))
         .on('presence', { event:'leave' }, ({ key }) => others.delete(key))
         .on('postgres_changes', { event:'INSERT', schema:'public', table:'parrot_lines' }, ({ new:r }) => r && remember(r.parrot, r.text))
-        .subscribe(st => { if (st === 'SUBSCRIBED') { chan.track({ on:1 }); sendPresence(true); } });
+;
+    NET_HOOKS.forEach(h => h(chan));
+    chan.subscribe(st => { if (st === 'SUBSCRIBED') { chan.track({ on:1 }); sendPresence(true); } });
   } catch (e) { sb = null; chan = null; }
 }
 
@@ -1254,6 +1258,178 @@ $albumBtn.addEventListener('click', () => {
   seenBox.append(h, list, tip);
 });
 
+/* ---- 모닥불 공터: 둘러앉고, 같이 구워 먹고, 같이 연주하기 ---- */
+const FIRE_TEX = ctex(64, 96, (g) => {
+  const grad = g.createLinearGradient(0, 96, 0, 0); grad.addColorStop(0, '#ffd34a'); grad.addColorStop(.5, '#f07a2a'); grad.addColorStop(1, '#c0392b');
+  g.fillStyle = grad; g.beginPath(); g.moveTo(8, 92); g.quadraticCurveTo(0, 50, 22, 30); g.quadraticCurveTo(20, 50, 30, 52); g.quadraticCurveTo(26, 22, 36, 2); g.quadraticCurveTo(44, 40, 50, 30); g.quadraticCurveTo(66, 60, 56, 92); g.closePath(); g.fill();
+  g.fillStyle = '#fff1b0'; g.beginPath(); g.moveTo(22, 92); g.quadraticCurveTo(20, 66, 32, 50); g.quadraticCurveTo(44, 66, 42, 92); g.closePath(); g.fill();
+});
+const LOG_TEX = ctex(128, 40, (g) => {
+  g.fillStyle = '#6b4a2a'; g.strokeStyle = RG.line; g.lineWidth = 2.5;
+  g.beginPath(); g.roundRect ? g.roundRect(4, 8, 120, 28, 12) : g.rect(4, 8, 120, 28); g.fill(); g.stroke();
+  g.fillStyle = '#c8a070'; g.beginPath(); g.ellipse(114, 22, 9, 13, 0, 0, Math.PI*2); g.fill(); g.stroke();
+  g.strokeStyle = '#4a3020'; g.lineWidth = 1.5; for (const y of [16, 26]) { g.beginPath(); g.moveTo(14, y); g.lineTo(96, y + 1); g.stroke(); }
+});
+const GLOW_TEX = ctex(128, 128, (g) => { const r = g.createRadialGradient(64, 64, 4, 64, 64, 64); r.addColorStop(0, 'rgba(255,170,80,.9)'); r.addColorStop(1, 'rgba(255,120,40,0)'); g.fillStyle = r; g.fillRect(0, 0, 128, 128); });
+const FOODS = [
+  { name:'구운 바나나', paint:(g) => { g.fillStyle = '#f1d44a'; g.beginPath(); g.ellipse(52, 18, 26, 9, -.2, 0, Math.PI*2); g.fill(); g.stroke(); } },
+  { name:'군옥수수', paint:(g) => { g.fillStyle = '#f2c230'; g.beginPath(); g.ellipse(52, 18, 24, 10, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = '#d9a520'; for (let x = 34; x < 72; x += 6) for (const y of [13, 19, 24]) g.fillRect(x, y, 3, 3); } },
+  { name:'망고 구이', paint:(g) => { g.fillStyle = '#f2992e'; g.beginPath(); g.ellipse(52, 18, 18, 13, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = '#f7c45a'; g.beginPath(); g.ellipse(48, 14, 6, 4, 0, 0, Math.PI*2); g.fill(); } }
+];
+FOODS.forEach(f => f.tex = ctex(96, 36, (g) => { g.strokeStyle = '#6b4a2a'; g.lineWidth = 3; g.beginPath(); g.moveTo(0, 32); g.lineTo(96, 12); g.stroke(); g.strokeStyle = RG.line; g.lineWidth = 2; f.paint(g); }));
+const fireMesh = cutout(plane(.7, 1.05), mat(FIRE_TEX, false, { fog:true }));
+const glow = cutout(plane(4.2, 4.2, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, fog:false }));
+glow.rotation.x = -Math.PI/2; glow.renderOrder = 5;
+const fireLogs = [0, 2.1, 4.2].map(a => { const me = cutout(plane(1.1, .34), mat(LOG_TEX)); me.userData.a = a; return me; });
+const sparks = pool(24, plane(.05, .05, false), mat(FIREFLY_TEX, false, { fog:false })).map(me => ({ me, t:Math.random()*2, x:0, z:0 }));
+const cookMesh = cutout(plane(.6, .22, false), new THREE.MeshBasicMaterial({ map:FOODS[0].tex, alphaTest:.5, side:THREE.DoubleSide })); cookMesh.visible = false;
+const RAW = new THREE.Color('#ffffff'), DONE = new THREE.Color('#b0703a');
+
+let cooking = null, foodNext = 0, instrument = null, myNoteT = -9;
+const NET_HOOKS = [];
+let feasts = []; try { feasts = JSON.parse(localStorage.getItem('denggul-feasts')) || []; } catch (e) {}
+const nearFire = (x, y) => wdist(x, y, FIRE.x, FIRE.y) < 3.3;
+
+/* 소리: 마림바, 마라카스, 북 */
+const SCALE = [261.6, 293.7, 329.6, 392, 440, 523.3, 587.3, 659.3];
+const INSTRUMENTS = { marimba:'마림바', maracas:'마라카스', drum:'북' };
+function playNote(inst, n, vol = 1){
+  if (!audio || !soundOn || vol <= 0) return;
+  try {
+    const { ac } = audio, t = ac.currentTime, out = ac.createGain(); out.gain.value = .35*vol; out.connect(ac.destination);
+    if (inst === 'marimba') {
+      for (const [mul, amp] of [[1, 1], [4, .18]]) { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.value = SCALE[n]*mul;
+        g.gain.setValueAtTime(amp, t); g.gain.exponentialRampToValueAtTime(.001, t + (mul > 1 ? .2 : .9)); o.connect(g).connect(out); o.start(t); o.stop(t + 1); }
+    } else if (inst === 'drum') {
+      const o = ac.createOscillator(), g = ac.createGain(); o.frequency.setValueAtTime(70 + n*14, t); o.frequency.exponentialRampToValueAtTime(40, t + .35);
+      g.gain.setValueAtTime(1, t); g.gain.exponentialRampToValueAtTime(.001, t + .45); o.connect(g).connect(out); o.start(t); o.stop(t + .5);
+    } else {
+      const len = ac.sampleRate*.12 | 0, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random()*2 - 1)*Math.pow(1 - i/len, 3);
+      const src = ac.createBufferSource(), hp = ac.createBiquadFilter(); src.buffer = buf; hp.type = 'highpass'; hp.frequency.value = 2500 + n*300;
+      src.connect(hp).connect(out); src.start(t);
+    }
+  } catch (e) {}
+}
+function myPlay(n){
+  if (!instrument) return;
+  startAudio(); playNote(instrument, n); myNoteT = clock;
+  if (chan) chan.send({ type:'broadcast', event:'note', payload:{ id:ME.id, inst:instrument, n, x:+P.x.toFixed(2), y:+P.y.toFixed(2) } });
+}
+NET_HOOKS.push(ch => {
+  ch.on('broadcast', { event:'note' }, ({ payload:p }) => {
+    if (!p || p.id === ME.id || !INSTRUMENTS[p.inst] || !(p.n >= 0 && p.n < 8)) return;
+    const o = others.get(p.id); if (o) o.noteT = clock;
+    if (typeof p.x === 'number') playNote(p.inst, p.n | 0, Math.max(0, 1 - wdist(p.x, p.y, P.x, P.y)/14));
+  });
+  ch.on('broadcast', { event:'feast' }, ({ payload:p }) => {
+    if (!p || p.id === ME.id) return;
+    const o = others.get(p.id), food = FOODS[p.f | 0]; if (!o || !food) return;
+    addLog(o.name, o.color, `${food.name}를 다 같이 나눠 먹었어요`);
+    if (nearFire(P.x, P.y)) recordFeast(food.name, [o.name, ...[...others.values()].filter(x => x !== o && nearFire(x.rx, x.ry)).map(x => x.name)]);
+  });
+});
+function recordFeast(food, names){
+  feasts.unshift({ date:today(), food, with:names.filter(Boolean) }); feasts = feasts.slice(0, 30);
+  try { localStorage.setItem('denggul-feasts', JSON.stringify(feasts)); } catch (e) {}
+}
+
+/* 모닥불 곁에서만 보이는 메뉴 */
+const fireStyle = document.createElement('style');
+fireStyle.textContent = `.firebar{position:fixed;right:calc(env(safe-area-inset-right,0px) + 12px);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;flex-direction:column;gap:6px;align-items:flex-end;max-width:calc(100vw - 24px)}
+.firebar .row2{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.firebar button{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px 12px;font:13px var(--body);cursor:pointer}
+.firebar button.on{background:var(--marigold);color:#3a2206;border-color:var(--marigold)}
+.firebar .keys button{min-width:38px;padding:10px 0;font:600 14px var(--body)}
+.firebar .title{font:700 15px var(--display);color:var(--marigold);padding:0 4px}
+@media (max-width:640px){.firebar{bottom:calc(env(safe-area-inset-bottom,0px) + 110px)}}`;
+document.head.append(fireStyle);
+const fireBar = document.createElement('div'); fireBar.className = 'firebar'; fireBar.hidden = true;
+fireBar.innerHTML = `<span class="title">모닥불</span><div class="row2 keys" id="keys" hidden></div><div class="row2" id="instRow"></div><div class="row2"><button id="sitBtn" type="button">앉기 (F)</button><button id="cookBtn" type="button"></button></div>`;
+document.body.append(fireBar);
+const $keys = fireBar.querySelector('#keys'), $instRow = fireBar.querySelector('#instRow'), $sitBtn = fireBar.querySelector('#sitBtn'), $cookBtn = fireBar.querySelector('#cookBtn');
+for (let i = 0; i < 8; i++) { const b = document.createElement('button'); b.type = 'button'; b.textContent = i + 1; b.addEventListener('pointerdown', e => { e.preventDefault(); myPlay(i); }); $keys.append(b); }
+for (const [k, name] of Object.entries(INSTRUMENTS)) { const b = document.createElement('button'); b.type = 'button'; b.textContent = name; b.dataset.k = k;
+  b.addEventListener('click', () => { instrument = instrument === k ? null : k; paintFire(); cv.focus(); }); $instRow.append(b); }
+function paintFire(){
+  $sitBtn.textContent = P.sit ? '일어서기 (F)' : '앉기 (F)';
+  $cookBtn.textContent = cooking ? `${FOODS[cooking.f].name} 굽는 중` : `${FOODS[foodNext].name} 굽기 (G)`;
+  $cookBtn.disabled = !!cooking;
+  for (const b of $instRow.children) b.classList.toggle('on', b.dataset.k === instrument);
+  $keys.hidden = !instrument;
+}
+function toggleSit(){
+  if (P.sit) { P.sit = false; paintFire(); return; }
+  const dx = wd(P.x - FIRE.x, W), dz = wd(P.y - FIRE.y, H), d = Math.hypot(dx, dz) || 1;
+  const nx = wrapX(FIRE.x + dx/d*1.35), nz = wrapY(FIRE.y + dz/d*1.35);
+  if (!blocked(nx, nz)) { P.x = nx; P.y = nz; }
+  P.sit = true; yaw = Math.atan2(dx, dz); paintFire(); sendPresence(true);
+}
+function startCook(){
+  if (cooking) return;
+  cooking = { f:foodNext, t:0 }; foodNext = (foodNext + 1) % FOODS.length;
+  cookMesh.material.map = FOODS[cooking.f].tex; cookMesh.material.needsUpdate = true; paintFire();
+}
+$sitBtn.addEventListener('click', () => { toggleSit(); cv.focus(); });
+$cookBtn.addEventListener('click', () => { startCook(); cv.focus(); });
+addEventListener('keydown', e => {
+  if (e.target === $say || modalOpen() || fireBar.hidden) return;
+  if (e.code === 'KeyF') toggleSit();
+  else if (e.code === 'KeyG') startCook();
+  else if (/^Digit[1-8]$/.test(e.code) && instrument) myPlay(+e.code.slice(5) - 1);
+});
+
+function updateFire(dt, camX, camZ){
+  const near = nearFire(P.x, P.y) && !modalOpen();
+  if (fireBar.hidden === near) { fireBar.hidden = !near; if (!near) { instrument = null; } paintFire(); }
+  if (P.sit && P.moving) { P.sit = false; paintFire(); }
+  if (!near && P.sit) P.sit = false;
+  const fl = 1 + Math.sin(clock*13)*.06 + Math.sin(clock*7.3)*.05;
+  fireMesh.position.set(FIRE.x, 0, FIRE.y); fireMesh.scale.set(fl, 1 + Math.sin(clock*9)*.08, 1);
+  fireMesh.rotation.y = Math.atan2(camX - FIRE.x, camZ - FIRE.y);
+  glow.position.set(FIRE.x, .02, FIRE.y); glow.material.opacity = .45 + .15*Math.sin(clock*11);
+  for (const l of fireLogs) { const a = l.userData.a; l.position.set(FIRE.x + Math.sin(a)*1.3, 0, FIRE.y + Math.cos(a)*1.3); l.rotation.y = Math.atan2(camX - l.position.x, camZ - l.position.z); }
+  for (const s of sparks) { s.t += dt; if (s.t > 1.6) { s.t = 0; s.x = (Math.random() - .5)*.4; s.z = (Math.random() - .5)*.4; }
+    s.me.visible = true; s.me.position.set(FIRE.x + s.x + Math.sin(clock*3 + s.t*4)*.08, .5 + s.t*1.3, FIRE.y + s.z); }
+  if (cooking) {
+    cooking.t += dt;
+    const k = Math.min(1, cooking.t/8), dx = wd(P.x - FIRE.x, W), dz = wd(P.y - FIRE.y, H), d = Math.hypot(dx, dz) || 1;
+    cookMesh.visible = true; cookMesh.position.set(FIRE.x + dx/d*.55, .6, FIRE.y + dz/d*.55); cookMesh.rotation.y = Math.atan2(camX - cookMesh.position.x, camZ - cookMesh.position.z);
+    cookMesh.material.color.copy(RAW).lerp(DONE, k*.7);
+    if (k >= 1 || !near) {
+      if (k >= 1) {
+        const food = FOODS[cooking.f], withNames = [...others.values()].filter(o => nearFire(o.rx, o.ry)).map(o => o.name);
+        addLog(ME.name || '나', myColor, `${food.name}를 다 같이 나눠 먹었어요`); myBubble = { text:`${food.name} 다 익었어요!`, until:clock + 4 };
+        recordFeast(food.name, withNames);
+        if (chan) chan.send({ type:'broadcast', event:'feast', payload:{ id:ME.id, f:cooking.f } });
+      }
+      cooking = null; cookMesh.visible = false; paintFire();
+    }
+  } else cookMesh.visible = false;
+}
+function drawFireOverlay(){
+  ctx.font = '18px system-ui,-apple-system,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = '#f6ead2';
+  const notes = [...others.values()].filter(o => clock - (o.noteT ?? -9) < 1).map(o => [o.rx, o.ry, o.noteT]);
+  if (clock - myNoteT < 1) notes.push([P.x, P.y, myNoteT]);
+  for (const [x, z, t] of notes) { const s = toScreen(x, 1.45 + (clock - t)*.4, z); if (s) { ctx.globalAlpha = 1 - (clock - t); ctx.fillText('♪', s[0] + Math.sin((clock - t)*9)*6, s[1]); } }
+  ctx.globalAlpha = 1;
+  if (cooking) { const s = toScreen(cookMesh.position.x, .95, cookMesh.position.z); if (s) { const k = Math.min(1, cooking.t/8);
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(s[0], s[1], 11, 0, Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = '#f2a93b'; ctx.beginPath(); ctx.arc(s[0], s[1], 11, -Math.PI/2, -Math.PI/2 + k*Math.PI*2); ctx.stroke(); } }
+}
+/* 그림첩에 모닥불 일지 */
+const feastBox = document.createElement('div');
+feastBox.style.cssText = 'display:flex;flex-direction:column;gap:4px;font-family:var(--hand);color:var(--ink);padding:4px';
+seenBox.after(feastBox);
+$albumBtn.addEventListener('click', () => {
+  feastBox.replaceChildren();
+  const h = document.createElement('h3'); h.style.cssText = 'margin:8px 0 0;font:700 18px var(--display)'; h.textContent = '모닥불 일지';
+  feastBox.append(h);
+  if (!feasts.length) { const p = document.createElement('p'); p.style.cssText = 'margin:0;font:13px var(--body);color:var(--dim)'; p.textContent = '출발점의 모닥불 곁에서 음식을 구우면 함께 먹은 기록이 남아요.'; feastBox.append(p); }
+  for (const f of feasts.slice(0, 12)) { const line = document.createElement('div'); line.style.fontSize = '20px';
+    line.textContent = `${f.date}, ${f.food}` + (f.with.length ? ` — 함께: ${f.with.join(', ')}` : ' — 혼자서'); feastBox.append(line); }
+});
+
 function draw(dt = .016){
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
   const e = updateObs(dt), cp = Math.cos(pitch), lerp = (a, b) => a + (b - a)*e;
@@ -1284,13 +1460,13 @@ function draw(dt = .016){
   const rx = Math.cos(yaw), rz = -Math.sin(yaw);
   myMesh.position.set(P.x, 0, P.y); myMesh.rotation.y = yaw;
   if (P.moving) { const s = P.fx*rx + P.fy*rz; if (Math.abs(s) > .2) P.flip = s < 0 ? -1 : 1; }
-  myMesh.scale.x = P.flip || 1; myMesh.visible = e < .6;
+  myMesh.scale.set(P.flip || 1, P.sit ? .72 : 1, 1); myMesh.visible = e < .6;
   for (const [key, o] of others) {
     let me = peopleMeshes.get(key);
     if (!me || me.userData.color !== o.color) { if (me) scene.remove(me); me = cutout(personGeo, mat(personTex(o.color))); me.userData.color = o.color; peopleMeshes.set(key, me); }
     me.position.set(o.rx, 0, o.ry); me.rotation.y = yaw;
     if (o.m) { const s = o.fx*rx + o.fy*rz; if (Math.abs(s) > .2) o.flip = s < 0 ? -1 : 1; }
-    me.scale.x = o.flip || 1;
+    me.scale.set(o.flip || 1, o.sit ? .72 : 1, 1);
   }
   for (const [key, me] of peopleMeshes) if (!others.has(key)) { scene.remove(me); peopleMeshes.delete(key); }
   PARROTS.forEach((p, i) => { p.mesh.rotation.y = yaw; p.mesh.position.y = Math.abs(Math.sin(clock*3 + i))*.03; });
@@ -1312,6 +1488,7 @@ function draw(dt = .016){
     e.me.visible = nt > .55 && d > 3 && d < 16 && Math.sin(clock*.8 + e.k) < .9;
     e.mk.visible = nt < .45 && d > 4 && d < 14 && Math.sin(clock*.3 + e.k) > -.2;   // 낮엔 원숭이가 수풀 사이로 내다봄
   }
+  updateFire(dt, camX, camZ);
   for (const o of scene.children) if (o.isMesh && !o.isInstancedMesh && o !== ground && o !== sky) { o.position.x = camX + wd(o.position.x - camX, W); o.position.z = camZ + wd(o.position.z - camZ, H); }
   renderer.render(scene, camera);
 
@@ -1323,6 +1500,7 @@ function draw(dt = .016){
     ctx.stroke();
   }
   if (flash > .01) { ctx.fillStyle = `rgba(255,255,240,${flash*.55})`; ctx.fillRect(0, 0, vw, vh); }
+  drawFireOverlay();
   drawObsOverlay(e, dt);
   ctx.font = '11px system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const L of LABELS) {
@@ -1375,7 +1553,7 @@ const $reset = document.getElementById('reset'); let armed = 0;
 $reset.addEventListener('click', () => {
   if (!armed) { armed = setTimeout(() => { armed = 0; $reset.textContent = '처음부터'; }, 3000); $reset.textContent = '한 번 더 누르면 초기화'; return; }
   clearTimeout(armed); armed = 0; $reset.textContent = '처음부터';
-  P.x = SX + .5; P.y = SY + .5; found = {}; clock = 0; save(); paintAlbumBtn(); sendPresence(true); cv.focus();
+  P.x = SX + .5; P.y = SY + 2.4; found = {}; clock = 0; save(); paintAlbumBtn(); sendPresence(true); cv.focus();
 });
 
 const touch = matchMedia('(pointer:coarse)').matches;
