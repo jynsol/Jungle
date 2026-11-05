@@ -243,6 +243,7 @@ SITES.forEach((s,i) => {
   for (const s of SITES) { if (!nearHub(s.cx, s.cy)) continue;
     for (let k = 1; k < 800; k++) { const a = k*2.39996, d = 18 + (k % 20), x = Math.floor(wrapX(SX + Math.cos(a)*d)), y = Math.floor(wrapY(SY + Math.sin(a)*d));
       if (nearHub(x + 1, y + 1) || SITES.some(o => o !== s && wdist(o.x, o.y, x, y) < 16)) continue;
+      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) setT(s.x + dx, s.y + dy, FLOOR);   // 옛 자리의 돌은 치움 (보이지 않는 벽이 남지 않게)
       s.x = x; s.y = y; s.cx = x + 1; s.cy = y + 1;
       for (let cx = Math.min(SX,x); cx <= Math.max(SX,x); cx++) if (type[id(cx,SY)] !== FLOOR) setT(cx,SY,BUSH);
       for (let cy = Math.min(SY,y); cy <= Math.max(SY,y); cy++) if (type[id(x,cy)] !== FLOOR) setT(x,cy,BUSH);
@@ -284,7 +285,8 @@ REGIONS.forEach((rg, i) => {
 });
 // 노란 나비 공터는 오두막 가는 길가로 (1장)
 { const bs = SITES.find(q => q.key === 'butterflies'), pts = REGIONS[0].pts, p = pts.find(([x, y]) => wdist(x, y, FIRE.x, FIRE.y) > 10) || pts[0];   // 오두막 가는 길 3분의 1쯤
-  const x = Math.floor(p[0] + 3.2), y = Math.floor(p[1]); bs.x = x; bs.y = y; bs.cx = x + 1; bs.cy = y + 1; clear(x + 1, y + 1, 2.8); for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) setT(x + dx, y + dy, RUIN); }
+  for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) setT(bs.x + dx, bs.y + dy, FLOOR);   // 옛 자리의 돌은 치움
+  const x = Math.floor(p[0] + 3.2), y = Math.floor(p[1]); bs.x = x; bs.y = y; bs.cx = x + 1; bs.cy = y + 1; clear(x + 1, y + 1, 2.8); }   // 나비 공터엔 돌제단 없이 트인 풀밭
 // 길가 덤불: 길 위로 잎이 넘어오지 않게 낮은 풀만
 const TRAIL_EDGE = new Uint8Array(W*H);
 for (let k = 0; k < W*H; k++) if (!TRAIL[k] && type[k] === BUSH) { const x = k % W, y = k / W | 0; if (TRAIL[id(x + 1, y)] || TRAIL[id(x - 1, y)] || TRAIL[id(x, y + 1)] || TRAIL[id(x, y - 1)]) TRAIL_EDGE[k] = 1; }
@@ -469,8 +471,8 @@ function parrotTalk(p, i, dt){
   if (p.cool > 0 || P.moving || clock - lastParrot < 10 || wdist(p.x, p.y, P.x, P.y) > 3.2) return;
   let ni = 0, nd = 1e9; PARROTS.forEach((q, j) => { const d = wdist(q.x, q.y, P.x, P.y); if (d < nd) { nd = d; ni = j; } });
   if (ni !== i) return;   // 가장 가까운 한 마리만
-  const hint = Math.random() < .35 ? parrotHint() : null, learned = parrotLine(i);
-  if (hint) parrotShow(p, hint); else p.bubble = { text:learned && Math.random() < .8 ? learned : PARROT_SEED[Math.random()*PARROT_SEED.length | 0], until:clock + 5 };   // 배운 말, 아니면 제 말버릇
+  const hint = parrotHint(); if (!hint) return;
+  parrotShow(p, hint);   // 앵무새는 늘 '다음에 할 곳'만 외침
   p.cool = 16 + Math.random()*14; lastParrot = clock; squawk();
 }
 
@@ -1299,7 +1301,7 @@ for (const b of TP) if (hash(b.k*103) < .05 && !border(b.k % W, b.k / W | 0)) { 
 
 /* 기적의 자리, 앵무새, 노인 */
 const altarGeo = plane(2.2, 1.1);
-const ALTARS = []; for (const s of SITES) if (s.key !== 'mirror') { const me = cutout(altarGeo, mat(ALTAR_TEX)); me.position.set(s.cx, 0, s.cy + .95); ALTARS.push(me); }
+const ALTARS = []; for (const s of SITES) if (s.key !== 'mirror' && s.key !== 'butterflies') { const me = cutout(altarGeo, mat(ALTAR_TEX)); me.position.set(s.cx, 0, s.cy + .95); ALTARS.push(me); }
 const personGeo = plane(.76, 1.14);
 const oldman = cutout(personGeo, mat(OLDMAN_TEX)); onArt('oldman', im => { swapTex(OLDMAN_TEX, im); fitGeo(oldman, 1.14, im); }); oldman.position.set(SITE.oldman.cx + 1.6, 0, SITE.oldman.cy + .6);
 const parrotGeo = plane(.42, .84);
@@ -1886,7 +1888,12 @@ for (const [k] of bushByTile) {
   for (let k = 0; k < W*H; k++) { if (!TRAIL_EDGE[k]) continue; const x = k % W + .5, z = (k / W | 0) + .5, d = wdist(x, z, h.x, h.y), f = wdist(x, z, FIRE.x, FIRE.y); if (d > 9 && d < 20 && f > 8 && wdist(x, z, FIRE.x, FIRE.y) < wdist(h.x, h.y, FIRE.x, FIRE.y)) cand.push({ k, x, z, d }); }
   cand.sort((a, b) => hash(a.k*151) - hash(b.k*151)); const got = [];
   for (const c of cand) { if (got.length >= 3) break; if (got.some(o => wdist(o.x, o.z, c.x, c.z) < 3)) continue; got.push(c);
-    const me = cutout(plane(.42, .42), mat(ITEMS.banana.tex)); me.position.set(c.x, .08, c.z); PICKS.push({ k:c.k + W*H, key:'banana', me, x:c.x, z:c.z }); } }
+    const me = cutout(plane(.42, .42), mat(ITEMS.banana.tex)); me.position.set(c.x, .08, c.z); PICKS.push({ k:c.k + W*H, key:'banana', me, x:c.x, z:c.z }); }
+  const bs = SITES.find(q => q.key === 'butterflies'), near = [];   // 나비 공터 바로 옆 길가에 망고 둘 (첫 퍼즐에 쓸 열매가 눈앞에)
+  for (let k = 0; k < W*H; k++) { if (!TRAIL_EDGE[k] && !TRAIL[k]) continue; const x = k % W + .5, z = (k / W | 0) + .5, d = wdist(x, z, bs.cx, bs.cy); if (d > 2.5 && d < 5.5) near.push({ k, x, z }); }
+  near.sort((a, b) => hash(a.k*157) - hash(b.k*157)); const got2 = [];
+  for (const c of near) { if (got2.length >= 2) break; if (got2.some(o => wdist(o.x, o.z, c.x, c.z) < 2.5)) continue; got2.push(c);
+    const me = cutout(plane(.42, .42), mat(ITEMS.mango.tex)); me.position.set(c.x, .08, c.z); PICKS.push({ k:c.k + 2*W*H, key:'mango', me, x:c.x, z:c.z }); } }
 const REGROW = 5*60*1000;   // 주운 자리는 5분 뒤 다시 열림
 const $bag = document.createElement('div'); $bag.className = 'bagi'; $bag.setAttribute('aria-label', '바구니'); document.querySelector('.hud').append($bag);
 function paintBag(){   // 바구니: 든 열매만 그림과 숫자로
@@ -3638,19 +3645,15 @@ function placeThumb(kind, key){   // 앵무새 그림 풍선에 넣을 장소 �
     if (kind === 'pz') return PUZZLES.find(q => q.id === key).thumb();
   } catch (e) {} return null;
 }
-function parrotHint(best){
-  const c = [
-    ...SITES.filter(s => !found[s.key]).map(s => ({ kind:'site', key:s.key, x:s.cx, y:s.cy })),
-    ...STORY_SPOTS.filter(s => !seen[s.key]).map(s => ({ kind:'story', key:s.key, x:s.x, y:s.y })),
-    ...(seen.waterfall ? [] : [{ kind:'waterfall', x:WATERFALL.x, y:WATERFALL.y }]),
-    ...(seen.lookout ? [] : [{ kind:'lookout', x:LOOKOUT.x, y:LOOKOUT.y }]),
-    ...PUZZLES.filter(p => !p.optional && pzStep(p) < p.done).map(p => ({ kind:'pz', key:p.id, x:p.x, y:p.y }))
-  ].sort((a, b) => wdist(P.x, P.y, a.x, a.y) - wdist(P.x, P.y, b.x, b.y));
-  if (!c.length) return null;
-  const t = c[best || Math.random() < .7 ? 0 : Math.min(c.length - 1, 1)];
-  t.img = placeThumb(t.kind, t.key); return t.img ? t : null;
+const MAIN_PATH = ['letter', 'butterfly', 'toucan', 'sloth', 'gramo', 'pond', 'cave', 'temple', 'clock', 'piano', 'flower', 'chorus'];   // 장 순서대로 '다음에 할 곳'
+function parrotHint(){
+  for (const id of MAIN_PATH) { const p = PUZZLES.find(q => q.id === id); if (!p || pzStep(p) >= p.done) continue;
+    if ((id === 'clock' || id === 'piano') && pzStep(PUZZLES.find(q => q.id === 'temple')) < 2) continue;   // 신전 안을 본 뒤에
+    if (id === 'temple' && pzStep(p) >= 2 && pzStep(p) < 3) { const k = !pzSave.moon ? 'clock' : !pzSave.mirD && (pzSave.mirSet || 0) < 2 ? 'piano' : null; if (k) { const c = PUZZLES.find(q => q.id === k); return { kind:'pz', key:k, x:c.x, y:c.y, img:placeThumb('pz', k) }; } }   // 신전 안을 본 뒤엔 시계·피아노
+    const t = { kind:'pz', key:id, x:p.x, y:p.y }; t.img = placeThumb('pz', id); return t.img ? t : { ...t, img:null }; }
+  return null;
 }
-const PLACE_WORD = { waterfall:'폭포', lookout:'바위', sloth:'나무늘보' };
+const PLACE_WORD = { waterfall:'폭포', lookout:'바위', sloth:'나무늘보', letter:'우체통', butterfly:'노란 나비', toucan:'큰부리새', gramo:'축음기', pond:'개구리', cave:'폭포', temple:'신전', clock:'괘종시계', piano:'피아노', flower:'꽃숲', chorus:'모닥불' };
 function placeWord(t){ if (t.kind === 'site') return SITE[t.key].name.split(' ').pop(); if (t.kind === 'story') return STORY_INFO[t.key].name.split(' ').pop(); return PLACE_WORD[t.key || t.kind] || '저기'; }
 function parrotShow(p, t){   // 앵무새답게 이름을 두 번 외치고 그쪽으로 고개를 돌림
   const w = placeWord(t); p.bubble = { text:`${w}! ${w}!`, until:clock + 6 };
