@@ -3,5 +3,5 @@
 // publishable key(sb_publishable_…)는 웹페이지에 공개해도 되는 키예요 (supabase.sql의 접근 규칙이 지켜 줘요).
 window.DENGGUL_CONFIG = {
   supabaseUrl: 'https://wxowiryvqzmqbhfkaosb.supabase.co',
-  supabaseAnonKey: ''   // publishable key
+  supabaseAnonKey: 'sb_publishable_vFWoi8H0YASBCzd7GHtfww_xDggpx8z'   // publishable key
 };
