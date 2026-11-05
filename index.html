@@ -742,8 +742,10 @@ function mat(tex, tint = true, extra = {}){
 }
 /* 판이 늘 카메라 쪽으로 몸을 돌림(360도 회전 가능) + 바람에 윗부분이 흔들림. 그래픽 카드에서 계산 */
 const U = { uTime:{ value:0 }, uWind:{ value:.03 }, uCurve:{ value:.003 }, uSize:{ value:new THREE.Vector2(W, H) }, uCull:{ value:20 } };
-function billboard(m){
+function billboard(m, stiff = 0){   // stiff: 큰 나무는 줄기가 휘지 않고 우듬지만 살짝
+  if (stiff) m.customProgramCacheKey = () => 'bb-stiff';
   m.onBeforeCompile = sh => {
+    if (stiff) sh.vertexShader = '#define STIFF\n' + sh.vertexShader;
     Object.assign(sh.uniforms, U);
     sh.vertexShader = 'uniform float uTime;\nuniform float uWind;\nuniform float uCurve;\nuniform vec2 uSize;\nuniform float uCull;\nvarying float vCalm;\n' + sh.vertexShader.replace('#include <project_vertex>', `
       vec4 mvPosition = vec4( transformed, 1.0 );
@@ -755,7 +757,11 @@ function billboard(m){
         float calm = clamp( ( length( ipos.xz - cameraPosition.xz ) - 4.0 ) / 12.0, 0.0, 1.0 ); vCalm = calm;
         float gust = pow( max( 0.0, sin( dot( ipos.xz, vec2( .8, .6 ) ) * .09 - uTime * .55 ) ), 10.0 );   // 몇 초에 한 번 숲을 쓸고 지나가는 바람 물결
         float breathe = sin( uTime * .5 + ipos.x * .03 + ipos.z * .02 ) * .15;
+        #ifdef STIFF
+        local.x += uWind * max( 0.0, local.y - 3.2 ) * .18 * ( gust + breathe ) * ( 1.0 - calm * .7 );
+        #else
         local.x += uWind * local.y * .9 * ( gust + breathe ) * ( 1.0 - calm * .7 );
+        #endif
         vec2 dd = cameraPosition.xz - ipos.xz;
         if ( cameraPosition.y > 4.5 && dot( dd, dd ) < 9.0 ) { gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 ); return; }   // 높은 데서 바로 밑 판은 그리지 않음 (비스듬히 길쭉하게 보여서)
         float ang = atan( dd.x, dd.y ), ca = cos( ang ), sa = sin( ang );
@@ -1196,7 +1202,7 @@ for (let k = 0; k < W*H; k++) if (type[k] === TREE) {
   TP.push(b); treeByTile.set(k, b);
 }
 const tcounts = TREES.map(() => 0); for (const b of TP) b.idx = tcounts[b.v]++;
-const treeMeshes = TREES.map((p, v) => { const m = new THREE.InstancedMesh(plane(p.w, p.h), billboard(mat(TREE_TEX[v])), Math.max(1, tcounts[v])); m.frustumCulled = false; scene.add(m); return m; });
+const treeMeshes = TREES.map((p, v) => { const m = new THREE.InstancedMesh(plane(p.w, p.h), billboard(mat(TREE_TEX[v]), true), Math.max(1, tcounts[v])); m.frustumCulled = false; scene.add(m); return m; });
 /* 나무는 줄기만 작은 원으로 막고, 부딪히면 둘레를 따라 미끄러짐(정면으로 부딪혀도 옆으로 비켜 감) */
 function pushOutTrees(){
   { const dx = wd(P.x - FIRE.x, W), dz = wd(P.y - FIRE.y, H), d = Math.hypot(dx, dz), min = .55;   // 모닥불도 둘레로 미끄러짐
@@ -2783,9 +2789,16 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
       if (WP.prog >= MEL.length) setPzStep(WP, 1); }
     else { WP.prog = 0; WP.wrongT = clock; pzSfx.hm(.07*near()); WP.melT = 1.5; }
   });
+  // 조약돌 수 순서(1→5)대로 개구리를 누르면 다섯이 함께 선율을 부르고, 노래 단추가 그 순서로 반짝임. 틀리면 모두 물에 퐁
+  WP.tapI = 0;
+  function tapFrog(i){
+    if (pzStep(WP) !== 0 || WP.melI >= 0) return;
+    if (i === ORDER[WP.tapI]) { FROGS[i].lit = true; pzSfx.rope(.04); if (++WP.tapI >= 5) { WP.tapI = 0; setTimeout(() => { FROGS.forEach(q => q.lit = false); WP.chorus = true; WP.melI = 0; WP.melStart = clock; singNotes.hidden = false; }, 700); } }
+    else { WP.tapI = 0; FROGS.forEach(q => q.lit = false); WP.splash = clock; tick(220, .25, .07, 'sine'); }
+  }
   WP.targets = () => {
     const st = pzStep(WP), L = [];
-    FROGS.forEach((f, i) => L.push({ key:'pz-frog', noSeen:true, x:f.x, h:.5, z:f.z, reach:5, me:frogs[i], act:() => { f.pop = clock; frogVoice(NOTE_OF[i], .1); } }));
+    FROGS.forEach((f, i) => L.push({ key:'pz-frog', noSeen:true, x:f.x, h:.5, z:f.z, reach:5, me:frogs[i], act:() => { f.pop = clock; frogVoice(NOTE_OF[i], .1); tapFrog(i); } }));
     otters.forEach((m, i) => L.push({ key:'pz-otter', noSeen:true, x:DAM.x, h:1.6, z:DAM.z, me:m, reach:7, act:() => { WP.dive = clock; tick(1500, .1, .05); } }));
     L.push({ key:'pz-dam', noSeen:true, x:DAM.x, h:.8, h0:.1, h1:1.5, z:DAM.z, me:dam });
     if (st === 2) L.push({ key:'pz-roll', noSeen:true, x:C.x, h:.3, z:C.z, reach:2.6, act:() => { giveMask('ocelot'); pickFx.push({ img:MASK_TEX.ocelot[1].userData.canvas, x:C.x, z:C.z, t:clock }); pzSfx.chime(.1); setPzStep(WP, 3); } });   // 섬엔 오셀롯 탈
@@ -2796,10 +2809,14 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     const el = clock - WP.t, nt = Math.max(0, Math.min(1, (dayState().dark - .12)/.66));
     const at = p => wrapNear(p.x, p.z, camX, camZ), face = (me, x, z) => { me.rotation.y = Math.atan2(camX - x, camZ - z); };
     // 개구리: 밤엔 선율을 부름
-    if (st === 0 && nt > .5 && wdist(P.x, P.y, C.x, C.z) < 14 && (WP.melT -= dt) <= 0) { WP.melI = 0; WP.melT = 10; WP.melStart = clock; }
-    if (WP.melI >= 0 && clock >= WP.melStart + WP.melI*.75) { const fi = ORDER[WP.melI]; FROGS[fi].pop = clock; frogVoice(NOTE_OF[fi], .1*near()); WP.melI++; if (WP.melI >= ORDER.length) WP.melI = -1; }
+    if (st === 0 && nt > .5 && WP.melI < 0 && wdist(P.x, P.y, C.x, C.z) < 14 && (WP.melT -= dt) <= 0) { WP.melI = 0; WP.melT = 10; WP.melStart = clock; }
+    if (WP.melI >= 0 && clock >= WP.melStart + WP.melI*.75) { const fi = ORDER[WP.melI]; FROGS[fi].pop = clock; frogVoice(NOTE_OF[fi], .1*near());
+      if (WP.chorus) { const b = singNotes.children[NOTE_OF[fi]]; if (b && b.animate) b.animate([{ transform:'scale(1)' }, { transform:'scale(1.35)', boxShadow:'0 0 14px #fff6c8' }, { transform:'scale(1)' }], { duration:520 }); }
+      WP.melI++; if (WP.melI >= ORDER.length) { WP.melI = -1;
+        if (WP.chorus) { WP.chorus = false; if (pzSave.mask !== 'otter') { const im = MASK_TEX.otter[1].image || MASK_TEX.otter[1].userData.canvas; wants.push({ x:DAM.x, h:1.9, z:DAM.z, img:im, until:clock + 4 }); } } } }
     FROGS.forEach((f, i) => { const [x, z] = at(f); rocks[i].position.set(x, 0, z); face(rocks[i], x, z); const pk = clock - f.pop, puff = pk < .5 ? Math.sin(pk/.5*Math.PI)*.25 : 0;
-      frogs[i].position.set(x, .32 + puff*.3, z); face(frogs[i], x, z); frogs[i].scale.set(1 + puff, 1 + puff*.6, 1); });
+      const sp = clock - (WP.splash || -9), dunk = sp < .9 ? Math.sin(sp/.9*Math.PI) : 0, lit = f.lit ? .12 : 0;   // 맞게 누른 개구리는 몸을 부풀린 채 기다림
+      frogs[i].position.set(x, .32 + puff*.3 + lit - dunk*.45, z); face(frogs[i], x, z); frogs[i].scale.set(1 + puff + lit, 1 + puff*.6 + lit, 1); frogs[i].visible = dunk < .7; });
     // 둑: 맞는 음마다 나뭇가지가 하나씩 빠짐 → 다 빠지면 무너짐
     { const [x, z] = at(DAM); const gone = st >= 1 ? Math.min(1, el/1.2) : 0, left = st >= 1 ? 0 : 1 - WP.prog*.12;
       dam.visible = gone < 1; dam.position.set(x, -gone*1.2, z); face(dam, x, z); dam.scale.set(1, Math.max(.1, left), 1); dam.rotation.z = st >= 1 ? gone*.3 : 0;
