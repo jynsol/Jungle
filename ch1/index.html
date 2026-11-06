@@ -61,7 +61,7 @@ renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
 const scene = new THREE.Scene();
 const SKY = new THREE.Color('#c8d3bf');
 scene.background = SKY; scene.fog = new THREE.Fog(SKY, 28, 80);
-const camera = new THREE.PerspectiveCamera(58, 1, .1, 200);
+const camera = new THREE.PerspectiveCamera(62, 1, .1, 200);
 function resize(){ renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
 const MOBILE = matchMedia('(pointer:coarse)').matches;
@@ -82,7 +82,7 @@ function billMat(tex, o = {}){
         vec3 t = cameraPosition - c; t.y = 0.; t = normalize(t + vec3(1e-4, 0., 0.)); vec3 right = vec3(t.z, 0., -t.x);
         float gust = smoothstep(.62, 1., .5 + .5*sin(uTime*.33 + c.x*.07 + c.z*.045)); float sway = sin(uTime*2.4 + c.x*.7 + c.z*.5)*uSway*position.y*position.y*gust;
         vec3 wp = c + right*(position.x + sway)*sx + vec3(0., position.y*sy, 0.) + t*uPush;
-        if (uOcc > .5 && uSway > 0. && sy < 3.) { vec2 dp = c.xz - uPlayer.xz; float pd = length(dp); float pk = smoothstep(1.8, .3, pd); vec2 pdir = pd > 1e-3 ? dp/pd : vec2(1., 0.); wp.xz += pdir*pk*.95*position.y*sy*.6; wp.y -= pk*.35*position.y*sy; }
+        if (uOcc > .5 && uSway > 0. && sy < 3.) { vec2 dp = c.xz - uPlayer.xz; float pd = length(dp); float pk = smoothstep(1.3, .2, pd); float sd = dot(dp, right.xz) >= 0. ? 1. : -1.; wp += right*sd*pk*.32*position.y*sy*.55; wp.y -= pk*.08*position.y*sy; }
         vDark = smoothstep(17., 5., length(c.xz - vec2(2., 46.)))*.42;
         vec4 mv = viewMatrix*vec4(wp, 1.); gl_Position = projectionMatrix*mv;
         vUv = vec2(uFlip > .5 ? 1. - uv.x : uv.x, uv.y); vFog = -mv.z; vNear = length(cameraPosition.xz - c.xz);
@@ -115,7 +115,7 @@ function flat(tex, w, h, x, y, z, rotY = 0, o = {}){
 }
 
 /* ============ 지도 ============ */
-const CLEAR_R = 7.5, TRUNK_R = 3.0, TREE_H = 11;
+const CLEAR_R = 7.5, TRUNK_R = 3.0, TREE_H = 5;
 const ROAD_CP = [[4.6,-5.6],[9,-11],[14,-19],[20,-25],[27,-27],[33,-20],[34,-8],[32,5],[26,17],[14,25],[0,27],[-13,25],[-24,17],[-30,5],[-31,-8],[-26,-19],[-16,-24],[-9,-17],[-6,-10],[-4.6,-5.6]];
 const FLOWER_CP = [[4.8,4.8],[9,9],[15,15],[23,21],[30,29],[36,38],[41,48]];
 /* 장소: 큰길에서 오솔길로 들어감 (오두막은 조금, 빨래터는 중간, 반딧불 덤불은 깊이) */
@@ -148,7 +148,7 @@ const SIDES = SIDE_CP.map((cp, i) => { const c = cp.slice(); c[0] = nearOn(ROAD,
 const zs = x => -46 + 9.5*Math.exp(-(((x - 31)/14)**2)) + 1.2*Math.sin(x/6);
 const inWater = (x, z) => Math.abs(z - zs(x)) < 2.4;
 const NB = { x:31, z:-45, r:5.2 };
-const CORE_W = 1.6, SIDE_W = .95, THICK = 2.2;
+const CORE_W = 1.6, SIDE_W = .95, THICK = 1.7;
 /* 길 가장자리까지 거리 (미리 계산) */
 const DG = .5, DN = 300, D0 = -75, DGRID = new Float32Array(DN*DN);
 for (let j = 0; j < DN; j++) for (let i = 0; i < DN; i++) { const x = D0 + (i + .5)*DG, z = D0 + (j + .5)*DG; let d = dPoly(ROAD, x, z) - CORE_W; if (d < 12) for (const sp of SIDES) d = Math.min(d, dPoly(sp, x, z) - SIDE_W); else for (const sp of SIDES) { const e = dPoly(sp, x, z) - SIDE_W; if (e < d) d = e; } DGRID[j*DN + i] = d; }
@@ -221,18 +221,19 @@ const ART = {
 const TL = new THREE.TextureLoader();
 const artTex = n => { const t = TL.load('../assets/' + n + '.png'); t.anisotropy = 4; return t; };
 const PLANTS = [
-  { n:'palm', h:[7, 9.5], w:.06, tree:true }, { n:'tree', h:[7, 9], w:.07, tree:true }, { n:'banana', h:[3.6, 4.8], w:.07, tree:true }, { n:'orangetree', h:[4.5, 5.5], w:.008, tree:true },
-  { n:'broadleaf', h:[1.6, 2.4], w:.18 }, { n:'fern', h:[1.3, 1.9], w:.18 }, { n:'heartleaf', h:[1.2, 1.8], w:.16 }, { n:'grass', h:[.7, 1.1], w:.12 }, { n:'sansevieria', h:[1, 1.4], w:.07 }, { n:'agave', h:[1.1, 1.5], w:.05 }
+  { n:'palm', h:[7, 10], w:.16, tree:true }, { n:'tree', h:[7, 9.5], w:.24, tree:true }, { n:'banana', h:[3.6, 4.8], w:.1, tree:true }, { n:'orangetree', h:[4.5, 5.5], w:.006, tree:true },
+  { n:'broadleaf', h:[1.6, 2.4], w:.12 }, { n:'fern', h:[1.3, 1.9], w:.1 }, { n:'heartleaf', h:[1.2, 1.8], w:.11 }, { n:'grass', h:[.7, 1.1], w:.06 }, { n:'sansevieria', h:[1, 1.4], w:.04 }, { n:'agave', h:[1.1, 1.5], w:.03 }
 ];
 const PW = PLANTS.reduce((a, p) => a + p.w, 0);
 const plantLists = PLANTS.map(() => []), curtain = PLANTS.map(() => []);
 const placeD = (x, z) => Math.min(Math.hypot(x, z) - CLEAR_R, ...Object.values(PLACES).map(p => Math.hypot(x - p.x, z - p.z) - p.r), Math.hypot(x - NB.x, z - NB.z) - NB.r, x > 21 && x < 37 && z - zs(x) > 2.4 && z - zs(x) < 5.5 ? -1 : 9);
+function addTree(r, x, z){ if (Math.abs(z - zs(x)) < 3.6 || dPoly(FPATH, x, z) < 2.4) return; const v = [0, 1, 1, 2][Math.floor(r()*4)], P = PLANTS[v], h = P.h[0] + r()*(P.h[1] - P.h[0]); plantLists[v].push([x, 0, z, h*ART[P.n][0]/ART[P.n][1], h]); }
 function addPlant(r, x, z, bushOnly){
   if (Math.abs(z - zs(x)) < 3.1) return;
-  let v; if (bushOnly) { let pick = r()*.71; v = 4; for (; v < PLANTS.length - 1; v++) { pick -= PLANTS[v].w; if (pick <= 0) break; } }
+  let v; if (bushOnly) { let pick = r()*.46; v = 4; for (; v < PLANTS.length - 1; v++) { pick -= PLANTS[v].w; if (pick <= 0) break; } }
   else { let pick = r()*PW; v = 0; for (; v < PLANTS.length - 1; v++) { pick -= PLANTS[v].w; if (pick <= 0) break; } }
   const P = PLANTS[v], e = Math.min(edge(x, z), placeD(x, z)), onFlower = dPoly(FPATH, x, z) < 2.0;
-  if (e < (P.tree ? THICK + 1.2 : .25)) return;
+  if (e < (P.tree ? THICK + .5 : .25)) return;
   if (blocked(x, z) && !P.tree) return;
   if (P.tree && onFlower) return;
   const h = P.h[0] + r()*(P.h[1] - P.h[0]), w = h*ART[P.n][0]/ART[P.n][1]*(r() < .5 ? 1 : 1.1);
@@ -241,7 +242,9 @@ function addPlant(r, x, z, bushOnly){
 { const r = rng(42);
   for (let gx = -76; gx < 76; gx += 1.25) for (let gz = -76; gz < 76; gz += 1.25) addPlant(r, gx + (r() - .5)*1.1, gz + (r() - .5)*1.1, false);
   /* 길가 덤불은 한 겹 더 빽빽하게 */
-  for (let gx = -76; gx < 76; gx += .85) for (let gz = -76; gz < 76; gz += .85) { const x = gx + (r() - .5)*.8, z = gz + (r() - .5)*.8, e = edge(x, z); if (e > .3 && e < THICK + 1.5 && r() < .75) addPlant(r, x, z, true); }
+  for (let gx = -76; gx < 76; gx += .85) for (let gz = -76; gz < 76; gz += .85) { const x = gx + (r() - .5)*.8, z = gz + (r() - .5)*.8, e = edge(x, z); if (e > .3 && e < THICK + 1.2 && r() < .38) addPlant(r, x, z, true); }
+  /* 길에서 조금 떨어진 곳부터는 나무를 한 겹 더 */
+  for (let gx = -76; gx < 76; gx += 2.1) for (let gz = -76; gz < 76; gz += 2.1) { const x = gx + (r() - .5)*1.8, z = gz + (r() - .5)*1.8, e = Math.min(edge(x, z), placeD(x, z)); if (e > THICK + .5 && r() < .8) addTree(r, x, z); }
 }
 function plantMesh(list, v, o){ const P = PLANTS[v]; const m = new THREE.InstancedMesh(quad, billMat(artTex(P.n), { sway:P.tree ? 0 : .09, occ:true, ...o }), Math.max(1, list.length)); m.count = list.length; m.frustumCulled = false;
   list.forEach((b, i) => { M4.compose(V3.set(b[0], b[1], b[2]), Q0, SC.set(b[3], b[4], 1)); m.setMatrixAt(i, M4); }); scene.add(m); return m; }
@@ -344,7 +347,7 @@ for (let i = 0; i < 7; i++) { const a = i/7*Math.PI*2 + .3; if (Math.abs(((a - M
   const fin = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(2.2, 0), new THREE.Vector2(0, 3.2)])), new THREE.MeshBasicMaterial({ map:T.trunk, side:THREE.DoubleSide }));
   fin.position.set(Math.cos(a)*TRUNK_R*.95, 0, Math.sin(a)*TRUNK_R*.95); fin.rotation.y = -a; scene.add(fin); }
 /* 나뭇잎 지붕: 꼭대기 둘레 */
-{ const leaves = []; const r = rng(77); for (let i = 0; i < 26; i++) { const a = r()*Math.PI*2, d = 3 + r()*6; leaves.push([Math.cos(a)*d, TREE_H + 4.2 + r()*3, Math.sin(a)*d, 5 + r()*3, 4 + r()*3]); }
+{ const leaves = []; const r = rng(77); for (let i = 0; i < 26; i++) { const a = r()*Math.PI*2, d = 3 + r()*6; leaves.push([Math.cos(a)*d, TREE_H + 8 + r()*4, Math.sin(a)*d, 5 + r()*3, 4 + r()*3]); }
   const m = new THREE.InstancedMesh(quad, billMat(artTex('heartleaf'), { near:4, sway:0, occ:true }), leaves.length); m.frustumCulled = false; leaves.forEach((b, i) => { M4.compose(V3.set(b[0], b[1], b[2]), Q0, SC.set(b[3], b[4], 1)); m.setMatrixAt(i, M4); }); scene.add(m); }
 /* 요람과 우체통, 흰 꽃 */
 const cradle = bill(T.cradle, 1.0, 2.0, 3.0, 1.0, 5.0, { near:0 });
@@ -352,8 +355,11 @@ const cradleGown = bill(T.gown, .5, .5, 3.0, 1.62, 5.0, { near:0, push:.08 });
 const mailbox = bill(artTex('mailbox'), .6, 1.5, -5.2, 0, 4.4, { near:0 });
 const flowers = [[5.4, 3.0], [6.1, 2.2], [5.0, 3.9]].map(([x, z]) => bill(artTex('whitespike'), .62, 1.18, x, 0, z, { near:0 }));
 /* 오르는 길 (홈 셋이 다 차면 자라남) */
-const HX = { R:4.35, a0:Math.PI/2 + .55, turns:1.15 };
+const HX = { R:4.35, a0:Math.PI/2 + .55, turns:.62 };
 HX.L = HX.R*Math.PI*2*HX.turns; HX.pitch = TREE_H/HX.L;
+const A_END = HX.a0 - HX.L/HX.R, NX = Math.cos(A_END - 2.3)*2.15, NZ = Math.sin(A_END - 2.3)*2.15;
+/* 위로 이어지는 줄기 (둥지는 굵은 가지 위, 줄기 옆) */
+{ const up = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.55, 12, 20, 1, true), new THREE.MeshBasicMaterial({ map:T.trunk })); up.position.set(0, TREE_H + 6, 0); scene.add(up); }
 const helixAt = s => { const a = HX.a0 - s/HX.R; return [Math.cos(a)*HX.R, Math.min(TREE_H, s*HX.pitch), Math.sin(a)*HX.R, a]; };
 const STEPS = Math.ceil(HX.L/.9);
 const stepMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1.7, .22, 1.05), new THREE.MeshBasicMaterial({ map:T.step }), STEPS); scene.add(stepMesh);
@@ -361,14 +367,14 @@ let helixGrow = 1;
 function placeSteps(k){ const n = Math.floor(STEPS*k); stepMesh.count = n; for (let i = 0; i < n; i++) { const [x, y, z, a] = helixAt(i*.9 + .45); const ry = -a; M4.compose(V3.set(x, y - .11, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0)), SC.set(1, 1, 1)); stepMesh.setMatrixAt(i, M4); } stepMesh.instanceMatrix.needsUpdate = true; }
 placeSteps(helixGrow);
 /* 꼭대기 둥지 */
-const nestB = bill(T.nest, 1.5, .75, 0, TREE_H, 0, { near:0 });
-const nestFluff = bill(T.fluff, .9, .55, 0, TREE_H + .35, 0, { near:0, push:.05 });
-const nestStone = bill(T.hotstone, .5, .35, .35, TREE_H + .4, 0, { near:0, push:.1 });
-const nestEgg = bill(T.egg, .36, .46, -.15, TREE_H + .42, 0, { near:0, push:.15 });
+const nestB = bill(T.nest, 1.5, .75, NX, TREE_H, NZ, { near:0 });
+const nestFluff = bill(T.fluff, .9, .55, NX, TREE_H + .35, NZ, { near:0, push:.05 });
+const nestStone = bill(T.hotstone, .5, .35, NX + .35, TREE_H + .4, NZ, { near:0, push:.1 });
+const nestEgg = bill(T.egg, .36, .46, NX - .15, TREE_H + .42, NZ, { near:0, push:.15 });
 const HOLE = { fluff:[-.42, (g) => { for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(20 + (i*29) % 56, 28 + (i*17) % 22, 12, 0, 7); g.fill(); } }], stone:[0, (g) => { g.beginPath(); g.ellipse(48, 40, 30, 20, 0, 0, 7); g.fill(); }], egg:[.42, (g) => { g.beginPath(); g.ellipse(48, 36, 18, 26, 0, 0, 7); g.fill(); }] };
-const holes = Object.fromEntries(Object.entries(HOLE).map(([k, [dx, f]]) => [k, bill(ctex(96, 72, (g) => { g.fillStyle = 'rgba(30,20,10,.55)'; f(g); g.globalCompositeOperation = 'source-atop'; g.strokeStyle = 'rgba(255,240,200,.9)'; g.lineWidth = 3; g.setLineDash([6, 5]); g.strokeRect(0, 0, 96, 72); }), .42, .32, dx, TREE_H + .62, 0, { near:0, push:.3, glow:true })]));
-const shell = bill(T.shell, .5, .34, 0, TREE_H + .5, 0, { near:0, push:.2 });
-const chick = bill(T.chick, .5, .5, 0, TREE_H + .5, 0, { near:0, push:.2 });
+const holes = Object.fromEntries(Object.entries(HOLE).map(([k, [dx, f]]) => [k, bill(ctex(96, 72, (g) => { g.fillStyle = 'rgba(30,20,10,.55)'; f(g); g.globalCompositeOperation = 'source-atop'; g.strokeStyle = 'rgba(255,240,200,.9)'; g.lineWidth = 3; g.setLineDash([6, 5]); g.strokeRect(0, 0, 96, 72); }), .42, .32, NX + dx, TREE_H + .62, NZ, { near:0, push:.3, glow:true })]));
+const shell = bill(T.shell, .5, .34, NX, TREE_H + .5, NZ, { near:0, push:.2 });
+const chick = bill(T.chick, .5, .5, NX, TREE_H + .5, NZ, { near:0, push:.2 });
 
 /* ============ 개울 ============ */
 const CREEK_X = [30.1, 31.9], ROWZ = [-35.4, -36.6, -37.8, -39.0], STABLE = [1, 0, 0, 1];
@@ -433,7 +439,7 @@ const maskB = bill(T.mask, .3, .3, 0, 0, 0, { near:0, push:.12 });
 { const im = new Image(); im.onload = () => { const cw = im.width/4, ch = im.height/3; for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) frames.push(ctex(256, 384, (g) => g.drawImage(im, c*cw, r*ch, cw, ch, 0, 0, 256, 384))); }; im.src = '../assets/player_walk.png'; }
 
 /* ============ 카메라 ============ */
-const CAM = { yaw:0, dist:5.6, h:2.5, x:0, y:3, z:0 };
+const CAM = { yaw:0, dist:2.9, h:1.55, x:0, y:3, z:0 };
 function camFwd(){ return [-Math.sin(CAM.yaw), -Math.cos(CAM.yaw)]; }
 
 /* ============ 길찾기 ============ */
@@ -480,10 +486,9 @@ act({ id:'flower', x:5.5, y:.7, z:3.0, r:.9, want:['bottle'], on(it){ if (it ===
 act({ id:'stepsBottom', x:helixAt(.5)[0], y:.4, z:helixAt(.5)[2], r:.9, reach:2.2, on(){ P.mode = 'helix'; P.s = .3; route = null; P.auto = HX.L + .3; return true; } });
 act({ id:'stepsTop', level:'top', x:helixAt(HX.L - .4)[0], y:TREE_H + .3, z:helixAt(HX.L - .4)[2], r:.9, reach:2.2, on(){ P.mode = 'helix'; P.s = HX.L - .3; P.auto = -.3; return true; } });
 /* 둥지 */
-act({ id:'nest', level:'top', x:0, y:TREE_H + .3, z:0, r:.8, reach:2.6, on(it){
-  if (flags.hatched) { if (!flags.maskTaken) { flags.maskTaken = 1; gain('mask', 0, TREE_H + .5, 0); return true; } return false; }
-  let put = 0; for (const k of ['fluff', 'stone', 'egg']) if (has(k) && !S.nest[k] && (k !== 'egg' || S.nest.fluff)) { S.nest[k] = 1; take(k); put++; }
-  if (!put) return false; save(); drawInv(); if (S.nest.fluff && S.nest.stone && S.nest.egg) hatchT = 0.001; return true; } });
+act({ id:'nest', level:'top', want:['fluff', 'stone', 'egg'], x:NX, y:TREE_H + .3, z:NZ, r:.8, reach:2.6, on(it){
+  if (flags.hatched) { if (!flags.maskTaken) { flags.maskTaken = 1; gain('mask', NX, TREE_H + .5, NZ); return true; } return false; }
+  if (!it || S.nest[it] || (it === 'egg' && !S.nest.fluff)) return false; S.nest[it] = 1; take(it); save(); drawInv(); if (S.nest.fluff && S.nest.stone && S.nest.egg) hatchT = 0.001; return true; } });
 /* 개울: 돌 */
 stones.forEach((st, i) => act({ id:'stone' + i, x:st.x, y:.1, z:st.z, r:.6, reach:99, on(){ return hopTo(i); } }));
 act({ id:'nbank', x:NBp[0], y:.1, z:NBp[1], r:1.2, reach:99, vis:() => P.stone >= 0 && stones[P.stone].r === 3, on(){ return hopTo('N'); } });
@@ -517,7 +522,7 @@ wetTufts.forEach((w, i) => act({ id:'wet' + i, x:w.x, y:.15, z:w.z, r:.35, on(){
 const $room = document.getElementById('room'), $rc = document.getElementById('roomc'), $dim = document.getElementById('dim'), rg = $rc.getContext('2d');
 let inRoom = false, roomEyes = 0, roomT = 0;
 const ROOM_HIT = [
-  { id:'bottle', x:.705, y:.37, r:.045, vis:() => !flags.bottle, on(){ flags.bottle = 1; const at = roomPt(.705, .37); if (has('flower')) { take('flower'); give('fbottle'); } else give('bottle'); save(); drawInv(); flyFrom(has('fbottle') ? 'fbottle' : 'bottle', at); drawRoom(); } },
+  { id:'bottle', x:.705, y:.37, r:.045, vis:() => !flags.bottle, on(){ flags.bottle = 1; const at = roomPt(.705, .37); give('bottle'); save(); drawInv(); flyFrom('bottle', at); drawRoom(); } },
   { id:'portrait', x:.36, y:.33, r:.08, on(){ roomEyes = 1 - roomEyes; drawRoom(); } },
   { id:'candle', x:.52, y:.6, r:.05, on(){ const at = roomPt(.52, .6); noAt(at[0], at[1]); } },
   { id:'out', x:.41, y:.93, r:.08, on(){ leaveRoom(); } }
@@ -575,7 +580,7 @@ function steps(n = 4){ try { ac = ac || new (window.AudioContext || window.webki
 function enterRoom(){ if (inRoom) return; inRoom = true; route = null; steps(4); $dim.style.opacity = 1; setTimeout(() => { roomPan = 0; drawRoom(); layoutRoom(); $room.style.display = 'block'; $dim.style.opacity = 0; }, 900); }
 function leaveRoom(){ steps(3); $dim.style.opacity = 1; setTimeout(() => { $room.style.display = 'none'; inRoom = false; P.x = HUT_X - 2.2; P.z = -5; CAM.yaw = -Math.PI/2; P.fx = -1; P.fz = 0; $dim.style.opacity = 0; }, 800); }
 $room.addEventListener('click', e => { if (rp && rp.moved) return; const b = roomBox(), u = (e.clientX - b.x)/b.w, v = (e.clientY - b.y)/b.h;
-  const h = ROOM_HIT.filter(o => !o.vis || o.vis()).find(o => Math.hypot((u - o.x)*1.6, v - o.y) < o.r*1.6 + .02); if (h) h.on(); });
+  if (sel) { sel = null; drawInv(); } const h = ROOM_HIT.filter(o => !o.vis || o.vis()).find(o => Math.hypot((u - o.x)*1.6, v - o.y) < o.r*1.6 + .02); if (h) h.on(); });
 
 /* ============ 징검다리 ============ */
 function hopTo(t, fromNorth){
@@ -620,10 +625,14 @@ function showHint(){ const h = document.getElementById('hint'); h.innerHTML = ''
 
 /* ============ 들고 다니는 것 ============ */
 const $inv = document.getElementById('inv');
-function drawInv(){ $inv.innerHTML = ''; for (const k of S.inv) { const d = document.createElement('div'); d.className = 'slot' + (k === 'mask' && flags.maskOn ? ' on' : ''); d.dataset.k = k; d.append(iconCanvas(k)); $inv.append(d);
+function drawInv(){ $inv.innerHTML = ''; for (const k of S.inv) { const d = document.createElement('div'); d.className = 'slot' + (sel === k ? ' sel' : '') + (k === 'mask' && flags.maskOn ? ' on' : ''); d.dataset.k = k; d.append(iconCanvas(k)); $inv.append(d);
   d.addEventListener('pointerdown', e => { e.stopPropagation(); }); d.addEventListener('click', e => { e.stopPropagation(); tapItem(k); }); } }
+let sel = null;
 function tapItem(k){
-  if (k === 'mask') { flags.maskOn = flags.maskOn ? 0 : 1; save(); buildGrid(); drawInv(); }
+  if (k === 'mask') { flags.maskOn = flags.maskOn ? 0 : 1; save(); buildGrid(); sel = null; drawInv(); return; }
+  if (sel && sel !== k) { const pair = [sel, k].sort().join('+'); if (pair === 'bottle+flower') { take('flower'); swapItem('bottle', 'fbottle'); sel = null; save(); drawInv(); return; }
+    const r = document.querySelector(`.slot[data-k="${k}"]`).getBoundingClientRect(); noAt(r.left + r.width/2, r.top); sel = null; drawInv(); return; }
+  sel = sel === k ? null : k; drawInv();
 }
 drawInv();
 
@@ -646,7 +655,8 @@ function curLevel(){ return P.mode === 'top' ? 'top' : P.mode === 'helix' ? 'hel
 function tap(sx, sy){
   if (flags.ended || inRoom) return;
   let best = null, bd = 1e9;
-  for (const a of ACTS) { if (!a.vis()) continue; V3.set(a.x, a.y, a.z); const dist = V3.distanceTo(camera.position); V3.project(camera); if (V3.z > 1) continue; const px = (V3.x + 1)/2*innerWidth, py = (1 - V3.y)/2*innerHeight;
+  const lvNow = curLevel();
+  for (const a of ACTS) { if (!a.vis()) continue; if (lvNow === 'top' && a.level !== 'top') continue; if (lvNow === 'ground' && a.level === 'top') continue; V3.set(a.x, a.y, a.z); const dist = V3.distanceTo(camera.position); V3.project(camera); if (V3.z > 1) continue; const px = (V3.x + 1)/2*innerWidth, py = (1 - V3.y)/2*innerHeight;
     const rp = Math.max(26, a.r/dist*innerHeight*.9); const d = Math.hypot(px - sx, py - sy); if (d < rp && dist < bd) { bd = dist; best = a; } }
   if (best) return useOn(best);
   // 땅을 누르면 그쪽으로 걸어감
@@ -654,7 +664,7 @@ function tap(sx, sy){
   const ray = new THREE.Raycaster(); ray.setFromCamera({ x:sx/innerWidth*2 - 1, y:-(sy/innerHeight*2 - 1) }, camera);
   const planeY = P.mode === 'top' ? TREE_H : 0; const t = (planeY - ray.ray.origin.y)/ray.ray.direction.y; if (!(t > 0)) return;
   const hx = ray.ray.origin.x + ray.ray.direction.x*t, hz = ray.ray.origin.z + ray.ray.direction.z*t;
-  if (P.mode === 'top') { const d = Math.hypot(hx, hz); P.goal = d < 2.6 ? [hx, hz] : [hx/d*2.6, hz/d*2.6]; return; }
+  if (P.mode === 'top') { const d = Math.hypot(hx, hz); if (d > 2.7) { P.mode = 'helix'; P.s = HX.L - .2; P.auto = -.3; P.goal = null; return; } P.goal = [hx, hz]; P.downAll = false; return; }
   if (P.mode !== 'ground') return;
   route = findPath(P.x, P.z, [hx, hz], .6); routeAct = null;
 }
@@ -663,8 +673,10 @@ function useOn(a){
   if (a.level === 'top' && lv !== 'top') { if (lv === 'helix') P.auto = HX.L + .3; return; }
   if (a.level === 'ground' && lv === 'top') return;
   if (a.reach < 50) { const d = Math.hypot(P.x - a.x, P.z - a.z); if (d > a.reach) { if (lv === 'ground') { route = findPath(P.x, P.z, [a.x, a.z], a.reach - .3); routeAct = route ? () => useOn(a) : null; } return; } }
-  const it = (a.want || []).find(k => has(k)) || null; const r = a.on(it);
+  const it = sel && has(sel) ? sel : null;
+  const r = it && !(a.want || []).includes(it) ? false : a.on(it);
   if (r === false) nope(a.x, a.y, a.z);
+  if (it) sel = null;
   P.face = [a.x - P.x, a.z - P.z];
   save(); drawInv();
 }
@@ -691,8 +703,8 @@ function step(dt){
   if (P.mode === 'ground' && mv) { const sp = SPEED*slow(P.x, P.z), nx = P.x + mv[0]*sp*dt, nz = P.z + mv[1]*sp*dt; if (moveTry(nx, nz)) { P.moving = true; P.fx = mv[0]; P.fz = mv[1]; } else route = null;
     // 오르는 길로 들어섬
     if (helixGrow >= 1) { const [hx, , hz] = helixAt(.3); if (Math.hypot(P.x - hx, P.z - hz) < .7) { const [tx, , tz] = helixAt(1.3); if ((tx - hx)*mv[0] + (tz - hz)*mv[1] > 0) { P.mode = 'helix'; P.s = .35; route = null; } } } }
-  if (P.mode === 'top') { if (mv) { const nx = P.x + mv[0]*SPEED*.8*dt, nz = P.z + mv[1]*SPEED*.8*dt; const d = Math.hypot(nx, nz); if (d < 2.7 && d > .7) { P.x = nx; P.z = nz; P.moving = true; P.fx = mv[0]; P.fz = mv[1]; } else P.goal = null;
-      const [hx, , hz] = helixAt(HX.L - .3); if (Math.hypot(P.x - hx, P.z - hz) < 1.0 && Math.hypot(nx, nz) > 2.3) { P.mode = 'helix'; P.s = HX.L - .4; } } P.y = TREE_H; }
+  if (P.mode === 'top') { if (mv) { const nx = P.x + mv[0]*SPEED*.8*dt, nz = P.z + mv[1]*SPEED*.8*dt; const d = Math.hypot(nx, nz); if (d < 2.6 && d > 1.85) { P.x = nx; P.z = nz; P.moving = true; P.fx = mv[0]; P.fz = mv[1]; } else P.goal = null;
+      const r1 = Math.hypot(P.x, P.z); if (r1 > 2.2 && (mv[0]*P.x + mv[1]*P.z)/r1 > .2) { const aEnd = HX.a0 - HX.L/HX.R; let da = Math.atan2(P.z, P.x) - aEnd; da = Math.atan2(Math.sin(da), Math.cos(da)); if (Math.abs(da) < 1.1) { P.mode = 'helix'; P.s = HX.L - .2; P.goal = null; P.auto = null; } } } P.y = TREE_H; }
   if (P.mode === 'helix') {
     const iv = inputVec(); let ds = 0;
     const [x0, , z0] = helixAt(P.s), [x1, , z1] = helixAt(P.s + .1); const tx = (x1 - x0)/.1, tz = (z1 - z0)/.1;
@@ -719,9 +731,9 @@ function step(dt){
   for (const k in holes) holes[k].visible = !S.nest[k] && !flags.hatched;
   if (P.mode === 'top' && !flags.sawNest) { flags.sawNest = 1; save(); }
   nestFluff.visible = !!S.nest.fluff; nestStone.visible = !!S.nest.stone; nestEgg.visible = !!S.nest.egg && !flags.hatched;
-  if (hatchT > 0 && !flags.hatched) { hatchT += dt; const sh = hatchT > 1 ? Math.sin(t*40)*.03*Math.min(1, hatchT - 1) : 0; nestEgg.at(-.15 + sh, TREE_H + .42, 0); if (hatchT > 4) { flags.hatched = 1; save(); } }
+  if (hatchT > 0 && !flags.hatched) { hatchT += dt; const sh = hatchT > 1 ? Math.sin(t*40)*.03*Math.min(1, hatchT - 1) : 0; nestEgg.at(NX - .15 + sh, TREE_H + .42, NZ); if (hatchT > 4) { flags.hatched = 1; save(); } }
   shell.visible = !!flags.hatched && !flags.maskTaken; chick.visible = !!flags.hatched && (hatchT === 0 || hatchT < 9);
-  if (flags.hatched) { if (hatchT > 0) hatchT += dt; const k = hatchT > 0 ? Math.max(0, hatchT - 4) : 9; chick.at(Math.sin(k)*k*.8, TREE_H + .5 + k*1.2, Math.cos(k*1.3)*k*.6); chick.visible = k < 6; }
+  if (flags.hatched) { if (hatchT > 0) hatchT += dt; const k = hatchT > 0 ? Math.max(0, hatchT - 4) : 9; chick.at(NX + Math.sin(k)*k*.8, TREE_H + .5 + k*1.2, NZ + Math.cos(k*1.3)*k*.6); chick.visible = k < 6; }
   /* 갈대와 알 */
   const ro = flags.reedsOpen ? 1 : 0; reeds[0].at(24.2 - ro*.7, 0, -35.6); reeds[1].at(25.4 + ro*.7, 0, -35.9); creekEgg.visible = !!flags.reedsOpen && !flags.egg; creekEgg.at(24.8, .02 + Math.sin(t*1.4)*.02, -36.2);
   /* 샘 */
@@ -740,7 +752,7 @@ function step(dt){
   { spiderRush = Math.max(0, spiderRush - dt*.8); let u = .5, v = .5; if (flags.hung) { u = .8; v = .72; } else if (spiderRush > 0) { u = .5 - .25*Math.min(1, spiderRush*3); v = .5 - .28*Math.min(1, spiderRush*3); } u += Math.sin(t*.7)*.01; spider.at(...webPt(u, v)); webFluff.visible = !flags.fluff; webBottle.visible = !!flags.hung; }
   /* 벌새 */
   if (!BIRD.gone) {
-    let tgt; if (flags.hatched) tgt = null; else if (flags.egg) tgt = [0, TREE_H + 1.4, .9]; else if (BIRD.left) tgt = [24.8, 1.9, -35.9]; else tgt = [3.0, 2.7, 5.0];
+    let tgt; if (flags.hatched) tgt = null; else if (flags.egg) tgt = [NX, TREE_H + 1.4, NZ]; else if (BIRD.left) tgt = [24.8, 1.9, -35.9]; else tgt = [3.0, 2.7, 5.0];
     const dP = Math.hypot(P.x - BIRD.x, P.z - BIRD.z);
     if (!BIRD.left && !flags.egg && (Math.hypot(P.x - 1.0, P.z - 6.6) > 5 || dP < 1.6)) BIRD.vanish = 1, BIRD.left = true;
     if (flags.hatched) { BIRD.op = Math.max(0, BIRD.op - dt*.4); if (BIRD.op <= 0) BIRD.gone = true; }
@@ -769,11 +781,11 @@ function step(dt){
   /* 카메라: 등 뒤에서 따라감 */
   CAM.manual = Math.max(0, (CAM.manual || 0) - dt);
   if (P.moving && !CAM.manual) { const want = Math.atan2(-P.fx, -P.fz); let d = want - CAM.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); CAM.yaw += d*Math.min(1, dt*(P.mode === 'helix' ? 2.2 : 1.1)); }
-  let cd = P.mode === 'top' ? 6.4 : CAM.dist; const chh = P.mode === 'top' ? 3.4 : CAM.h;
+  let cd = P.mode === 'top' ? 4.6 : CAM.dist; const chh = P.mode === 'top' ? 2.6 : CAM.h;
   if (P.mode !== 'top') for (let k = 0; k < 30 && Math.hypot(P.x + Math.sin(CAM.yaw)*cd, P.z + Math.cos(CAM.yaw)*cd) < TRUNK_R + 1.0; k++) cd -= .2;
   const wx = P.x + Math.sin(CAM.yaw)*cd, wz = P.z + Math.cos(CAM.yaw)*cd, wy = P.y + chh;
   CAM.x += (wx - CAM.x)*Math.min(1, dt*4); CAM.y += (wy - CAM.y)*Math.min(1, dt*4); CAM.z += (wz - CAM.z)*Math.min(1, dt*4);
-  camera.position.set(CAM.x, CAM.y, CAM.z); camera.lookAt(P.x, P.y + 1.25, P.z); U.uPlayer.value.set(P.x, P.y, P.z);
+  camera.position.set(CAM.x, CAM.y, CAM.z); { const [fx, fz] = camFwd(), ah = P.mode === 'top' ? 1.6 : 2.6; camera.lookAt(P.x + fx*ah, P.y + (P.mode === 'top' ? .5 : 1.05), P.z + fz*ah); } U.uPlayer.value.set(P.x, P.y, P.z);
   hintT -= dt; if (hintT <= 0) document.getElementById('hint').style.display = 'none';
   saveT += dt; if (saveT > 2) { saveT = 0; S.x = P.mode === 'ground' ? P.x : S.x; S.z = P.mode === 'ground' ? P.z : S.z; save(); }
 }
@@ -785,7 +797,7 @@ if (flags.ended) ending();
 
 function loop(now){ const dt = Math.min(.1, (now - last)/1000); last = now; step(dt); renderer.render(scene, camera); requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
-window.__g = { tapItem, P, S, flags, ACTS, tap, useOn, hopTo, stones, walkable, findPath, CAM, give:k => { give(k); drawInv(); } };
+window.__g = { scr:toScreen, setSel:k => { sel = k; drawInv(); }, tapItem, P, S, flags, ACTS, tap, useOn, hopTo, stones, walkable, findPath, CAM, give:k => { give(k); drawInv(); } };
 </script>
 </body>
 </html>
