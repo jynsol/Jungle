@@ -1255,7 +1255,7 @@ clear(BUD_SPOT.x, BUD_SPOT.y, 3.8);
   if (SKELETON) STORY_SPOTS.forEach((st, n) => { st.x = wrapX(FIRE.x + 60 + n*3) + .5; st.y = wrapY(FIRE.y + 64) + .5; }); }   // 뼈대 판: 물건들은 지도 밖으로
 // 오솔길 빈자리: 지역마다 큰 퍼즐로 들어오는 큰길 옆 네 군데 (나중에 단서를 놓을 자리)
 const SLOTS = [];
-if (SKELETON) for (const rk of ['dawn', 'high', 'water', 'flower', 'dusk', 'ruin']) for (const [f, sd] of [[.22, -5], [.42, 5], [.62, -5], [.8, 5]]) { const [x, y] = nearRoad(rk, f, sd); clear(x, y, 1.5); SLOTS.push({ x, y, rk }); }   // 아침: 자전거 / 한낮: 나란한 그네   // 물가 → 폐허 길: 먼저 괘종시계, 신전 가까이 피아노
+if (SKELETON) for (const rk of ['dawn', 'high', 'water', 'flower', 'dusk', 'ruin']) for (const [f, sd] of [[.22, -9], [.42, 9], [.62, -9], [.8, 9]]) { const [x, y] = nearRoad(rk, f, sd); clear(x, y, 1.5); SLOTS.push({ x, y, rk }); }   // 아침: 자전거 / 한낮: 나란한 그네   // 물가 → 폐허 길: 먼저 괘종시계, 신전 가까이 피아노
 // 샛길: 소리 없는 볼거리마다 가까운 짐승 길에서 좁은 오솔길이 갈라져 나감 (풀이 눌린 한 줄)
 const PATH2 = new Uint8Array(W*H);   // 오솔길 칸 (큰길과 다르게 그림)
 { const main = []; for (let k = 0; k < W*H; k++) if (TRAIL[k]) main.push(k);
