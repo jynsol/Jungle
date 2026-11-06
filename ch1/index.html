@@ -409,8 +409,6 @@ const SL = { t:0, last:-1, orange:null, throwT:2, bonks:0, trial:null, wantT:0, 
 /* 요람과 우체통, 흰 꽃, 바나나 나무 */
 bill(artTex('banana'), 2.2, 3.2, -6.4, 0, -2.6, { near:0 });
 const bananaBunch = bill(T.banana, .55, .55, -6.1, 1.35, -2.4, { near:0, push:.2 });
-const cradle = bill(T.cradle, 1.0, 2.0, 3.0, 1.0, 5.0, { near:0 });
-const cradleGown = bill(T.gown, .5, .5, 3.0, 1.62, 5.0, { near:0, push:.08 });
 const mailbox = bill(artTex('mailbox'), .6, 1.5, -5.2, 0, 4.4, { near:0 });
 const flowers = [[5.4, 3.0], [6.1, 2.2], [5.0, 3.9]].map(([x, z]) => bill(artTex('whitespike'), .62, 1.18, x, 0, z, { near:0 }));
 
@@ -445,6 +443,7 @@ flat(T.line, 7, 3.4, -50.6, 0, -3, Math.PI/2);
 const CLOTH_Z = { red:-.6, cream:-3, indigo:-5.4 };
 for (const k in CLOTH_Z) flat(T.clothes[k], 1.1, 1.38, -50.5, 1.6, CLOTH_Z[k], Math.PI/2);
 flat(T.washstone, 1.8, .9, -46, 0, -7.2, 0); const gourd = bill(T.gourd, .7, .46, -46, .62, -7.2, { near:0 });
+bill(artTex('broadleaf'), 1.1, 1.9, -43.6, 0, -.1, { near:0 }); const gownB = bill(T.gown, .8, .8, -43.8, .45, -.6, { near:0, push:.1 });
 
 /* ============ 산파의 빈 오두막 (서쪽에서 봄: 왼쪽이 북쪽) ============ */
 const HUT_X = 48.6;
@@ -472,8 +471,8 @@ const webBottle = bill(T.bottleF, .22, .38, ...webPt(.82, .78), { near:0, push:.
 const wetTufts = [[3.2, 46.4], [1.6, 47.4], [4.2, 47.1]].map(([x, z]) => bill(T.wetfluff, .5, .3, x, 0, z, { near:0 }));
 
 /* ============ 벌새 (소리 없이 떠 있음) ============ */
-const bird = bill(T.bird, .62, .46, 3.0, 2.7, 5.0, { near:0, push:.05 });
-const BIRD = { x:3.0, y:2.7, z:5.0, tx:3.0, ty:2.7, tz:5.0, op:1, gone:false };
+const bird = bill(T.bird, .62, .46, 2.6, 2.6, 4.4, { near:0, push:.05 });
+const BIRD = { x:2.6, y:2.6, z:4.4, tx:2.6, ty:2.6, tz:4.4, op:1, gone:false };
 
 /* ============ 숨은 꽃길 ============ */
 const pfl = []; for (let i = 0; i < FPATH.length; i += 3) for (const s of [-1, 1]) { const p = FPATH[i], q = FPATH[Math.min(FPATH.length - 1, i + 1)], dx = q[0] - p[0], dz = q[1] - p[1], L = Math.hypot(dx, dz) || 1; pfl.push([p[0] - dz/L*1.5*s + (hash(i + s)*.4), .0, p[1] + dx/L*1.5*s, .55, .55]); }
@@ -527,7 +526,7 @@ function toScreen(x, y, z){ V3.set(x, y, z).project(camera); return [(V3.x + 1)/
 const flags = S.f;
 
 /* 요람: 흔들림만 */
-act({ id:'cradle', x:3.0, y:1.4, z:5.0, r:.8, on(){ cradleKick = 1; if (!flags.gown) { flags.gown = 1; gain('cloth', 3.0, 1.6, 5.0); } return true; } });
+act({ id:'gown', x:-43.8, y:.7, z:-.6, r:.55, vis:() => !flags.gown, on(){ flags.gown = 1; gain('cloth', -43.8, .7, -.6); return true; } });
 /* 우체통: 다음에 할 일 그림 */
 act({ id:'mail', x:-5.2, y:1.1, z:4.4, r:.6, on(){ showHint(); return true; } });
 /* 흰 꽃 */
@@ -662,7 +661,7 @@ const HINT_ICON = {
   hot:(g) => { g.drawImage(T.spring.userData.canvas, 4, 30, 88, 60); g.drawImage(T.hotstone.userData.canvas, 26, 40, 44, 32); },
   web:(g) => { g.drawImage(T.web.userData.canvas, 4, 4, 88, 88); g.drawImage(T.spider.userData.canvas, 36, 30, 28, 28); },
   ffs:(g) => { g.drawImage(T.ffbush.userData.canvas, 0, 10, 96, 86); for (let i = 0; i < 6; i++) g.drawImage(T.glow.userData.canvas, 20 + i*10, 20 + (i % 3)*12, 18, 18); },
-  cradle:(g) => g.drawImage(T.cradle.userData.canvas, 24, 0, 48, 96),
+  cradle:(g) => { g.drawImage(T.line.userData.canvas, 0, 10, 96, 48); g.drawImage(T.gown.userData.canvas, 24, 40, 50, 50); },
   up:(g) => { g.drawImage(T.nest.userData.canvas, 12, 6, 72, 36); g.strokeStyle = '#3a2a1a'; g.lineWidth = 6; g.lineCap = 'round'; g.beginPath(); g.moveTo(48, 92); g.lineTo(48, 50); g.moveTo(34, 64); g.lineTo(48, 50); g.lineTo(62, 64); g.stroke(); },
   wear:(g) => { g.drawImage(T.mask.userData.canvas, 10, 10, 76, 76); },
   path:(g) => { for (let i = 0; i < 5; i++) g.drawImage(T.pflower.userData.canvas, 4 + i*16, 70 - i*14, 28, 28); },
@@ -842,7 +841,6 @@ function step(dt){
     const a = stones[f.from ?? f.at], b = stones[f.at]; if (!b) return; f.hop = Math.min(1, (f.hop ?? 1) + dt*2.2); const k = f.hop; f.b.at(a.x + (b.x - a.x)*k, .08 + Math.sin(k*Math.PI)*.5, a.z + (b.z - a.z)*k); });
   /* 큰 나무 */
   updateSloth(dt, t);
-  cradleKick = Math.max(0, cradleKick - dt*.4); { const sw = Math.sin(t*1.1)*.06 + Math.sin(t*5)*cradleKick*.2; cradle.at(3.0 + sw, 1.0, 5.0); cradleGown.at(3.0 + sw, 1.62, 5.0); cradleGown.visible = !flags.gown; }
   mailbox.upd();
   flowers.forEach(f => f.visible = true);
   for (const k in holes) holes[k].visible = !S.nest[k] && !flags.hatched;
@@ -856,7 +854,7 @@ function step(dt){
   /* 샘 */
   hotStone.visible = !flags.stone; bubbles.forEach((b, i) => { b.t = (b.t + dt*.5) % 1; b.b.at(SPRING.x + Math.sin(i*2.3)*.8, b.t*.6, SPRING.z + Math.cos(i*1.7)*.7); b.b.op = 1 - b.t; });
   /* 빨래터 */
-  gourd.visible = !flags.gourd;
+  gourd.visible = !flags.gourd; gownB.visible = !flags.gown;
   /* 오두막 */
   { const open = flags.door ? 1 : 0; door.userData.k = (door.userData.k || 0) + (open - (door.userData.k || 0))*Math.min(1, dt*2); door.rotation.y = -door.userData.k*1.6 + Math.sin(t*50)*doorShake*.02; doorShake = Math.max(0, doorShake - dt*1.5);
     for (const k in cords) cords[k].visible = !flags.door; }
@@ -870,7 +868,7 @@ function step(dt){
   { spiderRush = Math.max(0, spiderRush - dt*.8); let u = .5, v = .5; if (flags.hung) { u = .8; v = .72; } else if (spiderRush > 0) { u = .5 - .25*Math.min(1, spiderRush*3); v = .5 - .28*Math.min(1, spiderRush*3); } u += Math.sin(t*.7)*.01; spider.at(...webPt(u, v)); webFluff.visible = !flags.fluff; webBottle.visible = !!flags.hung; }
   /* 벌새 */
   if (!BIRD.gone) {
-    let tgt; if (flags.hatched) tgt = null; else if (flags.egg) tgt = [NX, TREE_H + 1.4, NZ]; else if (BIRD.left) tgt = [24.8, 1.9, -35.9]; else tgt = [3.0, 2.7, 5.0];
+    let tgt; if (flags.hatched) tgt = null; else if (flags.egg) tgt = [NX, TREE_H + 1.4, NZ]; else if (BIRD.left) tgt = [24.8, 1.9, -35.9]; else tgt = [2.6, 2.6, 4.4];
     const dP = Math.hypot(P.x - BIRD.x, P.z - BIRD.z);
     if (!BIRD.left && !flags.egg && (Math.hypot(P.x - 1.0, P.z - 6.6) > 5 || dP < 1.6)) BIRD.vanish = 1, BIRD.left = true;
     if (flags.hatched) { BIRD.op = Math.max(0, BIRD.op - dt*.4); if (BIRD.op <= 0) BIRD.gone = true; }
