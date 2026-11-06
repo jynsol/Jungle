@@ -1242,6 +1242,14 @@ clear(BUD_SPOT.x, BUD_SPOT.y, 3.8);
   { const wh = REGIONS[RGI('water')].hub, T = REGIONS[RGI('ruin')].temple;
     for (let k = 0; k < W*H; k++) { if (!TRAIL[k]) continue; const x = k % W + .5, y = (k / W | 0) + .5;
       if (wdist(x, y, wh.x, wh.y) < 2.2 || (T && Math.abs(wd(x - (T.cx + .5), W)) < 4.6 && Math.abs(wd(y - (T.cy + .5), H)) < 4.6) || (window.CAVE && window.CAVE.inside(x, y))) TRAIL[k] = 0; } }
+  // 큰길의 끝(밤)은 신전 문 앞: 큰길이 도착하는 쪽 벽에 문을 내고, 길 끝에서 문까지 이음
+  { const T = REGIONS[RGI('ruin')].temple; if (T) { const c = { x:T.cx + .5, y:T.cy + .5 }; let best = -1, bd = 1e9;
+      for (let k = 0; k < W*H; k++) { if (!TRAIL[k]) continue; const x = k % W + .5, y = (k / W | 0) + .5, d = wdist(x, y, c.x, c.y); if (d > 5.2 && d < bd) { bd = d; best = k; } }
+      if (best >= 0) { const ex = best % W + .5, ey = (best / W | 0) + .5, dx = wd(ex - c.x, W), dy = wd(ey - c.y, H), side = Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
+        for (let n = -1; n <= 1; n++) setT(T.cx + side[0]*4 + (side[0] ? 0 : n), T.cy + side[1]*4 + (side[1] ? 0 : n), FLOOR);   // 세 칸짜리 돌문
+        const door = { x:c.x + side[0]*5.5, y:c.y + side[1]*5.5 }, L = wdist(ex, ey, door.x, door.y), ux = wd(door.x - ex, W)/L, uy = wd(door.y - ey, H)/L;
+        for (let t = 0; t <= L; t += .25) for (const [a, b] of [[0, 0], [1, 0], [0, 1]]) { const k = id(Math.floor(ex + ux*t) + a, Math.floor(ey + uy*t) + b); if (type[k] !== RUIN) { type[k] = FLOOR; TRAIL[k] = 1; } }
+        T.door = door; } } }
   // 길 잇기: 모닥불에서 시작한 큰길이 중간에 끊긴 데(연못 섬, 물가 등) 없이 모든 길 조각이 한 줄로 이어지게 — 끊긴 조각은 가장 가까운 큰길까지 땅으로 이어 줌
   { const N8 = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]], gateT = new Set(); SHORTCUTS.forEach(sc => sc.tiles.forEach(k => gateT.add(k)));
     const reach = () => { const d = new Uint8Array(W*H), q = []; for (let a = -6; a <= 6; a++) for (let c = -6; c <= 6; c++) { const k = id(Math.floor(FIRE.x) + a, Math.floor(FIRE.y) + c); if (TRAIL[k] && !d[k]) { d[k] = 1; q.push(k); } }
