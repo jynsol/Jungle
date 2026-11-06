@@ -433,13 +433,13 @@ const EXIT = FLOWER_CP[FLOWER_CP.length - 1];
 /* ============ 나 ============ */
 const P = { x:S.x, z:S.z, y:0, fx:0, fz:-1, moving:false, row:1, flip:0, frame:0, ft:0, mode:S.mode || 'ground', s:S.s || 0, stone:-1 };
 if (P.mode === 'climb') P.mode = 'ground';
-const frames = []; const playerB = bill(T.shadow, 1.17, 1.75, P.x, 0, P.z, { near:0 });
-const shadow = flat(T.shadow, 1.2, .7, P.x, .03, P.z, 0, { center:true, blend:true }); shadow.rotation.x = -Math.PI/2;
-const maskB = bill(T.mask, .3, .3, 0, 0, 0, { near:0, push:.12 });
+const frames = []; const playerB = bill(T.shadow, .77, 1.15, P.x, 0, P.z, { near:0 });
+const shadow = flat(T.shadow, .8, .46, P.x, .03, P.z, 0, { center:true, blend:true }); shadow.rotation.x = -Math.PI/2;
+const maskB = bill(T.mask, .2, .2, 0, 0, 0, { near:0, push:.1 });
 { const im = new Image(); im.onload = () => { const cw = im.width/4, ch = im.height/3; for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) frames.push(ctex(256, 384, (g) => g.drawImage(im, c*cw, r*ch, cw, ch, 0, 0, 256, 384))); }; im.src = '../assets/player_walk.png'; }
 
 /* ============ 카메라 ============ */
-const CAM = { yaw:0, dist:2.9, h:1.55, x:0, y:3, z:0 };
+const CAM = { yaw:0, dist:2.3, h:1.4, x:0, y:3, z:0 };
 function camFwd(){ return [-Math.sin(CAM.yaw), -Math.cos(CAM.yaw)]; }
 
 /* ============ 길찾기 ============ */
@@ -784,15 +784,15 @@ function step(dt){
   if (frames.length) playerB.m.material.uniforms.map.value = frames[P.row*4 + P.frame];
   playerB.m.material.uniforms.uFlip.value = P.flip; playerB.at(P.x, P.y, P.z);
   shadow.position.set(P.x, P.y + .03, P.z);
-  maskB.visible = !!flags.maskOn; if (flags.maskOn) { maskB.m.material.uniforms.map.value = P.row === 0 ? T.maskBack : T.mask; maskB.at(P.x + (P.row === 2 ? (P.flip ? -.08 : .08)*0 : 0), P.y + 1.28, P.z); }
+  maskB.visible = !!flags.maskOn; if (flags.maskOn) { maskB.m.material.uniforms.map.value = P.row === 0 ? T.maskBack : T.mask; maskB.at(P.x + (P.row === 2 ? (P.flip ? -.08 : .08)*0 : 0), P.y + .86, P.z); }
   /* 카메라: 등 뒤에서 따라감 */
   CAM.manual = Math.max(0, (CAM.manual || 0) - dt);
   if (P.moving && !CAM.manual) { const want = Math.atan2(-P.fx, -P.fz); let d = want - CAM.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); CAM.yaw += d*Math.min(1, dt*(P.mode === 'climb' ? 2.6 : 1.1)); }
-  let cd = P.mode === 'top' ? 4.6 : CAM.dist; const chh = P.mode === 'top' ? 2.6 : CAM.h;
+  let cd = P.mode === 'top' ? 3.2 : CAM.dist; const chh = P.mode === 'top' ? 1.9 : CAM.h;
   if (P.mode !== 'top') for (let k = 0; k < 30 && Math.hypot(P.x + Math.sin(CAM.yaw)*cd, P.z + Math.cos(CAM.yaw)*cd) < TRUNK_R + 1.0; k++) cd -= .2;
   const wx = P.x + Math.sin(CAM.yaw)*cd, wz = P.z + Math.cos(CAM.yaw)*cd, wy = P.y + chh;
   CAM.x += (wx - CAM.x)*Math.min(1, dt*4); CAM.y += (wy - CAM.y)*Math.min(1, dt*4); CAM.z += (wz - CAM.z)*Math.min(1, dt*4);
-  camera.position.set(CAM.x, CAM.y, CAM.z); { const [fx, fz] = camFwd(), ah = P.mode === 'top' ? 1.6 : 2.6; camera.lookAt(P.x + fx*ah, P.y + (P.mode === 'top' ? .5 : 1.05), P.z + fz*ah); } U.uPlayer.value.set(P.x, P.y, P.z);
+  camera.position.set(CAM.x, CAM.y, CAM.z); { const [fx, fz] = camFwd(), ah = P.mode === 'top' ? 2 : 3; camera.lookAt(P.x + fx*ah, P.y + (P.mode === 'top' ? .55 : 1.05), P.z + fz*ah); } U.uPlayer.value.set(P.x, P.y, P.z);
   hintT -= dt; if (hintT <= 0) document.getElementById('hint').style.display = 'none';
   saveT += dt; if (saveT > 2) { saveT = 0; S.x = P.mode === 'ground' ? P.x : S.x; S.z = P.mode === 'ground' ? P.z : S.z; save(); }
 }
