@@ -40,7 +40,7 @@ THREE.ColorManagement.enabled = false;
 
 /* ============ 저장 ============ */
 const KEY = 'denggul-ch1-v1';
-const FRESH = () => ({ inv:[], f:{}, slots:{}, nest:{}, x:0, z:8.5 });
+const FRESH = () => ({ inv:[], f:{}, nest:{}, x:1.0, z:6.6 });
 let S = FRESH(); try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.f) S = Object.assign(FRESH(), s); } catch (e) {}
 let saveT = 0; const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
 const has = k => S.inv.includes(k);
@@ -71,22 +71,24 @@ const U = { uTime:{ value:0 }, uPlayer:{ value:new THREE.Vector3() } };
 function billMat(tex, o = {}){
   return new THREE.ShaderMaterial({
     uniforms:{ map:{ value:tex }, uTime:U.uTime, fogColor:{ value:SKY }, fogNear:{ value:28 }, fogFar:{ value:80 }, uOpacity:{ value:1 }, uNear:{ value:o.near ?? 2.4 }, uSway:{ value:o.sway ?? 0 }, uFlip:{ value:0 }, uPush:{ value:o.push ?? 0 }, uGlow:{ value:o.glow ? 1 : 0 }, uPlayer:U.uPlayer, uOcc:{ value:o.occ ? 1 : 0 } },
-    vertexShader:`uniform float uTime, uSway, uFlip, uPush, uOcc; uniform vec3 uPlayer; varying vec2 vUv; varying float vFog, vNear, vOcc;
+    vertexShader:`uniform float uTime, uSway, uFlip, uPush, uOcc; uniform vec3 uPlayer; varying vec2 vUv; varying float vFog, vNear, vOcc, vDark;
       void main(){
         vec3 c = (instanceMatrix * vec4(0., 0., 0., 1.)).xyz; float sx = length(instanceMatrix[0].xyz), sy = length(instanceMatrix[1].xyz);
         vec3 t = cameraPosition - c; t.y = 0.; t = normalize(t + vec3(1e-4, 0., 0.)); vec3 right = vec3(t.z, 0., -t.x);
-        float sway = sin(uTime*1.3 + c.x*.7 + c.z*.5)*uSway*position.y*position.y;
+        float gust = smoothstep(.62, 1., .5 + .5*sin(uTime*.33 + c.x*.07 + c.z*.045)); float sway = sin(uTime*2.4 + c.x*.7 + c.z*.5)*uSway*position.y*position.y*gust;
         vec3 wp = c + right*(position.x + sway)*sx + vec3(0., position.y*sy, 0.) + t*uPush;
+        if (uOcc > .5 && uSway > 0. && sy < 3.) { vec2 dp = c.xz - uPlayer.xz; float pd = length(dp); float pk = smoothstep(1.8, .3, pd); vec2 pdir = pd > 1e-3 ? dp/pd : vec2(1., 0.); wp.xz += pdir*pk*.95*position.y*sy*.6; wp.y -= pk*.35*position.y*sy; }
+        vDark = smoothstep(17., 5., length(c.xz - vec2(2., 46.)))*.42;
         vec4 mv = viewMatrix*vec4(wp, 1.); gl_Position = projectionMatrix*mv;
         vUv = vec2(uFlip > .5 ? 1. - uv.x : uv.x, uv.y); vFog = -mv.z; vNear = length(cameraPosition.xz - c.xz);
         vOcc = 1.; if (uOcc > .5) { vec2 cp = cameraPosition.xz, ab = uPlayer.xz - cp; float tt = clamp(dot(c.xz - cp, ab)/max(dot(ab, ab), 1e-3), 0., 1.); float ds = length(c.xz - (cp + ab*tt)); if (tt < .9) vOcc = mix(.0, 1., smoothstep(.6 + sx*.25, 1.4 + sx*.35, ds)); }
       }`,
-    fragmentShader:`uniform sampler2D map; uniform vec3 fogColor; uniform float fogNear, fogFar, uOpacity, uNear, uGlow; varying vec2 vUv; varying float vFog, vNear, vOcc;
+    fragmentShader:`uniform sampler2D map; uniform vec3 fogColor; uniform float fogNear, fogFar, uOpacity, uNear, uGlow; varying vec2 vUv; varying float vFog, vNear, vOcc, vDark;
       void main(){
         vec4 c = texture2D(map, vUv); if (c.a < .45) discard;
         float nf = uNear > 0. ? smoothstep(uNear*.45, uNear, vNear) : 1.;
         float d = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233)))*43758.5453); if (d > nf*uOpacity*max(vOcc, .0)) discard;
-        vec3 col = mix(c.rgb, fogColor, uGlow > .5 ? 0. : smoothstep(fogNear, fogFar, vFog)); gl_FragColor = vec4(col, 1.);
+        vec3 col = mix(c.rgb*(1. - (uGlow > .5 ? 0. : vDark)), fogColor, uGlow > .5 ? 0. : smoothstep(fogNear, fogFar, vFog)); gl_FragColor = vec4(col, 1.);
       }`
   });
 }
@@ -108,36 +110,64 @@ function flat(tex, w, h, x, y, z, rotY = 0, o = {}){
 }
 
 /* ============ 지도 ============ */
-const CLEAR_R = 14, TRUNK_R = 3.0, TREE_H = 11;
-const ROAD_CP = [[8,-9],[12,-16],[19,-25],[31,-30.5],[41,-22],[43,-6],[36,13],[19,25],[0,30],[-19,25],[-35,14],[-41,-5],[-36,-21],[-24,-28],[-12,-21],[-7,-10]];
-const FLOWER_CP = [[7,8],[15,15],[23,21],[30,29],[36,38],[41,48]];
+const CLEAR_R = 7.5, TRUNK_R = 3.0, TREE_H = 11;
+const ROAD_CP = [[4.6,-5.6],[9,-11],[14,-19],[20,-25],[27,-27],[33,-20],[34,-8],[32,5],[26,17],[14,25],[0,27],[-13,25],[-24,17],[-30,5],[-31,-8],[-26,-19],[-16,-24],[-9,-17],[-6,-10],[-4.6,-5.6]];
+const FLOWER_CP = [[4.8,4.8],[9,9],[15,15],[23,21],[30,29],[36,38],[41,48]];
+/* 장소: 큰길에서 오솔길로 들어감 (오두막은 조금, 빨래터는 중간, 반딧불 덤불은 깊이) */
+const PLACES = {
+  creek:{ x:30, z:-31.8, r:3.8 },
+  hut:{ x:44, z:-5, r:5, block:(x, z) => x > 48.2 },
+  ff:{ x:2, z:44, r:6, block:(x, z) => x > 3.8 && x < 7.2 && z > 47.3 },
+  laundry:{ x:-46, z:-3, r:5, block:(x, z) => x < -50.2 }
+};
+const SIDE_CP = [
+  [[25,-26.5],[26.5,-29.5],[29,-30.2],[30,-31.8]],
+  [[33.6,-6],[37,-3.2],[40,-6.8],[42.5,-4],[44,-5]],
+  [[-30.5,-2],[-34,1.8],[-37.5,-1.8],[-41,1],[-44,-1.5],[-46,-3]],
+  [[-1,27.5],[2.5,31.5],[-1.5,35],[1.2,38.5],[4,40.8],[2,44]]
+];
 function catmull(P, step = .5){ const out = [];
   for (let i = 0; i < P.length - 1; i++) { const p0 = P[Math.max(0, i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(P.length - 1, i + 2)];
     const L = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]), n = Math.max(2, Math.ceil(L/step));
     for (let k = 0; k < n; k++) { const t = k/n, t2 = t*t, t3 = t2*t; const f = (a, b, c, d) => .5*((2*b) + (-a + c)*t + (2*a - 5*b + 4*c - d)*t2 + (-a + 3*b - 3*c + d)*t3); out.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]); } }
   out.push(P[P.length - 1]); return out; }
-const ROAD = catmull(ROAD_CP), FPATH = catmull(FLOWER_CP);
+/* 곧은 데 없이 구불구불하게: 양 끝과 공터 근처는 그대로 둠 */
+function wiggle(P, amp, seed, ends = 4){ let L = 0; const len = []; P.forEach((p, i) => { if (i) L += Math.hypot(p[0] - P[i - 1][0], p[1] - P[i - 1][1]); len.push(L); });
+  return P.map((p, i) => { const a = P[Math.max(0, i - 2)], b = P[Math.min(P.length - 1, i + 2)], tx = b[0] - a[0], tz = b[1] - a[1], tl = Math.hypot(tx, tz) || 1;
+    const k = Math.max(0, Math.min(1, (Math.hypot(p[0], p[1]) - 8)/6, len[i]/ends, (L - len[i])/ends));
+    const off = amp*k*(Math.sin(len[i]/8.5 + seed) + .55*Math.sin(len[i]/3.7 + seed*2)); return [p[0] - tz/tl*off, p[1] + tx/tl*off]; }); }
 const dPoly = (P, x, z) => { let m = 1e9; for (const p of P) { const d = (p[0] - x)**2 + (p[1] - z)**2; if (d < m) m = d; } return Math.sqrt(m); };
+const nearOn = (P, x, z) => { let m = 1e9, q = P[0]; for (const p of P) { const d = (p[0] - x)**2 + (p[1] - z)**2; if (d < m) { m = d; q = p; } } return q; };
+const ROAD = wiggle(catmull(ROAD_CP), 2.0, 1.3, 1), FPATH = wiggle(catmull(FLOWER_CP), 1.4, 4.1);
+const SIDES = SIDE_CP.map((cp, i) => { const c = cp.slice(); c[0] = nearOn(ROAD, c[0][0], c[0][1]); return wiggle(catmull(c, .4), .7, i*2.3 + .5, 2.5); });
 const zs = x => -46 + 9.5*Math.exp(-(((x - 31)/14)**2)) + 1.2*Math.sin(x/6);
 const inWater = (x, z) => Math.abs(z - zs(x)) < 2.4;
-const PLACES = {
-  creek:{ x:31, z:-30.5, r:5 },
-  hut:{ x:42, z:-5, r:6, block:(x, z) => x > 47.3 },
-  ff:{ x:0, z:30, r:6.5, block:(x, z) => x > 1.8 && x < 5.2 && z > 33.2 },
-  laundry:{ x:-41, z:-5, r:6, block:(x, z) => x < -45.2 }
-};
 const NB = { x:31, z:-45, r:5.2 };
-function walkable(x, z){
-  const r0 = Math.hypot(x, z);
-  if (r0 < TRUNK_R + .45) return false;
-  if (r0 < CLEAR_R) return true;
+const CORE_W = 1.6, SIDE_W = .95, THICK = 2.2;
+/* 길 가장자리까지 거리 (미리 계산) */
+const DG = .5, DN = 300, D0 = -75, DGRID = new Float32Array(DN*DN);
+for (let j = 0; j < DN; j++) for (let i = 0; i < DN; i++) { const x = D0 + (i + .5)*DG, z = D0 + (j + .5)*DG; let d = dPoly(ROAD, x, z) - CORE_W; if (d < 12) for (const sp of SIDES) d = Math.min(d, dPoly(sp, x, z) - SIDE_W); else for (const sp of SIDES) { const e = dPoly(sp, x, z) - SIDE_W; if (e < d) d = e; } DGRID[j*DN + i] = d; }
+const edge = (x, z) => { const i = Math.floor((x - D0)/DG), j = Math.floor((z - D0)/DG); return i < 0 || j < 0 || i >= DN || j >= DN ? 99 : DGRID[j*DN + i]; };
+function blocked(x, z){ if (Math.hypot(x, z) < TRUNK_R + .45) return true; for (const k in PLACES) { const p = PLACES[k]; if (p.block && Math.hypot(x - p.x, z - p.z) < p.r + THICK + 1.5 && p.block(x, z)) return true; } return false; }
+/* 길 위 (빠르게 걷는 곳) */
+function core(x, z){
+  if (blocked(x, z)) return false;
+  if (Math.hypot(x, z) < CLEAR_R) return true;
   if (inWater(x, z)) return false;
   if (S.f.maskOn && dPoly(FPATH, x, z) < 1.4) return true;
-  for (const k in PLACES) { const p = PLACES[k]; if (Math.hypot(x - p.x, z - p.z) < p.r) return !(p.block && p.block(x, z)); }
+  for (const k in PLACES) { const p = PLACES[k]; if (Math.hypot(x - p.x, z - p.z) < p.r) return true; }
   if (Math.hypot(x - NB.x, z - NB.z) < NB.r) return true;
-  if (x > 21 && x < 37) { const dz = z - zs(x); if (dz > 2.4 && dz < 6) return true; }
-  return dPoly(ROAD, x, z) < 1.7;
+  if (x > 21 && x < 37) { const dz = z - zs(x); if (dz > 2.4 && dz < 5.5) return true; }
+  return edge(x, z) < 0;
 }
+/* 덤불 속 (헤치고 들어갈 수 있는 곳) */
+function thick(x, z){
+  if (blocked(x, z) || inWater(x, z) || Math.abs(z - zs(x)) < 2.9 && Math.hypot(x - NB.x, z - NB.z) > NB.r) return false;
+  if (Math.hypot(x, z) < CLEAR_R + 1.8) return true;
+  for (const k in PLACES) { const p = PLACES[k]; if (Math.hypot(x - p.x, z - p.z) < p.r + 1.8) return true; }
+  return edge(x, z) < THICK;
+}
+const walkable = (x, z) => core(x, z) || thick(x, z);
 
 /* ============ 땅 ============ */
 const GW = 160, GT = 2048, g2c = v => (v + GW/2)/GW*GT;
@@ -154,7 +184,9 @@ const groundTex = ctex(GT, GT, (g) => {
   { const rr = NB.r/GW*GT; g.fillStyle = '#7a7e56'; g.beginPath(); g.arc(g2c(NB.x), g2c(NB.z), rr, 0, 7); g.fill(); }
   // 큰길
   const strokePath = (P, w, col) => { g.strokeStyle = col; g.lineWidth = w/GW*GT; g.lineCap = g.lineJoin = 'round'; g.beginPath(); P.forEach((p, i) => i ? g.lineTo(g2c(p[0]), g2c(p[1])) : g.moveTo(g2c(p[0]), g2c(p[1]))); g.stroke(); };
-  strokePath(ROAD, 3.8, '#8a7a50'); strokePath(ROAD, 3.0, '#a8915e');
+  strokePath(ROAD, 3.6, '#7e7048'); strokePath(ROAD, 2.8, '#a08a5a');
+  for (const sp of SIDES) { strokePath(sp, 2.0, 'rgba(110,100,64,.8)'); strokePath(sp, 1.3, 'rgba(140,124,80,.75)'); }
+  { const fg = g.createRadialGradient(g2c(2), g2c(44), 10, g2c(2), g2c(44), 16/GW*GT); fg.addColorStop(0, 'rgba(10,20,16,.45)'); fg.addColorStop(1, 'rgba(10,20,16,0)'); g.fillStyle = fg; g.fillRect(0, 0, GT, GT); }
   for (let i = 0; i < ROAD.length; i += 3) { const p = ROAD[i]; g.fillStyle = 'rgba(80,64,40,.35)'; g.beginPath(); g.arc(g2c(p[0] + (r() - .5)*2), g2c(p[1] + (r() - .5)*2), 2 + r()*3, 0, 7); g.fill(); }
   // 개울
   for (let x = -GW/2; x < GW/2; x += .25) { const z = zs(x); g.fillStyle = '#2f5a58'; g.fillRect(g2c(x), g2c(z - 2.6), GT/GW*.3, 5.2/GW*GT); g.fillStyle = '#3e6f6a'; g.fillRect(g2c(x), g2c(z - 2.2), GT/GW*.3, 4.4/GW*GT); }
@@ -164,6 +196,18 @@ const groundTex = ctex(GT, GT, (g) => {
 /* 흐르는 물빛 */
 const sparkT = ctex(32, 32, (g) => { const r = g.createRadialGradient(16, 16, 0, 16, 16, 16); r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = r; g.fillRect(0, 0, 32, 32); });
 const sparks = Array.from({ length:40 }, (_, i) => { const m = flat(sparkT, .5, .12, 0, .04, 0, 0, { blend:true, add:true, center:true, opacity:.5 }); m.rotation.x = -Math.PI/2; return { m, x:-40 + i*2.2 + hash(i)*2, ph:hash(i + 9)*6, dz:(hash(i + 3) - .5)*3.4 }; });
+
+/* 멀리 겹겹이 보이는 숲 */
+for (const [R, seed, col, hgt] of [[70, 3, ['#6f8a72', '#7a947c', '#688270'], 13], [77, 8, ['#9fb19f', '#a8b8a6', '#97a996'], 17]]) {
+  const tex = ctex(4096, 512, (g) => { const r = rng(seed); for (let i = 0; i < 260; i++) { const x = r()*4096, h = 180 + r()*300, w = 60 + r()*120; g.fillStyle = col[i % 3];
+    if (r() < .35) { g.fillRect(x - 3, 512 - h, 6, h); for (let k = 0; k < 7; k++) { g.beginPath(); g.ellipse(x + Math.cos(k*.9)*w*.4, 512 - h + Math.sin(k*.9)*14, w*.45, 10, k*.9, 0, 7); g.fill(); } }
+    else { g.beginPath(); g.ellipse(x, 512 - h*.6, w, h*.45, 0, 0, 7); g.fill(); g.fillRect(x - w, 512 - h*.6, w*2, h*.6); } } });
+  tex.wrapS = THREE.RepeatWrapping; tex.repeat.set(2, 1);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(R, R, hgt, 64, 1, true), new THREE.MeshBasicMaterial({ map:tex, side:THREE.BackSide, transparent:true, alphaTest:.4, fog:false })); m.position.y = hgt/2 - .5; scene.add(m); }
+/* 떠다니는 빛 알갱이 */
+const motes = Array.from({ length:46 }, (_, i) => ({ m:flat(sparkT, .09, .09, 0, 0, 0, 0, { blend:true, add:true, center:true, glow:true, opacity:.6 }), ox:(hash(i)*2 - 1)*9, oz:(hash(i + 50)*2 - 1)*9, ph:hash(i + 7)*6.28, sp:.15 + hash(i + 3)*.25 }));
+function updateMotes(t){ for (const d of motes) { const x = P.x + ((d.ox + Math.sin(t*.05 + d.ph)*3 + 27) % 18) - 9, z = P.z + ((d.oz + Math.cos(t*.04 + d.ph)*3 + 27) % 18) - 9, y = P.y + .4 + ((t*d.sp + d.ph) % 3.4);
+  d.m.position.set(x, y, z); d.m.lookAt(camera.position); d.m.material.opacity = .45 + .4*Math.sin(t*1.7 + d.ph*3); } }
 
 /* ============ 식물 ============ */
 const ART = {
@@ -176,23 +220,25 @@ const PLANTS = [
   { n:'broadleaf', h:[1.6, 2.4], w:.18 }, { n:'fern', h:[1.3, 1.9], w:.18 }, { n:'heartleaf', h:[1.2, 1.8], w:.16 }, { n:'grass', h:[.7, 1.1], w:.12 }, { n:'sansevieria', h:[1, 1.4], w:.07 }, { n:'agave', h:[1.1, 1.5], w:.05 }
 ];
 const PW = PLANTS.reduce((a, p) => a + p.w, 0);
-function nearWalk(x, z, d){ if (walkableBase(x, z)) return true; for (let a = 0; a < 8; a++) if (walkableBase(x + Math.cos(a*.785)*d, z + Math.sin(a*.785)*d)) return true; return false; }
-function walkableBase(x, z){ const m = S.f.maskOn; S.f.maskOn = false; const w = walkable(x, z); S.f.maskOn = m; return w; }
 const plantLists = PLANTS.map(() => []), curtain = PLANTS.map(() => []);
-{ const r = rng(42);
-  for (let gx = -76; gx < 76; gx += 1.25) for (let gz = -76; gz < 76; gz += 1.25) {
-    const x = gx + (r() - .5)*1.1, z = gz + (r() - .5)*1.1;
-    if (Math.abs(z - zs(x)) < 3.1) continue;
-    let pick = r()*PW, v = 0; for (; v < PLANTS.length - 1; v++) { pick -= PLANTS[v].w; if (pick <= 0) break; }
-    const P = PLANTS[v], onFlower = dPoly(FPATH, x, z) < 2.0;
-    if (nearWalk(x, z, P.tree ? 2.4 : .7)) continue;
-    if (P.tree && onFlower) continue;
-    const h = P.h[0] + r()*(P.h[1] - P.h[0]), w = h*ART[P.n][0]/ART[P.n][1]*(r() < .5 ? 1 : 1.1);
-    (onFlower ? curtain : plantLists)[v].push([x, 0, z, w, h]);
-  }
-  // 물가 갈대
+const placeD = (x, z) => Math.min(Math.hypot(x, z) - CLEAR_R, ...Object.values(PLACES).map(p => Math.hypot(x - p.x, z - p.z) - p.r), Math.hypot(x - NB.x, z - NB.z) - NB.r, x > 21 && x < 37 && z - zs(x) > 2.4 && z - zs(x) < 5.5 ? -1 : 9);
+function addPlant(r, x, z, bushOnly){
+  if (Math.abs(z - zs(x)) < 3.1) return;
+  let v; if (bushOnly) { let pick = r()*.71; v = 4; for (; v < PLANTS.length - 1; v++) { pick -= PLANTS[v].w; if (pick <= 0) break; } }
+  else { let pick = r()*PW; v = 0; for (; v < PLANTS.length - 1; v++) { pick -= PLANTS[v].w; if (pick <= 0) break; } }
+  const P = PLANTS[v], e = Math.min(edge(x, z), placeD(x, z)), onFlower = dPoly(FPATH, x, z) < 2.0;
+  if (e < (P.tree ? THICK + 1.2 : .25)) return;
+  if (blocked(x, z) && !P.tree) return;
+  if (P.tree && onFlower) return;
+  const h = P.h[0] + r()*(P.h[1] - P.h[0]), w = h*ART[P.n][0]/ART[P.n][1]*(r() < .5 ? 1 : 1.1);
+  (onFlower ? curtain : plantLists)[v].push([x, 0, z, w, h]);
 }
-function plantMesh(list, v, o){ const P = PLANTS[v]; const m = new THREE.InstancedMesh(quad, billMat(artTex(P.n), { sway:P.tree ? .02 : .06, occ:true, ...o }), Math.max(1, list.length)); m.count = list.length; m.frustumCulled = false;
+{ const r = rng(42);
+  for (let gx = -76; gx < 76; gx += 1.25) for (let gz = -76; gz < 76; gz += 1.25) addPlant(r, gx + (r() - .5)*1.1, gz + (r() - .5)*1.1, false);
+  /* 길가 덤불은 한 겹 더 빽빽하게 */
+  for (let gx = -76; gx < 76; gx += .85) for (let gz = -76; gz < 76; gz += .85) { const x = gx + (r() - .5)*.8, z = gz + (r() - .5)*.8, e = edge(x, z); if (e > .3 && e < THICK + 1.5 && r() < .75) addPlant(r, x, z, true); }
+}
+function plantMesh(list, v, o){ const P = PLANTS[v]; const m = new THREE.InstancedMesh(quad, billMat(artTex(P.n), { sway:P.tree ? 0 : .09, occ:true, ...o }), Math.max(1, list.length)); m.count = list.length; m.frustumCulled = false;
   list.forEach((b, i) => { M4.compose(V3.set(b[0], b[1], b[2]), Q0, SC.set(b[3], b[4], 1)); m.setMatrixAt(i, M4); }); scene.add(m); return m; }
 plantLists.forEach((l, v) => plantMesh(l, v));
 const curtainMeshes = curtain.map((l, v) => plantMesh(l, v));
@@ -294,23 +340,19 @@ for (let i = 0; i < 7; i++) { const a = i/7*Math.PI*2 + .3; if (Math.abs(((a - M
   fin.position.set(Math.cos(a)*TRUNK_R*.95, 0, Math.sin(a)*TRUNK_R*.95); fin.rotation.y = -a; scene.add(fin); }
 /* 나뭇잎 지붕: 꼭대기 둘레 */
 { const leaves = []; const r = rng(77); for (let i = 0; i < 26; i++) { const a = r()*Math.PI*2, d = 3 + r()*6; leaves.push([Math.cos(a)*d, TREE_H + 4.2 + r()*3, Math.sin(a)*d, 5 + r()*3, 4 + r()*3]); }
-  const m = new THREE.InstancedMesh(quad, billMat(artTex('heartleaf'), { near:4, sway:.04, occ:true }), leaves.length); m.frustumCulled = false; leaves.forEach((b, i) => { M4.compose(V3.set(b[0], b[1], b[2]), Q0, SC.set(b[3], b[4], 1)); m.setMatrixAt(i, M4); }); scene.add(m); }
-/* 밑동의 홈 셋 */
-const SLOT_Z = TRUNK_R*1.07;
-flat(T.slot, 2.6, 1.08, 0, .5, SLOT_Z);
-const SLOT_X = { fluff:-.86, stone:0, egg:.86 };
-const slotGlow = {}; for (const k in SLOT_X) { const m = flat(T.glow, .9, .9, SLOT_X[k], 1.04, SLOT_Z + .03, 0, { blend:true, add:true, center:true, glow:true }); m.visible = false; slotGlow[k] = m; }
+  const m = new THREE.InstancedMesh(quad, billMat(artTex('heartleaf'), { near:4, sway:0, occ:true }), leaves.length); m.frustumCulled = false; leaves.forEach((b, i) => { M4.compose(V3.set(b[0], b[1], b[2]), Q0, SC.set(b[3], b[4], 1)); m.setMatrixAt(i, M4); }); scene.add(m); }
 /* 요람과 우체통, 흰 꽃 */
-const cradle = bill(T.cradle, 1.0, 2.0, 2.6, 1.0, 5.6, { near:0 });
-const mailbox = bill(artTex('mailbox'), .6, 1.5, -8, 0, 7.5, { near:0 });
-const flowers = [[7.4, 7.2], [8.2, 6.4], [7.8, 8.2]].map(([x, z]) => bill(artTex('whitespike'), .62, 1.18, x, 0, z, { near:0 }));
+const cradle = bill(T.cradle, 1.0, 2.0, 3.0, 1.0, 5.0, { near:0 });
+const cradleGown = bill(T.gown, .5, .5, 3.0, 1.62, 5.0, { near:0, push:.08 });
+const mailbox = bill(artTex('mailbox'), .6, 1.5, -5.2, 0, 4.4, { near:0 });
+const flowers = [[5.4, 3.0], [6.1, 2.2], [5.0, 3.9]].map(([x, z]) => bill(artTex('whitespike'), .62, 1.18, x, 0, z, { near:0 }));
 /* 오르는 길 (홈 셋이 다 차면 자라남) */
 const HX = { R:4.35, a0:Math.PI/2 + .55, turns:1.15 };
 HX.L = HX.R*Math.PI*2*HX.turns; HX.pitch = TREE_H/HX.L;
 const helixAt = s => { const a = HX.a0 - s/HX.R; return [Math.cos(a)*HX.R, Math.min(TREE_H, s*HX.pitch), Math.sin(a)*HX.R, a]; };
 const STEPS = Math.ceil(HX.L/.9);
 const stepMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1.7, .22, 1.05), new THREE.MeshBasicMaterial({ map:T.step }), STEPS); scene.add(stepMesh);
-let helixGrow = S.f.helix ? 1 : 0;
+let helixGrow = 1;
 function placeSteps(k){ const n = Math.floor(STEPS*k); stepMesh.count = n; for (let i = 0; i < n; i++) { const [x, y, z, a] = helixAt(i*.9 + .45); const ry = -a; M4.compose(V3.set(x, y - .11, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0)), SC.set(1, 1, 1)); stepMesh.setMatrixAt(i, M4); } stepMesh.instanceMatrix.needsUpdate = true; }
 placeSteps(helixGrow);
 /* 꼭대기 둥지 */
@@ -318,6 +360,8 @@ const nestB = bill(T.nest, 1.5, .75, 0, TREE_H, 0, { near:0 });
 const nestFluff = bill(T.fluff, .9, .55, 0, TREE_H + .35, 0, { near:0, push:.05 });
 const nestStone = bill(T.hotstone, .5, .35, .35, TREE_H + .4, 0, { near:0, push:.1 });
 const nestEgg = bill(T.egg, .36, .46, -.15, TREE_H + .42, 0, { near:0, push:.15 });
+const HOLE = { fluff:[-.42, (g) => { for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(20 + (i*29) % 56, 28 + (i*17) % 22, 12, 0, 7); g.fill(); } }], stone:[0, (g) => { g.beginPath(); g.ellipse(48, 40, 30, 20, 0, 0, 7); g.fill(); }], egg:[.42, (g) => { g.beginPath(); g.ellipse(48, 36, 18, 26, 0, 0, 7); g.fill(); }] };
+const holes = Object.fromEntries(Object.entries(HOLE).map(([k, [dx, f]]) => [k, bill(ctex(96, 72, (g) => { g.fillStyle = 'rgba(30,20,10,.55)'; f(g); g.globalCompositeOperation = 'source-atop'; g.strokeStyle = 'rgba(255,240,200,.9)'; g.lineWidth = 3; g.setLineDash([6, 5]); g.strokeRect(0, 0, 96, 72); }), .42, .32, dx, TREE_H + .62, 0, { near:0, push:.3, glow:true })]));
 const shell = bill(T.shell, .5, .34, 0, TREE_H + .5, 0, { near:0, push:.2 });
 const chick = bill(T.chick, .5, .5, 0, TREE_H + .5, 0, { near:0, push:.2 });
 
@@ -338,14 +382,13 @@ const hotStone = bill(T.hotstone, .7, .5, SPRING.x, 0, SPRING.z, { near:0, glow:
 const bubbles = Array.from({ length:8 }, (_, i) => ({ b:bill(T.bubble, .12, .12, 0, 0, 0, { near:0 }), t:i/8 }));
 
 /* ============ 빨래터 (동쪽에서 봄: 왼쪽이 남쪽) ============ */
-flat(T.line, 7, 3.4, -45.6, 0, -5, Math.PI/2);
-const CLOTH_Z = { red:-2.6, cream:-5, indigo:-7.4 };
-for (const k in CLOTH_Z) flat(T.clothes[k], 1.1, 1.38, -45.5, 1.6, CLOTH_Z[k], Math.PI/2);
-flat(T.washstone, 1.8, .9, -41, 0, -9.6, 0); const gourd = bill(T.gourd, .7, .46, -41, .62, -9.6, { near:0 });
-const gown = bill(T.gown, .9, .9, -38.6, .5, -.8, { near:0 }); bill(artTex('broadleaf'), 1.1, 2, -38.2, 0, -.2, { near:0 });
+flat(T.line, 7, 3.4, -50.6, 0, -3, Math.PI/2);
+const CLOTH_Z = { red:-.6, cream:-3, indigo:-5.4 };
+for (const k in CLOTH_Z) flat(T.clothes[k], 1.1, 1.38, -50.5, 1.6, CLOTH_Z[k], Math.PI/2);
+flat(T.washstone, 1.8, .9, -46, 0, -7.2, 0); const gourd = bill(T.gourd, .7, .46, -46, .62, -7.2, { near:0 });
 
 /* ============ 산파의 빈 오두막 (서쪽에서 봄: 왼쪽이 북쪽) ============ */
-const HUT_X = 47.6;
+const HUT_X = 48.6;
 flat(T.hut, 7, 6.1, HUT_X + .05, 0, -5, -Math.PI/2);
 const door = new THREE.Group(); door.position.set(HUT_X, 0, -5.82); scene.add(door);
 { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.64, 2.88), new THREE.MeshBasicMaterial({ map:T.door, side:THREE.DoubleSide })); m.position.set(0, 1.44, .82); m.rotation.y = -Math.PI/2; door.add(m); }
@@ -356,20 +399,20 @@ const CORD_Z = { cream:-5.42, indigo:-5.0, red:-4.58 };
 const cords = {}; for (const k in CORD_Z) { const m = flat(T.cords[k][0], .22, .58, HUT_X - .06, 1.0, CORD_Z[k], -Math.PI/2); cords[k] = m; }
 
 /* ============ 반딧불 덤불과 거미줄 (북쪽에서 봄) ============ */
-const FFB = { x:-3.2, z:34.6 };
+const FFB = { x:-1.2, z:48.6 };
 bill(T.ffbush, 3.2, 2.6, FFB.x, 0, FFB.z, { near:0 });
 const ffs = Array.from({ length:18 }, (_, i) => ({ m:flat(T.glow, .28, .28, 0, 0, 0, 0, { blend:true, add:true, center:true, glow:true }), ph:hash(i)*6.28, r:.5 + hash(i + 4)*1.2 }));
-const WEB = { x:3.5, z:34.2, y:.2, w:2.4, h:2.4 };
+const WEB = { x:5.5, z:48.2, y:.2, w:2.4, h:2.4 };
 flat(T.web, WEB.w, WEB.h, WEB.x, WEB.y, WEB.z, Math.PI);
 const webPt = (u, v) => [WEB.x - (u - .5)*WEB.w, WEB.y + v*WEB.h, WEB.z - .04];
 const spider = bill(T.spider, .42, .42, ...webPt(.5, .5), { near:0, push:.05 });
 const webFluff = bill(T.fluff, .5, .36, ...webPt(.25, .22), { near:0, push:.03 });
 const webBottle = bill(T.bottleF, .22, .38, ...webPt(.82, .78), { near:0, push:.06 });
-const wetTufts = [[1.2, 32.4], [-.4, 33.4], [2.2, 33.1]].map(([x, z]) => bill(T.wetfluff, .5, .3, x, 0, z, { near:0 }));
+const wetTufts = [[3.2, 46.4], [1.6, 47.4], [4.2, 47.1]].map(([x, z]) => bill(T.wetfluff, .5, .3, x, 0, z, { near:0 }));
 
 /* ============ 벌새 (소리 없이 떠 있음) ============ */
-const bird = bill(T.bird, .62, .46, 2.2, 3.1, 6.3, { near:0, push:.05 });
-const BIRD = { x:2.2, y:3.1, z:6.3, tx:2.2, ty:3.1, tz:6.3, op:1, gone:false };
+const bird = bill(T.bird, .62, .46, 3.0, 2.7, 5.0, { near:0, push:.05 });
+const BIRD = { x:3.0, y:2.7, z:5.0, tx:3.0, ty:2.7, tz:5.0, op:1, gone:false };
 
 /* ============ 숨은 꽃길 ============ */
 const pfl = []; for (let i = 0; i < FPATH.length; i += 3) for (const s of [-1, 1]) { const p = FPATH[i], q = FPATH[Math.min(FPATH.length - 1, i + 1)], dx = q[0] - p[0], dz = q[1] - p[1], L = Math.hypot(dx, dz) || 1; pfl.push([p[0] - dz/L*1.5*s + (hash(i + s)*.4), .0, p[1] + dx/L*1.5*s, .55, .55]); }
@@ -391,7 +434,7 @@ function camFwd(){ return [-Math.sin(CAM.yaw), -Math.cos(CAM.yaw)]; }
 /* ============ 길찾기 ============ */
 const GC = .8, GN = Math.ceil(150/GC), G0 = -75;
 let walkGrid = null;
-function buildGrid(){ walkGrid = new Uint8Array(GN*GN); for (let j = 0; j < GN; j++) for (let i = 0; i < GN; i++) walkGrid[j*GN + i] = walkable(G0 + (i + .5)*GC, G0 + (j + .5)*GC) ? 1 : 0; }
+function buildGrid(){ walkGrid = new Uint8Array(GN*GN); for (let j = 0; j < GN; j++) for (let i = 0; i < GN; i++) { const x = G0 + (i + .5)*GC, z = G0 + (j + .5)*GC; walkGrid[j*GN + i] = core(x, z) ? 1 : thick(x, z) ? 2 : 0; } }
 buildGrid();
 function findPath(x0, z0, goal, reach){
   const ci = v => Math.max(0, Math.min(GN - 1, Math.floor((v - G0)/GC)));
@@ -404,7 +447,7 @@ function findPath(x0, z0, goal, reach){
     const k = open[bi]; open[bi] = open[open.length - 1]; open.pop(); if (closed[k]) continue; closed[k] = 1;
     if (Math.hypot(cx(k) - gx, cz(k) - gz) <= reach) { best = k; break; }
     const i0 = k % GN, j0 = Math.floor(k/GN);
-    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { if (!di && !dj) continue; const i = i0 + di, j = j0 + dj; if (i < 0 || j < 0 || i >= GN || j >= GN) continue; const n = j*GN + i; if (!walkGrid[n] || closed[n]) continue; if (di && dj && (!walkGrid[j0*GN + i] || !walkGrid[j*GN + i0])) continue; const ng = g[k] + (di && dj ? 1.414 : 1)*GC; if (ng < g[n]) { g[n] = ng; from[n] = k; open.push(n); } }
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { if (!di && !dj) continue; const i = i0 + di, j = j0 + dj; if (i < 0 || j < 0 || i >= GN || j >= GN) continue; const n = j*GN + i; if (!walkGrid[n] || closed[n]) continue; if (di && dj && (!walkGrid[j0*GN + i] || !walkGrid[j*GN + i0])) continue; const ng = g[k] + (di && dj ? 1.414 : 1)*GC*(walkGrid[n] === 2 ? 3 : 1); if (ng < g[n]) { g[n] = ng; from[n] = k; open.push(n); } }
   }
   if (best < 0) return null;
   const path = []; for (let k = best; k >= 0 && k !== start; k = from[k]) path.push([cx(k), cz(k)]); path.reverse(); return path;
@@ -414,7 +457,6 @@ let route = null, routeAct = null;
 /* ============ 손대는 것들 ============ */
 const ACTS = [];
 function act(o){ ACTS.push(Object.assign({ r:.6, reach:2.4, level:'ground', vis:() => true }, o)); }
-let sel = null;
 
 function nope(x, y, z){ const p = toScreen(x, y, z); const d = document.createElement('div'); d.className = 'no'; d.textContent = '✕'; d.style.left = p[0] + 'px'; d.style.top = p[1] + 'px'; document.body.append(d); setTimeout(() => d.remove(), 800); }
 function gain(k, x, y, z){ give(k); save(); drawInv(); const p = toScreen(x, y, z); const c = iconCanvas(k); c.className = 'fx'; c.style.left = (p[0] - 28) + 'px'; c.style.top = (p[1] - 28) + 'px'; document.body.append(c);
@@ -424,49 +466,46 @@ function toScreen(x, y, z){ V3.set(x, y, z).project(camera); return [(V3.x + 1)/
 const flags = S.f;
 
 /* 요람: 흔들림만 */
-act({ id:'cradle', x:2.6, y:1.4, z:5.6, r:.8, on(){ cradleKick = 1; return true; } });
+act({ id:'cradle', x:3.0, y:1.4, z:5.0, r:.8, on(){ cradleKick = 1; if (!flags.gown) { flags.gown = 1; gain('cloth', 3.0, 1.6, 5.0); } return true; } });
 /* 우체통: 다음에 할 일 그림 */
-act({ id:'mail', x:-8, y:1.1, z:7.5, r:.6, on(){ showHint(); return true; } });
+act({ id:'mail', x:-5.2, y:1.1, z:4.4, r:.6, on(){ showHint(); return true; } });
 /* 흰 꽃 */
-act({ id:'flower', x:7.8, y:.7, z:7.2, r:.9, on(it){ if (it) return false; if (has('flower') || has('fbottle') || has('ffbottle') || flags.hung) return false; gain('flower', 7.8, .9, 7.2); return true; } });
-/* 홈 셋 */
-for (const k in SLOT_X) act({ id:'slot-' + k, x:SLOT_X[k], y:1.04, z:SLOT_Z + .1, r:.42, reach:2.6, on(it){ if (S.slots[k]) return false; if (it !== k || !has(it)) return false; S.slots[k] = 1; save(); if (S.slots.fluff && S.slots.stone && S.slots.egg && !flags.helix) { flags.helix = 1; save(); } return 'keep'; } });
+act({ id:'flower', x:5.5, y:.7, z:3.0, r:.9, want:['bottle'], on(it){ if (it === 'bottle') { swapItem('bottle', 'fbottle'); save(); drawInv(); return true; } if (has('flower') || has('fbottle') || has('ffbottle') || flags.hung) return false; gain('flower', 5.5, .9, 3.0); return true; } });
 /* 오르는 길 첫 칸 */
-act({ id:'stepsBottom', vis:() => helixGrow >= 1, x:helixAt(.5)[0], y:.4, z:helixAt(.5)[2], r:.9, reach:2.2, on(){ P.mode = 'helix'; P.s = .3; route = null; P.auto = HX.L + .3; return true; } });
-act({ id:'stepsTop', level:'top', vis:() => helixGrow >= 1, x:helixAt(HX.L - .4)[0], y:TREE_H + .3, z:helixAt(HX.L - .4)[2], r:.9, reach:2.2, on(){ P.mode = 'helix'; P.s = HX.L - .3; P.auto = -.3; return true; } });
+act({ id:'stepsBottom', x:helixAt(.5)[0], y:.4, z:helixAt(.5)[2], r:.9, reach:2.2, on(){ P.mode = 'helix'; P.s = .3; route = null; P.auto = HX.L + .3; return true; } });
+act({ id:'stepsTop', level:'top', x:helixAt(HX.L - .4)[0], y:TREE_H + .3, z:helixAt(HX.L - .4)[2], r:.9, reach:2.2, on(){ P.mode = 'helix'; P.s = HX.L - .3; P.auto = -.3; return true; } });
 /* 둥지 */
 act({ id:'nest', level:'top', x:0, y:TREE_H + .3, z:0, r:.8, reach:2.6, on(it){
   if (flags.hatched) { if (!flags.maskTaken) { flags.maskTaken = 1; gain('mask', 0, TREE_H + .5, 0); return true; } return false; }
-  if (it && ['fluff', 'stone', 'egg'].includes(it) && !S.nest[it]) { if (it === 'egg' && !S.nest.fluff) return false; S.nest[it] = 1; take(it); save(); drawInv(); if (S.nest.fluff && S.nest.stone && S.nest.egg) hatchT = 0.001; return true; }
-  return false; } });
+  let put = 0; for (const k of ['fluff', 'stone', 'egg']) if (has(k) && !S.nest[k] && (k !== 'egg' || S.nest.fluff)) { S.nest[k] = 1; take(k); put++; }
+  if (!put) return false; save(); drawInv(); if (S.nest.fluff && S.nest.stone && S.nest.egg) hatchT = 0.001; return true; } });
 /* 개울: 돌 */
 stones.forEach((st, i) => act({ id:'stone' + i, x:st.x, y:.1, z:st.z, r:.6, reach:99, on(){ return hopTo(i); } }));
 act({ id:'nbank', x:NBp[0], y:.1, z:NBp[1], r:1.2, reach:99, vis:() => P.stone >= 0 && stones[P.stone].r === 3, on(){ return hopTo('N'); } });
 act({ id:'sbank', x:SB[0], y:.1, z:SB[1], r:1.2, reach:99, vis:() => P.stone >= 0 && stones[P.stone].r === 0, on(){ return hopTo('S'); } });
 act({ id:'nbank2', x:NBp[0], y:.1, z:NBp[1] + 1.3, r:1.4, reach:99, vis:() => P.mode === 'ground' && P.z < -40 && P.stone < 0, on(){ return hopTo(3, true); } });
 /* 물 (아기 옷 적시기) */
-act({ id:'water', x:28, y:.05, z:zs(28) + 1.9, r:1.3, reach:2.6, on(it){ if (it === 'cloth') { swapItem('cloth', 'wetcloth'); save(); drawInv(); splash(28, zs(28) + 1.9); return true; } return false; } });
-act({ id:'water2', x:SPRING.x - 2.8, y:.05, z:zs(SPRING.x - 2.8) - 1.6, r:1.1, reach:2.6, on(it){ if (it === 'cloth') { swapItem('cloth', 'wetcloth'); save(); drawInv(); return true; } return false; } });
+act({ id:'water', want:['cloth'], x:28, y:.05, z:zs(28) + 1.9, r:1.3, reach:2.6, on(it){ if (it === 'cloth') { swapItem('cloth', 'wetcloth'); save(); drawInv(); splash(28, zs(28) + 1.9); return true; } return false; } });
+act({ id:'water2', want:['cloth'], x:SPRING.x - 2.8, y:.05, z:zs(SPRING.x - 2.8) - 1.6, r:1.1, reach:2.6, on(it){ if (it === 'cloth') { swapItem('cloth', 'wetcloth'); save(); drawInv(); return true; } return false; } });
 /* 갈대와 알 */
 act({ id:'reeds', x:24.8, y:.9, z:-35.8, r:1.0, reach:2.8, vis:() => !flags.reedsOpen, on(){ flags.reedsOpen = 1; save(); return true; } });
-act({ id:'cegg', x:24.8, y:.15, z:-36.2, r:.5, reach:3.0, vis:() => flags.reedsOpen && !flags.egg, on(it){ if (it !== 'bowl') { reach0 = 1; return false; } flags.egg = 1; swapItem('bowl', 'egg'); save(); drawInv(); return true; } });
+act({ id:'cegg', want:['bowl'], x:24.8, y:.15, z:-36.2, r:.5, reach:3.0, vis:() => flags.reedsOpen && !flags.egg, on(it){ if (it !== 'bowl') { reach0 = 1; return false; } flags.egg = 1; swapItem('bowl', 'egg'); save(); drawInv(); return true; } });
 /* 뜨거운 돌 */
-act({ id:'hot', x:SPRING.x, y:.25, z:SPRING.z, r:.5, reach:2.6, vis:() => !flags.stone, on(it){ if (it === 'wetcloth') { flags.stone = 1; take('wetcloth'); gain('stone', SPRING.x, .3, SPRING.z); return true; } steamPuff = 1; return false; } });
+act({ id:'hot', want:['wetcloth'], x:SPRING.x, y:.25, z:SPRING.z, r:.5, reach:2.6, vis:() => !flags.stone, on(it){ if (it === 'wetcloth') { flags.stone = 1; take('wetcloth'); gain('stone', SPRING.x, .3, SPRING.z); return true; } steamPuff = 1; return false; } });
 /* 빨래터 */
-act({ id:'gown', x:-38.6, y:.9, z:-.8, r:.6, vis:() => !flags.gown, on(it){ if (it) return false; flags.gown = 1; gain('cloth', -38.6, .9, -.8); return true; } });
-act({ id:'gourd', x:-41, y:.8, z:-9.6, r:.55, vis:() => !flags.gourd, on(it){ if (it) return false; flags.gourd = 1; gain('bowl', -41, .8, -9.6); return true; } });
+act({ id:'gourd', x:-46, y:.8, z:-7.2, r:.55, vis:() => !flags.gourd, on(){ flags.gourd = 1; gain('bowl', -46, .8, -7.2); return true; } });
 /* 오두막 문 매듭 */
 let pulled = [];
-for (const k in CORD_Z) act({ id:'cord-' + k, x:HUT_X - .1, y:1.3, z:CORD_Z[k], r:.22, reach:2.4, vis:() => !flags.door, on(it){ if (it) return false; if (pulled.includes(k)) return false;
+for (const k in CORD_Z) act({ id:'cord-' + k, x:HUT_X - .1, y:1.3, z:CORD_Z[k], r:.22, reach:2.4, vis:() => !flags.door, on(){ if (pulled.includes(k)) return false;
   pulled.push(k); cords[k].material.map = T.cords[k][1];
   if (pulled.some((p, i) => CORD_ORDER[i] !== p)) { const was = pulled.slice(); setTimeout(() => { for (const c of was) cords[c].material.map = T.cords[c][0]; }, 450); pulled = []; doorShake = 1; return true; }
   if (pulled.length === 3) { flags.door = 1; save(); } return true; } });
-act({ id:'bottle', x:HUT_X + 1.0, y:1.35, z:-5, r:.35, reach:2.8, vis:() => flags.door && !flags.bottle, on(it){ if (it) return false; flags.bottle = 1; gain('bottle', HUT_X + 1, 1.3, -5); return true; } });
+act({ id:'bottle', x:HUT_X + 1.0, y:1.35, z:-5, r:.35, reach:2.8, vis:() => flags.door && !flags.bottle, on(){ flags.bottle = 1; if (has('flower')) { take('flower'); gain('fbottle', HUT_X + 1, 1.3, -5); } else gain('bottle', HUT_X + 1, 1.3, -5); return true; } });
 /* 반딧불 */
-act({ id:'ff', x:FFB.x, y:1.3, z:FFB.z - .6, r:1.2, reach:2.8, vis:() => !flags.ff, on(it){ if (it === 'fbottle') { flags.ff = 1; swapItem('fbottle', 'ffbottle'); save(); drawInv(); ffGather = 1; return true; } ffScatter = 1; return it === 'bottle' ? 'scatter' : (it ? false : 'scatter'); } });
+act({ id:'ff', want:['fbottle', 'bottle'], x:FFB.x, y:1.3, z:FFB.z - .6, r:1.2, reach:2.8, vis:() => !flags.ff, on(it){ if (it === 'fbottle') { flags.ff = 1; swapItem('fbottle', 'ffbottle'); save(); drawInv(); ffGather = 1; return true; } ffScatter = 1; return it === 'bottle' ? 'scatter' : (it ? false : 'scatter'); } });
 /* 거미줄 */
-act({ id:'web', x:WEB.x, y:1.4, z:WEB.z, r:1.1, reach:2.6, vis:() => !flags.hung, on(it){ if (it === 'ffbottle') { flags.hung = 1; take('ffbottle'); save(); drawInv(); return true; } return false; } });
-act({ id:'wfluff', x:webPt(.25, .22)[0], y:webPt(.25, .22)[1], z:WEB.z, r:.32, reach:2.6, vis:() => !flags.fluff, on(it){ if (it) return false; if (!flags.hung) { spiderRush = 1; return false; } flags.fluff = 1; gain('fluff', ...webPt(.25, .22)); return true; } });
+act({ id:'web', want:['ffbottle'], x:WEB.x, y:1.4, z:WEB.z, r:1.1, reach:2.6, vis:() => !flags.hung, on(it){ if (it === 'ffbottle') { flags.hung = 1; take('ffbottle'); save(); drawInv(); return true; } return false; } });
+act({ id:'wfluff', x:webPt(.25, .22)[0], y:webPt(.25, .22)[1], z:WEB.z, r:.32, reach:2.6, vis:() => !flags.fluff, on(){ if (!flags.hung) { spiderRush = 1; return false; } flags.fluff = 1; gain('fluff', ...webPt(.25, .22)); return true; } });
 wetTufts.forEach((w, i) => act({ id:'wet' + i, x:w.x, y:.15, z:w.z, r:.35, on(){ drip = { x:w.x, z:w.z, t:0 }; return false; } }));
 
 /* ============ 징검다리 ============ */
@@ -491,7 +530,7 @@ const HINT_ICON = {
   hot:(g) => { g.drawImage(T.spring.userData.canvas, 4, 30, 88, 60); g.drawImage(T.hotstone.userData.canvas, 26, 40, 44, 32); },
   web:(g) => { g.drawImage(T.web.userData.canvas, 4, 4, 88, 88); g.drawImage(T.spider.userData.canvas, 36, 30, 28, 28); },
   ffs:(g) => { g.drawImage(T.ffbush.userData.canvas, 0, 10, 96, 86); for (let i = 0; i < 6; i++) g.drawImage(T.glow.userData.canvas, 20 + i*10, 20 + (i % 3)*12, 18, 18); },
-  slots:(g) => g.drawImage(T.slot.userData.canvas, 0, 28, 96, 40),
+  cradle:(g) => g.drawImage(T.cradle.userData.canvas, 24, 0, 48, 96),
   up:(g) => { g.drawImage(T.nest.userData.canvas, 12, 6, 72, 36); g.strokeStyle = '#3a2a1a'; g.lineWidth = 6; g.lineCap = 'round'; g.beginPath(); g.moveTo(48, 92); g.lineTo(48, 50); g.moveTo(34, 64); g.lineTo(48, 50); g.lineTo(62, 64); g.stroke(); },
   wear:(g) => { g.drawImage(T.mask.userData.canvas, 10, 10, 76, 76); },
   path:(g) => { for (let i = 0; i < 5; i++) g.drawImage(T.pflower.userData.canvas, 4 + i*16, 70 - i*14, 28, 28); },
@@ -500,24 +539,22 @@ const HINT_ICON = {
 function nextHint(){
   if (flags.maskOn) return 'path';
   if (flags.maskTaken) return 'wear';
-  if (flags.helix) return 'up';
+  if (!flags.sawNest) return 'up';
   const need = [];
-  if (!S.slots.stone) need.push(has('stone') ? 'slots' : !flags.gown && !has('cloth') && !has('wetcloth') ? 'cloth' : has('cloth') ? 'wetcloth' : P.z > -40 && !flags.crossed ? 'stones' : 'hot');
-  if (!S.slots.fluff) need.push(has('fluff') ? 'slots' : !flags.door ? 'knot' : !flags.bottle ? 'bottle' : flags.hung ? 'web' : has('ffbottle') ? 'web' : has('fbottle') ? 'ffs' : 'flower');
-  if (!S.slots.egg) need.push(has('egg') ? 'slots' : !flags.gourd ? 'bowl' : 'reeds');
-  return need[Math.floor(hintN++ % need.length)] || 'slots';
+  if (!S.nest.stone) need.push(has('stone') ? 'up' : !flags.gown ? 'cradle' : has('cloth') ? 'wetcloth' : P.z > -40 && !flags.crossed ? 'stones' : 'hot');
+  if (!S.nest.fluff) need.push(has('fluff') ? 'up' : !flags.door ? 'knot' : !flags.bottle ? 'bottle' : flags.hung ? 'web' : has('ffbottle') ? 'web' : has('fbottle') ? 'ffs' : 'flower');
+  if (!S.nest.egg) need.push(has('egg') ? 'up' : !flags.gourd ? 'bowl' : 'reeds');
+  return need[Math.floor(hintN++ % need.length)] || 'up';
 }
 let hintN = 0, hintT = 0;
 function showHint(){ const h = document.getElementById('hint'); h.innerHTML = ''; const c = iconCanvas(nextHint()); h.append(c); h.style.display = 'block'; hintT = 3.5; }
 
 /* ============ 들고 다니는 것 ============ */
 const $inv = document.getElementById('inv');
-function drawInv(){ $inv.innerHTML = ''; for (const k of S.inv) { const d = document.createElement('div'); d.className = 'slot' + (sel === k ? ' sel' : '') + (k === 'mask' && flags.maskOn ? ' on' : ''); d.dataset.k = k; d.append(iconCanvas(k)); $inv.append(d);
+function drawInv(){ $inv.innerHTML = ''; for (const k of S.inv) { const d = document.createElement('div'); d.className = 'slot' + (k === 'mask' && flags.maskOn ? ' on' : ''); d.dataset.k = k; d.append(iconCanvas(k)); $inv.append(d);
   d.addEventListener('pointerdown', e => { e.stopPropagation(); }); d.addEventListener('click', e => { e.stopPropagation(); tapItem(k); }); } }
 function tapItem(k){
-  if (k === 'mask') { flags.maskOn = flags.maskOn ? 0 : 1; save(); buildGrid(); sel = null; drawInv(); return; }
-  if (sel && sel !== k) { const pair = [sel, k].sort().join('+'); if (pair === 'bottle+flower') { take('flower'); swapItem('bottle', 'fbottle'); sel = null; save(); drawInv(); return; } const r = document.querySelector(`.slot[data-k="${k}"]`).getBoundingClientRect(); const d = document.createElement('div'); d.className = 'no'; d.textContent = '✕'; d.style.left = (r.left + r.width/2) + 'px'; d.style.top = (r.top) + 'px'; document.body.append(d); setTimeout(() => d.remove(), 800); sel = null; drawInv(); return; }
-  sel = sel === k ? null : k; drawInv();
+  if (k === 'mask') { flags.maskOn = flags.maskOn ? 0 : 1; save(); buildGrid(); drawInv(); }
 }
 drawInv();
 
@@ -557,10 +594,8 @@ function useOn(a){
   if (a.level === 'top' && lv !== 'top') { if (lv === 'helix') P.auto = HX.L + .3; return; }
   if (a.level === 'ground' && lv === 'top') return;
   if (a.reach < 50) { const d = Math.hypot(P.x - a.x, P.z - a.z); if (d > a.reach) { if (lv === 'ground') { route = findPath(P.x, P.z, [a.x, a.z], a.reach - .3); routeAct = route ? () => useOn(a) : null; } return; } }
-  const it = sel; const r = a.on(it);
+  const it = (a.want || []).find(k => has(k)) || null; const r = a.on(it);
   if (r === false) nope(a.x, a.y, a.z);
-  if (r && r !== 'walk' && r !== 'scatter' && it) { if (r !== 'keep' && !has(it)) sel = null; if (r === 'keep') sel = null; }
-  if (r === false) sel = null;
   P.face = [a.x - P.x, a.z - P.z];
   save(); drawInv();
 }
@@ -568,6 +603,7 @@ function useOn(a){
 /* ============ 매 프레임 ============ */
 let last = performance.now(), cradleKick = 0, hatchT = 0, steamPuff = 0, doorShake = 0, spiderRush = 0, ffScatter = 0, ffGather = 0, reach0 = 0, splashAt = null, drip = null;
 const SPEED = 4.3;
+const slow = (x, z) => core(x, z) ? 1 : .5;
 function moveTry(nx, nz){ if (walkable(nx, nz)) { P.x = nx; P.z = nz; return true; } if (walkable(nx, P.z)) { P.x = nx; return true; } if (walkable(P.x, nz)) { P.z = nz; return true; } return false; }
 function inputVec(){ let ix = 0, iz = 0; if (keys.w || keys.arrowup) iz -= 1; if (keys.s || keys.arrowdown) iz += 1; if (keys.a || keys.arrowleft) ix -= 1; if (keys.d || keys.arrowright) ix += 1;
   if (joy) { const L = Math.hypot(joy[0], joy[1]); if (L > 8) { ix = joy[0]/Math.max(L, 40); iz = joy[1]/Math.max(L, 40); } }
@@ -583,7 +619,7 @@ function step(dt){
     else if (P.goal) { const dx = P.goal[0] - P.x, dz = P.goal[1] - P.z, d = Math.hypot(dx, dz); if (d < .2) P.goal = null; else mv = [dx/d, dz/d]; }
   }
   P.moving = false;
-  if (P.mode === 'ground' && mv) { const nx = P.x + mv[0]*SPEED*dt, nz = P.z + mv[1]*SPEED*dt; if (moveTry(nx, nz)) { P.moving = true; P.fx = mv[0]; P.fz = mv[1]; } else route = null;
+  if (P.mode === 'ground' && mv) { const sp = SPEED*slow(P.x, P.z), nx = P.x + mv[0]*sp*dt, nz = P.z + mv[1]*sp*dt; if (moveTry(nx, nz)) { P.moving = true; P.fx = mv[0]; P.fz = mv[1]; } else route = null;
     // 오르는 길로 들어섬
     if (helixGrow >= 1) { const [hx, , hz] = helixAt(.3); if (Math.hypot(P.x - hx, P.z - hz) < .7) { const [tx, , tz] = helixAt(1.3); if ((tx - hx)*mv[0] + (tz - hz)*mv[1] > 0) { P.mode = 'helix'; P.s = .35; route = null; } } } }
   if (P.mode === 'top') { if (mv) { const nx = P.x + mv[0]*SPEED*.8*dt, nz = P.z + mv[1]*SPEED*.8*dt; const d = Math.hypot(nx, nz); if (d < 2.7 && d > .7) { P.x = nx; P.z = nz; P.moving = true; P.fx = mv[0]; P.fz = mv[1]; } else P.goal = null;
@@ -608,11 +644,11 @@ function step(dt){
   frogs.forEach((f, i) => { f.t -= dt; if (f.t < 0) { f.t = 2.5 + hash(t + i)*3; const ok = stones.map((s, k) => k).filter(k => stones[k].ok && k !== P.stone && frogs.every(o => o === f || o.at !== k)); f.from = f.at >= 0 ? f.at : ok[0]; f.at = ok[Math.floor(hash(t*7 + i)*ok.length)]; f.hop = 0; }
     const a = stones[f.from ?? f.at], b = stones[f.at]; if (!b) return; f.hop = Math.min(1, (f.hop ?? 1) + dt*2.2); const k = f.hop; f.b.at(a.x + (b.x - a.x)*k, .08 + Math.sin(k*Math.PI)*.5, a.z + (b.z - a.z)*k); });
   /* 큰 나무 */
-  helixGrow = flags.helix ? Math.min(1, helixGrow + dt*.35) : 0; placeSteps(helixGrow);
-  for (const k in slotGlow) { slotGlow[k].visible = !!S.slots[k]; slotGlow[k].material.opacity = .6 + .3*Math.sin(t*3); }
-  cradleKick = Math.max(0, cradleKick - dt*.4); { const sw = Math.sin(t*1.1)*.06 + Math.sin(t*5)*cradleKick*.2; cradle.at(2.6 + sw, 1.0, 5.6); }
+  cradleKick = Math.max(0, cradleKick - dt*.4); { const sw = Math.sin(t*1.1)*.06 + Math.sin(t*5)*cradleKick*.2; cradle.at(3.0 + sw, 1.0, 5.0); cradleGown.at(3.0 + sw, 1.62, 5.0); cradleGown.visible = !flags.gown; }
   mailbox.upd();
   flowers.forEach(f => f.visible = true);
+  for (const k in holes) holes[k].visible = !S.nest[k] && !flags.hatched;
+  if (P.mode === 'top' && !flags.sawNest) { flags.sawNest = 1; save(); }
   nestFluff.visible = !!S.nest.fluff; nestStone.visible = !!S.nest.stone; nestEgg.visible = !!S.nest.egg && !flags.hatched;
   if (hatchT > 0 && !flags.hatched) { hatchT += dt; const sh = hatchT > 1 ? Math.sin(t*40)*.03*Math.min(1, hatchT - 1) : 0; nestEgg.at(-.15 + sh, TREE_H + .42, 0); if (hatchT > 4) { flags.hatched = 1; save(); } }
   shell.visible = !!flags.hatched && !flags.maskTaken; chick.visible = !!flags.hatched && (hatchT === 0 || hatchT < 9);
@@ -622,7 +658,7 @@ function step(dt){
   /* 샘 */
   hotStone.visible = !flags.stone; bubbles.forEach((b, i) => { b.t = (b.t + dt*.5) % 1; b.b.at(SPRING.x + Math.sin(i*2.3)*.8, b.t*.6, SPRING.z + Math.cos(i*1.7)*.7); b.b.op = 1 - b.t; });
   /* 빨래터 */
-  gown.visible = !flags.gown; gourd.visible = !flags.gourd;
+  gourd.visible = !flags.gourd;
   /* 오두막 */
   { const open = flags.door ? 1 : 0; door.userData.k = (door.userData.k || 0) + (open - (door.userData.k || 0))*Math.min(1, dt*2); door.rotation.y = -door.userData.k*1.6 + Math.sin(t*50)*doorShake*.02; doorShake = Math.max(0, doorShake - dt*1.5);
     for (const k in cords) cords[k].visible = !flags.door; bottleB.visible = !!flags.door && !flags.bottle; }
@@ -635,9 +671,9 @@ function step(dt){
   { spiderRush = Math.max(0, spiderRush - dt*.8); let u = .5, v = .5; if (flags.hung) { u = .8; v = .72; } else if (spiderRush > 0) { u = .5 - .25*Math.min(1, spiderRush*3); v = .5 - .28*Math.min(1, spiderRush*3); } u += Math.sin(t*.7)*.01; spider.at(...webPt(u, v)); webFluff.visible = !flags.fluff; webBottle.visible = !!flags.hung; }
   /* 벌새 */
   if (!BIRD.gone) {
-    let tgt; if (flags.hatched) tgt = null; else if (flags.egg) tgt = [0, TREE_H + 1.4, .9]; else if (BIRD.left) tgt = [24.8, 1.9, -35.9]; else tgt = [2.2, 3.1, 6.3];
+    let tgt; if (flags.hatched) tgt = null; else if (flags.egg) tgt = [0, TREE_H + 1.4, .9]; else if (BIRD.left) tgt = [24.8, 1.9, -35.9]; else tgt = [3.0, 2.7, 5.0];
     const dP = Math.hypot(P.x - BIRD.x, P.z - BIRD.z);
-    if (!BIRD.left && !flags.egg && (Math.hypot(P.x, P.z - 8.5) > 6 || dP < 1.6)) BIRD.vanish = 1, BIRD.left = true;
+    if (!BIRD.left && !flags.egg && (Math.hypot(P.x - 1.0, P.z - 6.6) > 5 || dP < 1.6)) BIRD.vanish = 1, BIRD.left = true;
     if (flags.hatched) { BIRD.op = Math.max(0, BIRD.op - dt*.4); if (BIRD.op <= 0) BIRD.gone = true; }
     else if (BIRD.vanish) { BIRD.op -= dt*1.5; if (BIRD.op <= 0) { BIRD.vanish = 0; BIRD.x = tgt[0]; BIRD.y = tgt[1]; BIRD.z = tgt[2]; } }
     else { if (Math.hypot(BIRD.x - tgt[0], BIRD.z - tgt[2]) > .5) { BIRD.op -= dt*1.5; if (BIRD.op <= 0) { BIRD.x = tgt[0]; BIRD.y = tgt[1]; BIRD.z = tgt[2]; } } else BIRD.op = Math.min(1, BIRD.op + dt*.6); }
@@ -649,6 +685,7 @@ function step(dt){
   pflMesh.visible = !!flags.maskOn; curtainMeshes.forEach(m => m.visible = !flags.maskOn);
   document.getElementById('veil').style.opacity = flags.maskOn ? 1 : 0;
   if (flags.maskOn && P.mode === 'ground' && Math.hypot(P.x - EXIT[0], P.z - EXIT[1]) < 2.2 && !flags.ended) ending();
+  updateMotes(t);
   /* 물빛 */
   sparks.forEach(s => { const x = ((s.x + t*.8 + 80) % 160) - 80; s.m.position.set(x, .04, zs(x) + s.dz); s.m.material.opacity = .25 + .25*Math.sin(t*2 + s.ph); });
   /* 나 그리기 */
@@ -679,7 +716,7 @@ if (flags.ended) ending();
 
 function loop(now){ const dt = Math.min(.1, (now - last)/1000); last = now; step(dt); renderer.render(scene, camera); requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
-window.__g = { tapItem, get sel(){ return sel; }, P, S, flags, ACTS, tap, useOn, hopTo, stones, walkable, findPath, CAM, setSel:k => { sel = k; }, give:k => { give(k); drawInv(); } };
+window.__g = { tapItem, P, S, flags, ACTS, tap, useOn, hopTo, stones, walkable, findPath, CAM, give:k => { give(k); drawInv(); } };
 </script>
 </body>
 </html>
