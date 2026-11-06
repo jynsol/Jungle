@@ -20,7 +20,8 @@ body{margin:0}
   color-scheme:dark;
 }
 html,body{height:100%;background:var(--bg);color:var(--ink)}
-body{overflow:hidden;font-family:var(--body)}
+body{overflow:hidden;font-family:var(--body);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+input,textarea{-webkit-user-select:text;user-select:text}
 canvas#c{display:block;width:100%;height:100%;touch-action:none;outline:none}
 canvas#o{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px}
@@ -375,7 +376,8 @@ $say.addEventListener('focus', () => keys.clear());
 let joy = null, look = null;
 cv.addEventListener('pointerdown', e => {
   startAudio(); $say.blur(); cv.focus();
-  look = { id:e.pointerId, x:e.clientX };   // 어디를 끌어도 둘러봄. 걷기는 누른 곳으로
+  if (e.pointerType === 'touch' && !joy && e.clientX < innerWidth*.5) joy = { id:e.pointerId, sx:e.clientX, sy:e.clientY, x:e.clientX, y:e.clientY };   // 폰: 화면 왼쪽 절반을 끌면 그쪽으로 걸음
+  else if (!look) look = { id:e.pointerId, x:e.clientX };   // 오른쪽 절반(컴퓨터는 어디든)을 끌면 둘러봄. 누르기만 하면 그곳으로 걷거나 손을 댐
   try { cv.setPointerCapture(e.pointerId); } catch (er) {}
 });
 cv.addEventListener('pointermove', e => {
@@ -3477,12 +3479,36 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     onArt('vine_curtain', im => swapTex(CURTAIN_T, im));
     const OPEN_IF = [() => pzStep(PUZZLES.find(q => q.id === 'sloth')) >= 6, () => pzStep(PUZZLES.find(q => q.id === 'galleon')) >= 1, () => pzStep(PUZZLES.find(q => q.id === 'cave')) >= 3, () => pzStep(PUZZLES.find(q => q.id === 'temple')) >= 4];
     const GT = { id:'gates', optional:true, x:FIRE.x, y:FIRE.y, done:9, thumb:() => null };
-    for (const sc of SHORTCUTS) { sc.m = cutout(plane(2.8, 2.4), mat(CURTAIN_T)); sc.post = [-1.3, 1.3].map(() => cutout(plane(.3, 2.6), mat(LOG_TEX))); sc.t = -99; }
-    GT.targets = () => SHORTCUTS.filter(sc => !sc.open && wdist(P.x, P.y, sc.gate.x, sc.gate.z) < 6).map(sc => ({ key:'pz-curtain', noSeen:true, x:sc.gate.x, h:1.2, h0:.2, h1:2.3, z:sc.gate.z, reach:3, me:sc.m, act:() => { pzSfx.rope(.05); sc.shake = clock; } }));   // 손으로는 안 걷힘
-    GT.update = (dt, camX, camZ) => { SHORTCUTS.forEach((sc, i) => { const open = OPEN_IF[i](); if (open !== sc.open) { sc.open = open; for (const k of sc.tiles) type[k] = open ? FLOOR : RUIN; if (open) { sc.t = clock; if (wdist(P.x, P.y, sc.gate.x, sc.gate.z) < 30) { pzSfx.rope(.08); setTimeout(() => pzSfx.chime(.06), 900); } } }
-      const k = sc.open ? Math.min(1, (clock - sc.t)/2.5) : 0, [x, z] = wrapNear(sc.gate.x, sc.gate.z, camX, camZ); sc.m.visible = k < 1;
-      if (sc.m.visible) { sc.m.position.set(x, k*2.6, z); sc.m.lookAt(camera.position.x, k*2.6, camera.position.z); sc.m.scale.set(1, 1 - k*.9, 1); sc.m.rotation.z = clock - (sc.shake || -9) < .6 ? Math.sin((clock - sc.shake)*30)*.04 : 0; }
-      const ang = Math.atan2(camX - x, camZ - z); sc.post.forEach((m, j) => { m.position.set(x + Math.cos(ang)*(j ? 1.4 : -1.4), 0, z - Math.sin(ang)*(j ? 1.4 : -1.4)); m.rotation.y = ang; m.visible = true; }); }); };
+    // 장마다 다른 장벽: 1→2 오므라든 큰 꽃봉오리(나비 떼가 와서 피움), 2→3 물에 잠긴 길(물이 빠짐), 3→4 무너진 돌 더미(땅으로 가라앉음), 4→끝 가시덤불(달빛이 닿으면 갈라짐)
+    const BUD_SHUT = ctex(200, 170, (g) => { for (let n = 0; n < 3; n++) { const cx = 40 + n*60, h = 120 + (n % 2)*30; g.strokeStyle = '#3e6a32'; g.lineWidth = 6; g.beginPath(); g.moveTo(cx, 170); g.lineTo(cx, 170 - h + 40); g.stroke();
+        g.fillStyle = ['#c0508a', '#d8709a', '#a84078'][n]; g.strokeStyle = RG.line; g.lineWidth = 3; g.beginPath(); g.moveTo(cx, 170 - h - 10); g.quadraticCurveTo(cx + 30, 170 - h + 30, cx + 8, 170 - h + 60); g.lineTo(cx - 8, 170 - h + 60); g.quadraticCurveTo(cx - 30, 170 - h + 30, cx, 170 - h - 10); g.fill(); g.stroke();
+        leafShape(g, cx, 150, 34, -.4, COLORS.leaves[n % 4], .4); leafShape(g, cx, 140, 30, Math.PI + .4, COLORS.leaves[(n + 1) % 4], .4); } });
+    const BUD_OPEN = ctex(200, 170, (g) => { for (let n = 0; n < 3; n++) { const cx = 40 + n*60, h = 120 + (n % 2)*30, cy = 170 - h + 20; g.strokeStyle = '#3e6a32'; g.lineWidth = 6; g.beginPath(); g.moveTo(cx, 170); g.lineTo(cx, cy + 20); g.stroke();
+        for (let k = 0; k < 6; k++) { const a = k*Math.PI/3 + n; g.fillStyle = ['#e070a8', '#f090b8', '#c85898'][n]; g.strokeStyle = RG.line; g.lineWidth = 2; g.beginPath(); g.ellipse(cx + Math.cos(a)*20, cy + Math.sin(a)*14, 16, 9, a, 0, Math.PI*2); g.fill(); g.stroke(); }
+        g.fillStyle = '#f2d84a'; g.beginPath(); g.arc(cx, cy, 8, 0, Math.PI*2); g.fill(); } });
+    const RUBBLE_T = ctex(220, 150, (g) => { for (let k = 0; k < 14; k++) { const x = 20 + (k*53) % 180, y = 150 - 18 - ((k*37) % 90)*(1 - Math.abs(x - 110)/130), r = 18 + (k % 4)*6; g.fillStyle = ['#8d8b78', '#a29e88', '#77735f', '#9a8a70'][k % 4]; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.beginPath(); g.ellipse(x, y, r, r*.7, k, 0, Math.PI*2); g.fill(); g.stroke(); } g.fillStyle = '#6e8a4a'; for (let k = 0; k < 8; k++) leafShape(g, 20 + k*26, 146, 14, -1.2 + k*.3, COLORS.leaves[k % 4], .3); });
+    const THORN_T = ctex(220, 180, (g) => { g.strokeStyle = '#3a2a1a'; g.lineWidth = 5; for (let k = 0; k < 16; k++) { g.beginPath(); g.moveTo((k*29) % 220, 180); g.bezierCurveTo((k*61) % 220, 120, (k*83) % 220, 60, (k*47) % 220, 10 + (k % 5)*10); g.stroke(); }
+      g.fillStyle = '#2a1a10'; for (let k = 0; k < 70; k++) { const x = (k*37) % 220, y = 20 + (k*53) % 150; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 7, y - 3); g.lineTo(x + 2, y + 4); g.fill(); } for (let k = 0; k < 10; k++) leafShape(g, (k*23) % 220, 30 + (k*41) % 130, 14, k, '#2f4a2a', .4); });
+    const POOL_T = ctex(128, 128, (g) => { const r = g.createRadialGradient(64, 64, 10, 64, 64, 62); r.addColorStop(0, COLORS.water); r.addColorStop(.85, COLORS.water); r.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = r; g.fillRect(0, 0, 128, 128); g.strokeStyle = 'rgba(220,240,245,.5)'; g.lineWidth = 2; for (const rr of [20, 34, 48]) { g.beginPath(); g.ellipse(64, 64, rr, rr*.8, 0, 0, Math.PI*2); g.stroke(); } });
+    const GFLY_T = ctex(32, 22, (g) => { g.fillStyle = '#f2d84a'; for (const sx of [-1, 1]) { g.beginPath(); g.ellipse(16 + sx*7, 9, 7, 6, sx*.4, 0, Math.PI*2); g.fill(); } g.fillStyle = '#3a2410'; g.fillRect(15, 4, 2, 14); });
+    SHORTCUTS.forEach((sc, i) => { sc.t = -99; sc.kind = ['bud', 'water', 'rubble', 'thorn'][i] || 'thorn';
+      if (sc.kind === 'bud') { sc.m = cutout(plane(3.2, 2.7), mat(BUD_SHUT)); sc.flies = Array.from({ length:8 }, () => cutout(plane(.26, .18, false), mat(GFLY_T))); }
+      else if (sc.kind === 'water') { sc.m = cutout(new THREE.CircleGeometry(2.3, 32), mat(POOL_T, true, { alphaTest:.05 })); sc.m.rotation.x = -Math.PI/2; }
+      else if (sc.kind === 'rubble') sc.m = cutout(plane(3.4, 2.2), mat(RUBBLE_T));
+      else { sc.m = cutout(plane(1.7, 2.6), mat(THORN_T)); sc.m2 = cutout(plane(1.7, 2.6), mat(THORN_T)); sc.beam = cutout(plane(1.2, 12, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0, color:'#dfe8ff' })); } });
+    GT.targets = () => SHORTCUTS.filter(sc => !sc.open && wdist(P.x, P.y, sc.gate.x, sc.gate.z) < 6).map(sc => ({ key:'pz-curtain', noSeen:true, x:sc.gate.x, h:1.2, h0:.2, h1:2.3, z:sc.gate.z, reach:3, me:sc.m, act:() => { sc.shake = clock; if (sc.kind === 'water') tick(180, .3, .05, 'sine'); else pzSfx.rope(.05); } }));   // 손으로는 안 열림
+    const farSound = kind => { if (kind === 'rubble') sfx((ac, t) => { const src = ac.createBufferSource(), lp = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = noiseBuf(ac, 2.5); lp.type = 'lowpass'; lp.frequency.value = 120; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.25, t + .3); g.gain.exponentialRampToValueAtTime(.0001, t + 2.4); src.connect(lp).connect(g).connect(ac.destination); src.start(t); src.stop(t + 2.5); });   // 땅 밑에서 쿵
+      else if (kind === 'water') for (let n = 0; n < 10; n++) setTimeout(() => tick(130 + Math.random()*60, .3, .04, 'sine'), n*200);
+      else [1046, 1318, 1568, 2093].forEach((f, n) => setTimeout(() => tick(f, .5, .035), 300 + n*180)); };
+    GT.update = (dt, camX, camZ) => { SHORTCUTS.forEach((sc, i) => { const open = OPEN_IF[i](); if (open !== sc.open) { const first = sc.open === false; sc.open = open; for (const k of sc.tiles) type[k] = open ? FLOOR : RUIN; if (open) { sc.t = first ? clock : clock - 99; if (first) setTimeout(() => farSound(sc.kind), 400); } }   // 풀었을 때만 열리는 모습과 소리 (다시 들어왔을 땐 이미 열려 있음)
+      const k = sc.open ? Math.min(1, (clock - sc.t)/(sc.kind === 'bud' ? 4 : 3)) : 0, [x, z] = wrapNear(sc.gate.x, sc.gate.z, camX, camZ), ang = Math.atan2(camX - x, camZ - z), sh = clock - (sc.shake || -9) < .6 ? Math.sin((clock - sc.shake)*30)*.04 : 0;
+      if (sc.kind === 'bud') { sc.m.visible = true; sc.m.position.set(x, 0, z); sc.m.lookAt(camera.position.x, 0, camera.position.z); sc.m.rotation.z = sh; sc.m.material.map = k > .6 ? BUD_OPEN : BUD_SHUT;   // 나비 떼가 내려앉으면 꽃이 피고, 핀 꽃은 길 양옆으로 비켜 섬
+        sc.m.scale.set(1 + (k > .6 ? (k - .6)*.6 : 0), 1, 1); if (k >= 1) { sc.m.position.set(x + Math.cos(ang)*2.2, 0, z - Math.sin(ang)*2.2); }
+        sc.flies.forEach((f, n) => { const on = sc.open && k < 1; f.visible = on || (sc.open && n < 3); if (!f.visible) return; const a = clock*2 + n*.8, r = k < .6 ? (1 - k/.6)*8 + .6 : .5 + (n % 3)*.3; f.position.set(x + Math.cos(a)*r, 1.4 + Math.sin(a*1.3)*.4 + (k < .6 ? (1 - k/.6)*2 : 0), z + Math.sin(a)*r*.6); f.lookAt(camera.position); f.scale.set(1, .5 + Math.abs(Math.sin(clock*14 + n))*.5, 1); }); }
+      else if (sc.kind === 'water') { sc.m.visible = k < 1; sc.m.position.set(x, .03 - k*.05, z); sc.m.scale.setScalar(1 - k*.85); sc.m.rotation.z = clock*.05; }   // 물이 빠지며 개울 바닥이 드러남
+      else if (sc.kind === 'rubble') { sc.m.visible = k < 1; sc.m.position.set(x + (k > 0 && k < 1 ? Math.sin(clock*40)*.04 : 0), -k*2.3, z); sc.m.lookAt(camera.position.x, -k*2.3, camera.position.z); sc.m.rotation.z = sh; }   // 땅으로 가라앉음
+      else { const sp = k*1.6; [sc.m, sc.m2].forEach((m, j) => { m.visible = k < 1; const sd = (j ? 1 : -1)*(.8 + sp); m.position.set(x + Math.cos(ang)*sd, 0, z - Math.sin(ang)*sd); m.rotation.set(0, ang, sh*(j ? 1 : -1)); });   // 달빛이 닿은 가시덤불이 양쪽으로 갈라짐
+        sc.beam.visible = sc.open && k < 1; if (sc.beam.visible) { sc.beam.position.set(x, 6, z); sc.beam.lookAt(camera.position.x, 6, camera.position.z); sc.beam.material.opacity = Math.sin(k*Math.PI)*.7; } } }); };
     PUZZLES.push(GT); }
 
   /* 숲의 소리 표지: 길에서 벗어난 것들은 다가가면 그쪽에서 소리가 남 (어? 저기 뭐가 있나?) — 왼쪽·오른쪽으로 들림 */
@@ -3673,6 +3699,7 @@ if (MOBILE) {
 }
 let touchHelp = 0;   // 조작 안내 그림은 띄우지 않음
 function drawTouchHelp(dt){
+  if (joy) { const jx = joy.x - joy.sx, jy = joy.y - joy.sy, l = Math.hypot(jx, jy), k = l > 46 ? 46/l : 1; ctx.globalAlpha = .35; ctx.strokeStyle = '#f6ead2'; ctx.fillStyle = '#f6ead2'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(joy.sx, joy.sy, 46, 0, Math.PI*2); ctx.stroke(); ctx.globalAlpha = .5; ctx.beginPath(); ctx.arc(joy.sx + jx*k, joy.sy + jy*k, 18, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; }   // 걷는 동안 손가락 밑에 작은 고리
   if (touchHelp <= 0) return;
   touchHelp -= dt; if (joy || look) touchHelp = Math.min(touchHelp, 3);
   ctx.globalAlpha = Math.min(1, touchHelp/3)*.55; ctx.strokeStyle = '#f6ead2'; ctx.fillStyle = '#f6ead2'; ctx.lineWidth = 2;
