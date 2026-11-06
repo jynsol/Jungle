@@ -72,16 +72,17 @@ const hash = n => { const x = Math.sin(n*127.1 + 311.7)*43758.5453; return x - M
 const LINE = '#14261c';
 
 /* ============ 그림판 (늘 카메라 쪽으로 몸을 돌리는 판) ============ */
+const SHAKING = new Set();
 const U = { uTime:{ value:0 }, uPlayer:{ value:new THREE.Vector3() } };
 function billMat(tex, o = {}){
   return new THREE.ShaderMaterial({
-    uniforms:{ map:{ value:tex }, uTime:U.uTime, fogColor:{ value:SKY }, fogNear:{ value:28 }, fogFar:{ value:80 }, uOpacity:{ value:1 }, uNear:{ value:o.near ?? 2.4 }, uSway:{ value:o.sway ?? 0 }, uFlip:{ value:0 }, uPush:{ value:o.push ?? 0 }, uGlow:{ value:o.glow ? 1 : 0 }, uPlayer:U.uPlayer, uOcc:{ value:o.occ ? 1 : 0 } },
-    vertexShader:`uniform float uTime, uSway, uFlip, uPush, uOcc; uniform vec3 uPlayer; varying vec2 vUv; varying float vFog, vNear, vOcc, vDark;
+    uniforms:{ map:{ value:tex }, uTime:U.uTime, fogColor:{ value:SKY }, fogNear:{ value:28 }, fogFar:{ value:80 }, uOpacity:{ value:1 }, uNear:{ value:o.near ?? 2.4 }, uSway:{ value:o.sway ?? 0 }, uFlip:{ value:0 }, uPush:{ value:o.push ?? 0 }, uGlow:{ value:o.glow ? 1 : 0 }, uPlayer:U.uPlayer, uOcc:{ value:o.occ ? 1 : 0 }, uShake:{ value:0 } },
+    vertexShader:`uniform float uTime, uSway, uFlip, uPush, uOcc, uShake; uniform vec3 uPlayer; varying vec2 vUv; varying float vFog, vNear, vOcc, vDark;
       void main(){
         vec3 c = (instanceMatrix * vec4(0., 0., 0., 1.)).xyz; float sx = length(instanceMatrix[0].xyz), sy = length(instanceMatrix[1].xyz);
         vec3 t = cameraPosition - c; t.y = 0.; t = normalize(t + vec3(1e-4, 0., 0.)); vec3 right = vec3(t.z, 0., -t.x);
         float gust = smoothstep(.62, 1., .5 + .5*sin(uTime*.33 + c.x*.07 + c.z*.045)); float sway = sin(uTime*2.4 + c.x*.7 + c.z*.5)*uSway*position.y*position.y*gust;
-        vec3 wp = c + right*(position.x + sway)*sx + vec3(0., position.y*sy, 0.) + t*uPush;
+        vec3 wp = c + right*(position.x + sway + sin(uTime*46.)*uShake*.06*(.4 + position.y))*sx + vec3(0., position.y*sy, 0.) + t*uPush;
         if (uOcc > .5 && uSway > 0. && sy < 3.) { vec2 dp = c.xz - uPlayer.xz; float pd = length(dp); float pk = smoothstep(1.3, .2, pd); float sd = dot(dp, right.xz) >= 0. ? 1. : -1.; wp += right*sd*pk*.32*position.y*sy*.55; wp.y -= pk*.08*position.y*sy; }
         vDark = smoothstep(17., 5., length(c.xz - vec2(2., 46.)))*.42;
         vec4 mv = viewMatrix*vec4(wp, 1.); gl_Position = projectionMatrix*mv;
@@ -104,7 +105,7 @@ function bill(tex, w, h, x, y, z, o){
   const m = new THREE.InstancedMesh(quad, billMat(tex, o), 1); m.frustumCulled = false; scene.add(m);
   const b = { m, w, h, x, y, z, at(x, y, z){ this.x = x; this.y = y; this.z = z; this.upd(); return this; }, size(w, h){ this.w = w; this.h = h; this.upd(); return this; },
     upd(){ M4.compose(V3.set(this.x, this.y, this.z), Q0, SC.set(this.w, this.h, 1)); m.setMatrixAt(0, M4); m.instanceMatrix.needsUpdate = true; },
-    set visible(v){ m.visible = v; }, get visible(){ return m.visible; }, set op(v){ m.material.uniforms.uOpacity.value = v; } };
+    set visible(v){ m.visible = v; }, get visible(){ return m.visible; }, set op(v){ m.material.uniforms.uOpacity.value = v; }, shake(){ m.material.uniforms.uShake.value = 1; SHAKING.add(m.material.uniforms.uShake); } };
   b.upd(); return b;
 }
 /* 고정된 판(벽, 문, 줄): 한쪽을 바라봄 */
@@ -158,6 +159,7 @@ function blocked(x, z){ if (Math.hypot(x, z) < TRUNK_R + .45) return true; for (
 function core(x, z){
   if (blocked(x, z)) return false;
   if (Math.hypot(x, z) < CLEAR_R) return true;
+  if (S.f.pads) for (const p of PADS) if (Math.hypot(x - p.x, z - p.z) < .68) return true;
   if (inWater(x, z)) return false;
   if (S.f.maskOn && dPoly(FPATH, x, z) < 1.4) return true;
   for (const k in PLACES) { const p = PLACES[k]; if (Math.hypot(x - p.x, z - p.z) < p.r) return true; }
@@ -304,6 +306,7 @@ T.web = ctex(256, 256, (g) => { g.strokeStyle = 'rgba(240,240,235,.9)'; g.lineWi
 T.spider = ctex(96, 96, (g) => { g.strokeStyle = '#111'; g.lineWidth = 3.5; for (let i = 0; i < 4; i++) for (const s of [-1, 1]) { g.beginPath(); g.moveTo(48, 48); g.quadraticCurveTo(48 + s*26, 30 + i*10, 48 + s*44, 22 + i*18); g.stroke(); } g.fillStyle = '#1a1410'; g.beginPath(); g.ellipse(48, 56, 14, 18, 0, 0, 7); g.fill(); g.beginPath(); g.arc(48, 36, 9, 0, 7); g.fill(); g.fillStyle = '#c03020'; g.beginPath(); g.arc(48, 58, 4, 0, 7); g.fill(); });
 T.ffbush = ctex(256, 256, (g) => { const r = rng(5); for (let i = 0; i < 40; i++) { const a = r()*Math.PI*2, d = r()*90; g.save(); g.translate(128 + Math.cos(a)*d*.9, 150 + Math.sin(a)*d*.6); g.rotate(a); g.fillStyle = ['#2d4f3a', '#355a45', '#26443a'][i % 3]; g.strokeStyle = LINE; g.lineWidth = 2; g.beginPath(); g.ellipse(0, 0, 38, 16, 0, 0, 7); g.fill(); g.stroke(); g.restore(); } });
 T.stone = ctex(128, 128, (g) => { g.fillStyle = '#7c7a70'; g.strokeStyle = '#3a3a34'; g.lineWidth = 5; g.beginPath(); g.ellipse(64, 64, 58, 50, .2, 0, 7); g.fill(); g.stroke(); g.fillStyle = 'rgba(110,140,90,.6)'; g.beginPath(); g.ellipse(48, 50, 22, 12, .4, 0, 7); g.fill(); });
+T.pad = ctex(128, 128, (g) => { g.fillStyle = '#4f8a3e'; g.strokeStyle = '#2a4a22'; g.lineWidth = 3; g.beginPath(); g.moveTo(64, 64); g.arc(64, 64, 58, .4, Math.PI*2 - .1); g.closePath(); g.fill(); g.stroke(); g.strokeStyle = '#6aa85a'; g.lineWidth = 2; for (let a = 0; a < 6; a++) { g.beginPath(); g.moveTo(64, 64); g.lineTo(64 + Math.cos(a + .8)*50, 64 + Math.sin(a + .8)*50); g.stroke(); } });
 T.frog = ctex(96, 72, (g) => { g.fillStyle = '#4f8a3a'; g.strokeStyle = LINE; g.lineWidth = 2.5; g.beginPath(); g.ellipse(48, 46, 30, 20, 0, 0, 7); g.fill(); g.stroke(); for (const x of [30, 66]) { g.beginPath(); g.arc(x, 28, 9, 0, 7); g.fill(); g.stroke(); g.fillStyle = '#111'; g.beginPath(); g.arc(x, 28, 4, 0, 7); g.fill(); g.fillStyle = '#4f8a3a'; } g.beginPath(); g.ellipse(18, 62, 14, 6, 0, 0, 7); g.fill(); g.stroke(); g.beginPath(); g.ellipse(78, 62, 14, 6, 0, 0, 7); g.fill(); g.stroke(); });
 T.reeds = ctex(256, 320, (g) => { const r = rng(9); for (let i = 0; i < 46; i++) { const x = 20 + r()*216, h = 160 + r()*150; g.strokeStyle = ['#6a7a3a', '#55702e', '#8a8a4a'][i % 3]; g.lineWidth = 4 + r()*3; g.beginPath(); g.moveTo(x, 320); g.quadraticCurveTo(x + (r() - .5)*30, 320 - h*.6, x + (r() - .5)*50, 320 - h); g.stroke(); if (i % 5 === 0) { g.fillStyle = '#6a4a2a'; g.beginPath(); g.ellipse(x + (r() - .5)*40, 320 - h + 10, 6, 18, 0, 0, 7); g.fill(); } } });
 T.spring = ctex(256, 256, (g) => { const r = g.createRadialGradient(128, 128, 10, 128, 128, 120); r.addColorStop(0, '#9fd3c4'); r.addColorStop(.7, '#5fa7a0'); r.addColorStop(.9, '#c08a4a'); r.addColorStop(1, 'rgba(160,110,60,0)'); g.fillStyle = r; g.beginPath(); g.arc(128, 128, 120, 0, 7); g.fill(); });
@@ -423,10 +426,13 @@ const shell = bill(T.shell, .5, .34, NX, TREE_H + .5, NZ, { near:0, push:.2 });
 const chick = bill(T.chick, .5, .5, NX, TREE_H + .5, NZ, { near:0, push:.2 });
 
 /* ============ 개울 ============ */
-const CREEK_X = [30.1, 31.9], ROWZ = [-35.4, -36.6, -37.8, -39.0], STABLE = [1, 0, 0, 1];
-const stones = []; for (let r = 0; r < 4; r++) for (let c = 0; c < 2; c++) { const x = CREEK_X[c] + (hash(r*7 + c) - .5)*.3, z = ROWZ[r] + zs(31) + 37; const m = flat(T.stone, 1.25, 1.1, x, .06, z, 0, { center:true }); m.rotation.x = -Math.PI/2; stones.push({ m, x, z, r, c, ok:STABLE[r] === c, sink:0 }); }
-const SB = [31, -33.6], NBp = [31, zs(31) - 3.2];
-const frogs = [0, 1].map(i => ({ b:bill(T.frog, .5, .38, 0, .08, 0, { near:0 }), at:-1, t:hash(i)*3 }));
+/* 개울가 바위 다섯: 개구리가 한 마리씩. 조약돌 수가 노래 순서 */
+const NOTE_OF = [3, 0, 4, 1, 2], PEBBLES = [2, 4, 1, 5, 3], SONG = [0, 1, 2, 3, 4].sort((a, b) => PEBBLES[a] - PEBBLES[b]);
+const rockTex = n => ctex(96, 64, (g) => { g.fillStyle = '#6e6a5a'; g.strokeStyle = LINE; g.lineWidth = 2.5; g.beginPath(); g.ellipse(48, 44, 42, 18, 0, 0, 7); g.fill(); g.stroke(); g.fillStyle = '#e8e0c8'; for (let k = 0; k < n; k++) { g.beginPath(); g.arc(48 + (k - (n - 1)/2)*11, 48, 3.6, 0, 7); g.fill(); } });
+const FROGS = [27, 29, 31.6, 33.6, 35.6].map((x, i) => { const z = zs(x) + 3.15 + (i % 2)*.35; return { i, x, z, rock:bill(rockTex(PEBBLES[i]), .9, .6, x, 0, z, { near:0 }), b:bill(T.frog, .5, .38, x, .3, z, { near:0, push:.05 }), pop:-9, tilt:-9, leap:0 }; });
+const PADS = [-35.45, -36.5, -37.55, -38.6, -39.65].map((z, i) => { const x = 31 + Math.sin(i*1.7)*.35, m = flat(T.pad, 1.25, 1.25, x, .05, z, 0, { center:true }); m.rotation.x = -Math.PI/2; return { x, z, m }; });
+const SB = [31, -33.6];
+const SONGS = { prog:0, melT:3, melI:-1, melStart:0 };
 const reeds = [bill(T.reeds, 1.6, 2.0, 24.2, 0, -35.6, { near:0, sway:.05 }), bill(T.reeds, 1.6, 2.1, 25.4, 0, -35.9, { near:0, sway:.05 })];
 const creekEgg = bill(T.egg, .3, .38, 24.8, .02, -36.2, { near:0 });
 /* 강 양쪽 갈대 */
@@ -518,8 +524,8 @@ let route = null, routeAct = null;
 const ACTS = [];
 function act(o){ ACTS.push(Object.assign({ r:.6, reach:2.4, level:'ground', vis:() => true }, o)); }
 
-function nope(){}
-function gain(k, x, y, z){ give(k); save(); drawInv(); const p = toScreen(x, y, z); const c = iconCanvas(k); c.className = 'fx'; c.style.left = (p[0] - 28) + 'px'; c.style.top = (p[1] - 28) + 'px'; document.body.append(c);
+function nope(a){ snd.thud(.05); if (a && a.obj) a.obj.shake(); }
+function gain(k, x, y, z){ give(k); save(); drawInv(); snd.pick(); const p = toScreen(x, y, z); const c = iconCanvas(k); c.className = 'fx'; c.style.left = (p[0] - 28) + 'px'; c.style.top = (p[1] - 28) + 'px'; document.body.append(c);
   const slot = [...document.querySelectorAll('.slot')].find(s => s.dataset.k === k); const r = slot ? slot.getBoundingClientRect() : { left:innerWidth/2, top:innerHeight - 60 };
   requestAnimationFrame(() => requestAnimationFrame(() => { c.style.transform = `translate(${r.left - p[0] + 28}px, ${r.top - p[1] + 28}px) scale(.8)`; c.style.opacity = .3; })); setTimeout(() => c.remove(), 700); }
 function toScreen(x, y, z){ V3.set(x, y, z).project(camera); return [(V3.x + 1)/2*innerWidth, (1 - V3.y)/2*innerHeight]; }
@@ -528,49 +534,46 @@ const flags = S.f;
 /* 요람: 흔들림만 */
 act({ id:'gown', x:-43.8, y:.7, z:-.6, r:.55, vis:() => !flags.gown, on(){ flags.gown = 1; gain('cloth', -43.8, .7, -.6); return true; } });
 /* 우체통: 다음에 할 일 그림 */
-act({ id:'mail', x:-5.2, y:1.1, z:4.4, r:.6, on(){ showHint(); return true; } });
+act({ id:'mail', obj:mailbox, x:-5.2, y:1.1, z:4.4, r:.6, on(){ showHint(); return true; } });
 /* 흰 꽃 */
-act({ id:'flower', x:5.5, y:.7, z:3.0, r:.9, want:['bottle'], on(it){ if (it === 'bottle') { swapItem('bottle', 'fbottle'); save(); drawInv(); return true; } if (has('flower') || has('fbottle') || has('ffbottle') || flags.hung) return false; gain('flower', 5.5, .9, 3.0); return true; } });
+act({ id:'flower', obj:flowers[0], x:5.5, y:.7, z:3.0, r:.9, want:['bottle'], on(it){ if (it === 'bottle') { swapItem('bottle', 'fbottle'); save(); drawInv(); return true; } if (has('flower') || has('fbottle') || has('ffbottle') || flags.hung) return false; gain('flower', 5.5, .9, 3.0); return true; } });
 /* 오르는 길 첫 칸 */
 act({ id:'ladder', vis:() => flags.sl >= 5, x:LAD.bx, y:1.4, z:LAD.bz, r:.9, reach:2.4, on(){ startClimb(true); return true; } });
 /* 나무늘보 퍼즐 */
-act({ id:'monkey', x:SPOT.monkey[0], y:MY + .3, z:SPOT.monkey[1], r:.5, reach:99, on(){ if (flags.sl === 0 && Math.hypot(P.x, P.z) < 5) throwOrange(); return true; } });
-act({ id:'sloth', x:SPOT.sloth[0], y:BR - .7, z:SPOT.sloth[1], r:.7, reach:99, on(){ if (flags.sl === 1) SL.wantT = 3.5; return true; } });
+act({ id:'monkey', obj:monkeyB, x:SPOT.monkey[0], y:MY + .3, z:SPOT.monkey[1], r:.5, reach:99, on(){ if (flags.sl === 0 && Math.hypot(P.x, P.z) < 5) throwOrange(); return true; } });
+act({ id:'sloth', obj:slothB, x:SPOT.sloth[0], y:BR - .7, z:SPOT.sloth[1], r:.7, reach:99, on(){ if (flags.sl === 1) SL.wantT = 3.5; return true; } });
 act({ id:'vine', x:SPOT.vine[0], y:1.7, z:SPOT.vine[1], r:.4, reach:2.4, on(){ return pullVine(); } });
-act({ id:'basket', want:['banana'], x:SPOT.sloth[0], y:.4, z:SPOT.sloth[1], r:.5, reach:2.4, vis:() => flags.sl < 2 && !SL.trial, on(it){ if (it === 'banana') { flags.bb = 1; take('banana'); save(); drawInv(); return true; } if (flags.bb) { flags.bb = 0; gain('banana', SPOT.sloth[0], .5, SPOT.sloth[1]); return true; } return false; } });
-act({ id:'bananaTree', x:-6.1, y:1.6, z:-2.4, r:1.0, reach:2.6, vis:() => !flags.banana, on(){ flags.banana = 1; gain('banana', -6.1, 1.6, -2.4); return true; } });
+act({ id:'basket', obj:basketB, want:['banana'], x:SPOT.sloth[0], y:.4, z:SPOT.sloth[1], r:.5, reach:2.4, vis:() => flags.sl < 2 && !SL.trial, on(it){ if (it === 'banana') { flags.bb = 1; take('banana'); save(); drawInv(); return true; } if (flags.bb) { flags.bb = 0; gain('banana', SPOT.sloth[0], .5, SPOT.sloth[1]); return true; } return false; } });
+act({ id:'bananaTree', obj:bananaBunch, x:-6.1, y:1.6, z:-2.4, r:1.0, reach:2.6, vis:() => !flags.banana, on(){ flags.banana = 1; gain('banana', -6.1, 1.6, -2.4); return true; } });
 act({ id:'ladderTop', level:'top', vis:() => flags.sl >= 5, x:SPOT.ladder[0]*1.04, y:TREE_H + .3, z:SPOT.ladder[1]*1.04, r:.7, reach:2.4, on(){ startClimb(false); return true; } });
 /* 둥지 */
-act({ id:'nest', level:'top', want:['fluff', 'stone', 'egg'], x:NX, y:TREE_H + .3, z:NZ, r:.8, reach:2.6, on(it){
+act({ id:'nest', obj:nestB, level:'top', want:['fluff', 'stone', 'egg'], x:NX, y:TREE_H + .3, z:NZ, r:.8, reach:2.6, on(it){
   if (flags.hatched) { if (!flags.maskTaken) { flags.maskTaken = 1; gain('mask', NX, TREE_H + .5, NZ); return true; } return false; }
-  if (!it || S.nest[it] || (it === 'egg' && !S.nest.fluff)) return false; S.nest[it] = 1; take(it); save(); drawInv(); if (S.nest.fluff && S.nest.stone && S.nest.egg) hatchT = 0.001; return true; } });
+  if (!it || S.nest[it] || (it === 'egg' && !S.nest.fluff)) return false; S.nest[it] = 1; take(it); save(); drawInv(); if (S.nest.fluff && S.nest.stone && S.nest.egg) { hatchT = 0.001; setTimeout(() => snd.tick(1400, .04), 1500); setTimeout(() => snd.tick(1500, .05), 2500); setTimeout(() => snd.chime(.09), 4000); } return true; } });
 /* 개울: 돌 */
-stones.forEach((st, i) => act({ id:'stone' + i, x:st.x, y:.1, z:st.z, r:.6, reach:99, on(){ return hopTo(i); } }));
-act({ id:'nbank', x:NBp[0], y:.1, z:NBp[1], r:1.2, reach:99, vis:() => P.stone >= 0 && stones[P.stone].r === 3, on(){ return hopTo('N'); } });
-act({ id:'sbank', x:SB[0], y:.1, z:SB[1], r:1.2, reach:99, vis:() => P.stone >= 0 && stones[P.stone].r === 0, on(){ return hopTo('S'); } });
-act({ id:'nbank2', x:NBp[0], y:.1, z:NBp[1] + 1.3, r:1.4, reach:99, vis:() => P.mode === 'ground' && P.z < -40 && P.stone < 0, on(){ return hopTo(3, true); } });
+FROGS.forEach((f, i) => act({ id:'frog' + i, x:f.x, y:.45, z:f.z, r:.4, reach:3.2, vis:() => !flags.pads, on(){ return frogTap(i); } }));
 /* 물 (아기 옷 적시기) */
 act({ id:'water', want:['cloth'], x:28, y:.05, z:zs(28) + 1.9, r:1.3, reach:2.6, on(it){ if (it === 'cloth') { swapItem('cloth', 'wetcloth'); save(); drawInv(); splash(28, zs(28) + 1.9); return true; } return false; } });
 act({ id:'water2', want:['cloth'], x:SPRING.x - 2.8, y:.05, z:zs(SPRING.x - 2.8) - 1.6, r:1.1, reach:2.6, on(it){ if (it === 'cloth') { swapItem('cloth', 'wetcloth'); save(); drawInv(); return true; } return false; } });
 /* 갈대와 알 */
-act({ id:'reeds', x:24.8, y:.9, z:-35.8, r:1.0, reach:2.8, vis:() => !flags.reedsOpen, on(){ flags.reedsOpen = 1; save(); return true; } });
-act({ id:'cegg', want:['bowl'], x:24.8, y:.15, z:-36.2, r:.5, reach:3.0, vis:() => flags.reedsOpen && !flags.egg, on(it){ if (it !== 'bowl') { reach0 = 1; return false; } flags.egg = 1; swapItem('bowl', 'egg'); save(); drawInv(); return true; } });
+act({ id:'reeds', x:24.8, y:.9, z:-35.8, r:1.0, reach:2.8, vis:() => !flags.reedsOpen, on(){ flags.reedsOpen = 1; save(); snd.rustle(); return true; } });
+act({ id:'cegg', obj:creekEgg, want:['bowl'], x:24.8, y:.15, z:-36.2, r:.5, reach:3.0, vis:() => flags.reedsOpen && !flags.egg, on(it){ if (it !== 'bowl') { reach0 = 1; return false; } flags.egg = 1; swapItem('bowl', 'egg'); save(); drawInv(); return true; } });
 /* 뜨거운 돌 */
-act({ id:'hot', want:['wetcloth'], x:SPRING.x, y:.25, z:SPRING.z, r:.5, reach:2.6, vis:() => !flags.stone, on(it){ if (it === 'wetcloth') { flags.stone = 1; take('wetcloth'); gain('stone', SPRING.x, .3, SPRING.z); return true; } steamPuff = 1; return false; } });
+act({ id:'hot', obj:hotStone, want:['wetcloth'], x:SPRING.x, y:.25, z:SPRING.z, r:.5, reach:2.6, vis:() => !flags.stone, on(it){ if (it === 'wetcloth') { flags.stone = 1; take('wetcloth'); gain('stone', SPRING.x, .3, SPRING.z); return true; } steamPuff = 1; return false; } });
 /* 빨래터 */
-act({ id:'gourd', x:-46, y:.8, z:-7.2, r:.55, vis:() => !flags.gourd, on(){ flags.gourd = 1; gain('bowl', -46, .8, -7.2); return true; } });
+act({ id:'gourd', obj:gourd, x:-46, y:.8, z:-7.2, r:.55, vis:() => !flags.gourd, on(){ flags.gourd = 1; gain('bowl', -46, .8, -7.2); return true; } });
 /* 오두막 문 매듭 */
 let pulled = [];
 for (const k in CORD_Z) act({ id:'cord-' + k, x:HUT_X - .1, y:1.3, z:CORD_Z[k], r:.22, reach:2.4, vis:() => !flags.door, on(){ if (pulled.includes(k)) return false;
   pulled.push(k); cords[k].material.map = T.cords[k][1];
   if (pulled.some((p, i) => CORD_ORDER[i] !== p)) { const was = pulled.slice(); setTimeout(() => { for (const c of was) cords[c].material.map = T.cords[c][0]; }, 450); pulled = []; doorShake = 1; return true; }
-  if (pulled.length === 3) { flags.door = 1; save(); } return true; } });
+  snd.tick(700 + CORD_ORDER.indexOf(k)*120); if (pulled.length === 3) { flags.door = 1; save(); snd.thud(.12); snd.rope(.05); } return true; } });
 act({ id:'hutdoor', x:HUT_X + .3, y:1.3, z:-5, r:.7, reach:2.6, vis:() => flags.door, on(){ enterRoom(); return true; } });
 /* 반딧불 */
-act({ id:'ff', want:['fbottle', 'bottle'], x:FFB.x, y:1.3, z:FFB.z - .6, r:1.2, reach:2.8, vis:() => !flags.ff, on(it){ if (it === 'fbottle') { flags.ff = 1; swapItem('fbottle', 'ffbottle'); save(); drawInv(); ffGather = 1; return true; } ffScatter = 1; return it === 'bottle' ? 'scatter' : (it ? false : 'scatter'); } });
+act({ id:'ff', obj:null, want:['fbottle', 'bottle'], x:FFB.x, y:1.3, z:FFB.z - .6, r:1.2, reach:2.8, vis:() => !flags.ff, on(it){ if (it === 'fbottle') { flags.ff = 1; swapItem('fbottle', 'ffbottle'); save(); drawInv(); ffGather = 1; return true; } ffScatter = 1; return it === 'bottle' ? 'scatter' : (it ? false : 'scatter'); } });
 /* 거미줄 */
-act({ id:'web', want:['ffbottle'], x:WEB.x, y:1.4, z:WEB.z, r:1.1, reach:2.6, vis:() => !flags.hung, on(it){ if (it === 'ffbottle') { flags.hung = 1; take('ffbottle'); save(); drawInv(); return true; } return false; } });
-act({ id:'wfluff', x:webPt(.25, .22)[0], y:webPt(.25, .22)[1], z:WEB.z, r:.32, reach:2.6, vis:() => !flags.fluff, on(){ if (!flags.hung) { spiderRush = 1; return false; } flags.fluff = 1; gain('fluff', ...webPt(.25, .22)); return true; } });
+act({ id:'web', obj:spider, want:['ffbottle'], x:WEB.x, y:1.4, z:WEB.z, r:1.1, reach:2.6, vis:() => !flags.hung, on(it){ if (it === 'ffbottle') { flags.hung = 1; take('ffbottle'); save(); drawInv(); return true; } return false; } });
+act({ id:'wfluff', obj:webFluff, x:webPt(.25, .22)[0], y:webPt(.25, .22)[1], z:WEB.z, r:.32, reach:2.6, vis:() => !flags.fluff, on(){ if (!flags.hung) { spiderRush = 1; return false; } flags.fluff = 1; gain('fluff', ...webPt(.25, .22)); return true; } });
 wetTufts.forEach((w, i) => act({ id:'wet' + i, x:w.x, y:.15, z:w.z, r:.35, on(){ drip = { x:w.x, z:w.z, t:0 }; return false; } }));
 
 /* ============ 산파의 방 (들어가면 그림 한 장) ============ */
@@ -629,6 +632,39 @@ $room.addEventListener('pointermove', e => { if (!rp) return; const dx = e.clien
 $room.addEventListener('pointerup', () => { setTimeout(() => { rp = null; }, 0); });
 addEventListener('resize', layoutRoom);
 let ac = null;
+/* ============ 소리 ============ */
+const snd = (() => {
+  let out = null, amb = null; const SCALE = [0, 2, 4, 7, 9];
+  function init(){ try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); if (!out) { out = ac.createGain(); out.gain.value = .9; out.connect(ac.destination); startAmb(); } } catch (e) {} }
+  addEventListener('pointerdown', init, true); addEventListener('keydown', init, true);
+  const ok = () => ac && out;
+  function tone(f, d, v, type = 'sine', f2, delay = 0){ if (!ok()) return; const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + d); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + .015); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g).connect(out); o.start(t); o.stop(t + d + .05); }
+  const nbuf = (() => { let b = null; return () => { if (b) return b; const n = ac.sampleRate*2; b = ac.createBuffer(1, n, ac.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random()*2 - 1; return b; }; })();
+  function noise(d, f, v, type = 'lowpass', q = 1, f2, delay = 0){ if (!ok()) return; const t = ac.currentTime + delay, src = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = nbuf(); fl.type = type; fl.Q.value = q; fl.frequency.setValueAtTime(f, t); if (f2) fl.frequency.linearRampToValueAtTime(f2, t + d);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + .03); g.gain.exponentialRampToValueAtTime(.0001, t + d); src.connect(fl).connect(g).connect(out); src.start(t, Math.random()); src.stop(t + d + .05); }
+  function loop(type, f, q, v){ const src = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = nbuf(); src.loop = true; fl.type = type; fl.frequency.value = f; fl.Q.value = q; g.gain.value = v; src.connect(fl).connect(g).connect(out); src.start(); return g; }
+  function startAmb(){ amb = { wind:loop('lowpass', 380, .7, .05), water:loop('bandpass', 900, .6, 0), birdT:2, frogT:3, bugs:null };
+    const o = ac.createOscillator(), lfo = ac.createOscillator(), lg = ac.createGain(), g = ac.createGain(); o.frequency.value = 4700; lfo.frequency.value = 28; lg.gain.value = .5; g.gain.value = 0; const am = ac.createGain(); am.gain.value = .5;
+    lfo.connect(lg).connect(am.gain); o.connect(am).connect(g).connect(out); o.start(); lfo.start(); amb.bugs = g; }
+  return {
+    frog(n, v){ const f = 330*2**(SCALE[n]/12); tone(f*1.35, .3, v, 'triangle', f); tone(f*2.7, .12, v*.25, 'sine', f*2); },
+    chime(v = .08){ [523.3, 659.3, 784, 1046.5].forEach((f, i) => tone(f, .7, v, 'sine', 0, i*.13)); },
+    pick(v = .08){ tone(880, .16, v, 'triangle'); tone(1320, .22, v*.8, 'triangle', 0, .07); },
+    use(v = .07){ tone(523, .2, v, 'triangle'); tone(784, .3, v, 'triangle', 0, .09); },
+    hm(v = .07){ tone(180, .5, v, 'sawtooth', 130); },
+    thud(v = .1){ tone(120, .3, v, 'sine', 50); noise(.12, 300, v*.6); },
+    rope(v = .06){ noise(1.4, 560, v, 'bandpass', 12, 300); },
+    rustle(v = .07){ noise(.5, 2400, v, 'highpass', .6); },
+    splash(v = .1){ noise(.45, 1500, v, 'bandpass', .8, 600); },
+    munch(v = .07){ for (let i = 0; i < 5; i++) noise(.08, 900, v, 'lowpass', 1, 0, i*.33); },
+    tick(f = 900, v = .05){ tone(f, .08, v, 'square'); },
+    update(dt){ if (!ok() || !amb) return; const t = ac.currentTime, quiet = inRoom ? .2 : 1;
+      const dW = Math.abs(P.z - zs(P.x)), dFF = Math.hypot(P.x - 2, P.z - 46), dCl = Math.hypot(P.x, P.z);
+      amb.water.gain.setTargetAtTime(Math.max(0, 1 - dW/16)*.14*quiet, t, .4); amb.bugs.gain.setTargetAtTime(Math.max(0, 1 - dFF/18)*.025*quiet, t, .5); amb.wind.gain.setTargetAtTime((.035 + Math.min(.04, P.y*.01))*quiet, t, .5);
+      if ((amb.birdT -= dt) <= 0) { amb.birdT = 1.5 + Math.random()*4.5; const v = (.012 + .02*Math.max(0, 1 - dCl/40))*Math.min(1, dFF/12)*quiet, f = 1800 + Math.random()*1800, n = 1 + Math.floor(Math.random()*4); for (let i = 0; i < n; i++) tone(f*(1 + Math.random()*.15), .09 + Math.random()*.08, v, 'sine', f*(1.25 + Math.random()*.4), i*(.11 + Math.random()*.06)); }
+      if ((amb.frogT -= dt) <= 0) { amb.frogT = 2 + Math.random()*5; const v = Math.max(0, 1 - dW/14)*.03*quiet; if (v > .002) { tone(170, .12, v, 'square', 120); tone(260, .1, v*.7, 'square', 200, .16); } } }
+  };
+})();
 function steps(n = 4){ try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); const sr = ac.sampleRate;
   for (let i = 0; i < n; i++) { const t0 = ac.currentTime + i*.32, len = .12, buf = ac.createBuffer(1, sr*len, sr), d = buf.getChannelData(0); for (let k = 0; k < d.length; k++) d[k] = (Math.random()*2 - 1)*Math.pow(1 - k/d.length, 3);
     const src = ac.createBufferSource(), lp = ac.createBiquadFilter(), gn = ac.createGain(); src.buffer = buf; lp.type = 'lowpass'; lp.frequency.value = 500 + Math.random()*200; gn.gain.value = .5; src.connect(lp).connect(gn).connect(ac.destination); src.start(t0); } } catch (e) {} }
@@ -637,19 +673,11 @@ function leaveRoom(){ steps(3); $dim.style.opacity = 1; setTimeout(() => { $room
 $room.addEventListener('click', e => { if (rp && rp.moved) return; const b = roomBox(), u = (e.clientX - b.x)/b.w, v = (e.clientY - b.y)/b.h;
   if (sel) { sel = null; drawInv(); } const h = ROOM_HIT.filter(o => !o.vis || o.vis()).find(o => Math.hypot((u - o.x)*1.6, v - o.y) < o.r*1.6 + .02); if (h) h.on(); });
 
-/* ============ 징검다리 ============ */
-function hopTo(t, fromNorth){
-  if (P.jump || (P.mode !== 'ground' && P.mode !== 'stone')) return false;
-  let cur = P.stone >= 0 ? stones[P.stone].r : (P.z < -40 ? 4 : -1);
-  if (t === 'N') { if (cur !== 3) return false; jump(NBp[0], NBp[1], -1); return true; }
-  if (t === 'S') { if (cur !== 0) return false; jump(SB[0], SB[1], -1); return true; }
-  const st = stones[t]; if (!st || st.sink > 0) return false;
-  if (P.stone < 0) { const nearS = Math.hypot(P.x - SB[0], P.z - SB[1]) < 2.4, nearN = Math.hypot(P.x - NBp[0], P.z - NBp[1]) < 2.4;
-    if (!(nearS && st.r === 0) && !(nearN && st.r === 3)) { route = findPath(P.x, P.z, st.r === 0 ? SB : NBp, .9); routeAct = route ? () => hopTo(t) : null; return route ? 'walk' : false; } }
-  else if (Math.abs(st.r - cur) !== 1) return false;
-  jump(st.x, st.z, t); return true;
-}
-function jump(x, z, si){ P.jump = { x0:P.x, z0:P.z, x1:x, z1:z, t:0, si }; P.mode = 'stone'; route = null; }
+/* ============ 개구리의 노래 ============ */
+function frogTap(i){ const f = FROGS[i]; f.pop = U.uTime.value; snd.frog(NOTE_OF[i], .16);
+  if (SONG[SONGS.prog] === i) { SONGS.prog++; if (SONGS.prog >= 5) { flags.pads = 1; flags.padT = 0; save(); SONGS.solveT = U.uTime.value; setTimeout(() => snd.chime(.1), 500); } }
+  else { SONGS.prog = SONG[0] === i ? 1 : 0; if (SONGS.prog === 0) { const t = U.uTime.value; FROGS.forEach(o => o.tilt = t); snd.hm(.08); } }
+  return true; }
 function splash(x, z){ for (let i = 0; i < 6; i++) bubbles[i].t = 0; splashAt = { x, z, t:0 }; }
 
 /* ============ 힌트 ============ */
@@ -665,7 +693,7 @@ const HINT_ICON = {
   up:(g) => { g.drawImage(T.nest.userData.canvas, 12, 6, 72, 36); g.strokeStyle = '#3a2a1a'; g.lineWidth = 6; g.lineCap = 'round'; g.beginPath(); g.moveTo(48, 92); g.lineTo(48, 50); g.moveTo(34, 64); g.lineTo(48, 50); g.lineTo(62, 64); g.stroke(); },
   wear:(g) => { g.drawImage(T.mask.userData.canvas, 10, 10, 76, 76); },
   path:(g) => { for (let i = 0; i < 5; i++) g.drawImage(T.pflower.userData.canvas, 4 + i*16, 70 - i*14, 28, 28); },
-  stones:(g) => { for (let i = 0; i < 4; i++) g.drawImage(T.stone.userData.canvas, 10 + (i % 2)*40, 70 - i*18, 36, 30); g.drawImage(T.frog.userData.canvas, 50, 40, 36, 26); }
+  stones:(g) => { [1, 4, 2, 5, 3].forEach((n, i) => g.drawImage(rockTex(n).userData.canvas, 4 + (i % 3)*30, 50 - Math.floor(i/3)*30, 34, 22)); g.drawImage(T.frog.userData.canvas, 50, 8, 40, 30); return; for (let i = 0; i < 4; i++) g.drawImage(T.stone.userData.canvas, 10 + (i % 2)*40, 70 - i*18, 36, 30); g.drawImage(T.frog.userData.canvas, 50, 40, 36, 26); }
 };
 function nextHint(){
   if (flags.maskOn) return 'path';
@@ -674,7 +702,7 @@ function nextHint(){
   if (flags.sl === 1) return has('banana') || flags.bb ? 'vine' : 'banana';
   if (!flags.sawNest) return 'up';
   const need = [];
-  if (!S.nest.stone) need.push(has('stone') ? 'up' : !flags.gown ? 'cradle' : has('cloth') ? 'wetcloth' : P.z > -40 && !flags.crossed ? 'stones' : 'hot');
+  if (!S.nest.stone) need.push(has('stone') ? 'up' : !flags.gown ? 'cradle' : has('cloth') ? 'wetcloth' : !flags.pads ? 'stones' : 'hot');
   if (!S.nest.fluff) need.push(has('fluff') ? 'up' : !flags.door ? 'knot' : !flags.bottle ? 'bottle' : flags.hung ? 'web' : has('ffbottle') ? 'web' : has('fbottle') ? 'ffs' : 'flower');
   if (!S.nest.egg) need.push(has('egg') ? 'up' : !flags.gourd ? 'bowl' : 'reeds');
   return need[Math.floor(hintN++ % need.length)] || 'up';
@@ -712,7 +740,7 @@ cvs.addEventListener('contextmenu', e => e.preventDefault());
 
 function curLevel(){ return P.mode === 'top' ? 'top' : P.mode === 'climb' ? 'climb' : 'ground'; }
 /* 사다리 오르내리기: 밑으로 가서 → 오르고 → 발판으로 (내려올 땐 거꾸로) */
-function startClimb(up){ if (P.mode === 'climb') return; route = null; P.goal = null; P.climb = { up, t:0, x0:P.x, z0:P.z }; P.mode = 'climb'; }
+function startClimb(up){ if (P.mode === 'climb') return; snd.rope(.05); route = null; P.goal = null; P.climb = { up, t:0, x0:P.x, z0:P.z }; P.mode = 'climb'; }
 const ease = x => x*x*(3 - 2*x);
 function updateClimb(dt){ const c = P.climb; c.t += dt/2.2; const k = Math.min(1, c.t);
   if (c.up) { if (k < .2) { const u = ease(k/.2); P.x = c.x0 + (LAD.bx - c.x0)*u; P.z = c.z0 + (LAD.bz - c.z0)*u; P.y = 0; P.fx = LAD.bx - c.x0; P.fz = LAD.bz - c.z0; }
@@ -747,7 +775,8 @@ function useOn(a){
   if (a.reach < 50) { const d = Math.hypot(P.x - a.x, P.z - a.z); if (d > a.reach) { if (lv === 'top') { P.topGoal = { a:Math.atan2(a.z, a.x), act:a }; return; } if (lv === 'ground') { route = findPath(P.x, P.z, [a.x, a.z], a.reach - .3); routeAct = route ? () => useOn(a) : null; } return; } }
   const it = sel && has(sel) ? sel : null;
   const r = it && !(a.want || []).includes(it) ? false : a.on(it);
-  if (r === false) nope(a.x, a.y, a.z);
+  if (r === false) nope(a);
+  else if (it && !has(it) || it && r === true) snd.use();
   if (it) sel = null;
   P.face = [a.x - P.x, a.z - P.z];
   save(); drawInv();
@@ -765,9 +794,9 @@ function inputVec(){ let ix = 0, iz = 0; if (keys.w || keys.arrowup) iz -= 1; if
 
 /* ============ 나무늘보와 원숭이 ============ */
 const ease2 = k => { k = Math.max(0, Math.min(1, k)); return k*k*(3 - 2*k); };
-function throwOrange(){ if (SL.orange) return; const under = Math.hypot(P.x - SPOT.sloth[0], P.z - SPOT.sloth[1]) < .85; SL.orange = { t:0, x0:SPOT.monkey[0], z0:SPOT.monkey[1], x1:P.x, z1:P.z, under }; }
+function throwOrange(){ if (SL.orange) return; snd.tone && 0; setTimeout(() => snd.tick(1200, .03), 0); const under = Math.hypot(P.x - SPOT.sloth[0], P.z - SPOT.sloth[1]) < .85; SL.orange = { t:0, x0:SPOT.monkey[0], z0:SPOT.monkey[1], x1:P.x, z1:P.z, under }; }
 function pullVine(){ if (SL.trial || flags.sl >= 2) return true; if (flags.sl === 1 && flags.bb) { flags.bb = 0; flags.sl = 2; save(); return true; } SL.trial = { t:0, kind:flags.sl === 0 ? 'sleep' : flags.bb ? 'x' : 'empty' }; return true; }
-function setSL(n){ flags.sl = n; save(); }
+function setSL(n){ flags.sl = n; save(); if (n === 1) snd.hm(.06); if (n === 3) snd.munch(); if (n === 4) { snd.rope(.08); setTimeout(() => snd.thud(.12), 900); } if (n === 5) snd.chime(.06); }
 function updateSloth(dt, t){
   const st = flags.sl; if (st !== SL.last) { SL.t = 0; SL.last = st; } SL.t += dt; const el = SL.t, d = Math.hypot(P.x, P.z);
   const high = P.y > 2.5; bigTree.visible = !high; bigTree.upd();
@@ -801,7 +830,7 @@ function updateSloth(dt, t){
       if (u >= 1 && !o.hit2) { o.hit2 = true; if (flags.sl === 0) setSL(1); }
       if (k > 1.5) { const u2 = Math.min(1, (k - 1.5)/.7); py = BR - 1 - (BR - 1.2)*u2*u2; } }
     else { const u = Math.min(1, (k - .9)/.9), tx = SPOT.sloth[0] - o.x1, tz = SPOT.sloth[1] - o.z1, tl = Math.hypot(tx, tz) || 1, run = Math.min(tl - .3, 1.6); px = o.x1 + tx/tl*run*u; pz = o.z1 + tz/tl*run*u; py = Math.max(.12, 1.2 + Math.sin(u*Math.PI)*.8 - 1.1*u); }
-    if (k > .9 && !o.hit) { o.hit = true; if (Math.hypot(P.x - o.x1, P.z - o.z1) < 1.2) { SL.starT = t; if (!o.under && flags.sl === 0 && ++SL.bonks >= 2) setTimeout(() => { SL.wakeT = 3.5; }, 700); } }
+    if (k > .9 && !o.hit) { o.hit = true; snd.tick(560, .06); if (Math.hypot(P.x - o.x1, P.z - o.z1) < 1.2) { SL.starT = t; if (!o.under && flags.sl === 0 && ++SL.bonks >= 2) setTimeout(() => { SL.wakeT = 3.5; }, 700); } }
     orangeB.at(px, py - .12, pz); if (k > 3) { SL.orange = null; orangeB.visible = false; } }
   /* 머리 위 별 */
   const sk = (t - SL.starT)/1.3; stars.forEach((b, i) => { b.visible = sk >= 0 && sk < 1; if (b.visible) { const a = t*5 + i*1.57; b.at(P.x + Math.cos(a)*.28, P.y + 1.2 + Math.sin(a*2)*.04, P.z + Math.sin(a)*.28); b.op = 1 - sk; } });
@@ -834,11 +863,15 @@ function step(dt){
   /* 징검다리 위 */
   if (P.jump) { const j = P.jump; j.t += dt/.42; const k = Math.min(1, j.t); P.x = j.x0 + (j.x1 - j.x0)*k; P.z = j.z0 + (j.z1 - j.z0)*k; P.y = Math.sin(k*Math.PI)*.6 + (j.si >= 0 ? .1 : 0); P.moving = true; P.fx = j.x1 - j.x0; P.fz = j.z1 - j.z0;
     if (k >= 1) { P.jump = null; if (j.si === -1) { P.mode = 'ground'; P.stone = -1; P.y = 0; if (P.z < -40) flags.crossed = 1; } else { P.stone = j.si; const st = stones[j.si]; if (!st.ok) { st.sink = .001; } } } }
-  if (P.stone >= 0 && !P.jump) { const st = stones[P.stone]; P.y = .1 - st.sink*.9; if (st.sink > .6) { splash(P.x, P.z); P.stone = -1; P.mode = 'ground'; P.x = SB[0]; P.z = SB[1]; P.y = 0; } }
-  stones.forEach(st => { if (st.sink > 0) { st.sink += dt*1.6; if (st.sink > 2.6) st.sink = 0; } st.m.position.y = .06 - Math.min(1, st.sink)*.5; st.m.visible = st.sink < 1.2 || st.sink > 2.2; });
-  /* 개구리: 가라앉지 않는 돌에만 앉음 */
-  frogs.forEach((f, i) => { f.t -= dt; if (f.t < 0) { f.t = 2.5 + hash(t + i)*3; const ok = stones.map((s, k) => k).filter(k => stones[k].ok && k !== P.stone && frogs.every(o => o === f || o.at !== k)); f.from = f.at >= 0 ? f.at : ok[0]; f.at = ok[Math.floor(hash(t*7 + i)*ok.length)]; f.hop = 0; }
-    const a = stones[f.from ?? f.at], b = stones[f.at]; if (!b) return; f.hop = Math.min(1, (f.hop ?? 1) + dt*2.2); const k = f.hop; f.b.at(a.x + (b.x - a.x)*k, .08 + Math.sin(k*Math.PI)*.5, a.z + (b.z - a.z)*k); });
+  /* 개구리: 가까이 있으면 몇 초마다 조약돌 순서대로 노래 */
+  { const dC = Math.hypot(P.x - 31, P.z - (zs(31) + 3)); const solveK = flags.pads ? (SONGS.solveT ? (t - SONGS.solveT)/2.5 : 9) : -1;
+    if (!flags.pads && SONGS.melI < 0 && dC < 10 && (SONGS.melT -= dt) <= 0) { SONGS.melI = 0; SONGS.melT = 8; SONGS.melStart = t; }
+    if (SONGS.melI >= 0 && t >= SONGS.melStart + SONGS.melI*.7) { const fi = SONG[SONGS.melI]; FROGS[fi].pop = t; snd.frog(NOTE_OF[fi], .14*Math.max(0, 1 - dC/14)); SONGS.melI++; if (SONGS.melI >= 5) SONGS.melI = -1; }
+    FROGS.forEach((f, i) => { const pk = t - f.pop, puff = pk < .5 ? Math.sin(pk/.5*Math.PI)*.25 : 0, tk = t - f.tilt, tilt = tk < 1.2 ? Math.sin(tk*9)*.12*(1 - tk/1.2) : 0;
+      if (solveK >= 0) { const k = Math.max(0, Math.min(1, solveK*5 - i)), pd = PADS[i]; f.b.at(f.x + (pd.x + .35 - f.x)*k, .3 + Math.sin(k*Math.PI)*1.2 - k*.22, f.z + (pd.z - f.z)*k); }
+      else f.b.at(f.x + tilt, .3 + puff*.3, f.z); f.b.size(.5*(1 + puff), .38*(1 + puff*.6)); });
+    PADS.forEach((pd, i) => { const k = solveK < 0 ? 0 : Math.max(0, Math.min(1, solveK*5 - i - .5)); pd.m.visible = k > 0; pd.m.position.y = -.3 + k*.35; });
+    if (flags.pads && !SONGS.grid) { SONGS.grid = 1; buildGrid(); } }
   /* 큰 나무 */
   updateSloth(dt, t);
   mailbox.upd();
@@ -882,7 +915,8 @@ function step(dt){
   pflMesh.visible = !!flags.maskOn; curtainMeshes.forEach(m => m.visible = !flags.maskOn);
   document.getElementById('veil').style.opacity = flags.maskOn ? 1 : 0;
   if (flags.maskOn && P.mode === 'ground' && Math.hypot(P.x - EXIT[0], P.z - EXIT[1]) < 2.2 && !flags.ended) ending();
-  updateMotes(t);
+  updateMotes(t); snd.update(dt);
+  for (const u of SHAKING) { u.value = Math.max(0, u.value - dt*2.2); if (!u.value) SHAKING.delete(u); }
   /* 물빛 */
   sparks.forEach(s => { const x = ((s.x + t*.8 + 80) % 160) - 80; s.m.position.set(x, .04, zs(x) + s.dz); s.m.material.opacity = .25 + .25*Math.sin(t*2 + s.ph); });
   /* 나 그리기 */
@@ -913,7 +947,7 @@ if (flags.ended) ending();
 
 function loop(now){ const dt = Math.min(.1, (now - last)/1000); last = now; step(dt); renderer.render(scene, camera); requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
-window.__g = { scr:toScreen, setSel:k => { sel = k; drawInv(); }, tapItem, P, S, flags, ACTS, tap, useOn, hopTo, stones, walkable, findPath, CAM, give:k => { give(k); drawInv(); } };
+window.__g = { scr:toScreen, setSel:k => { sel = k; drawInv(); }, tapItem, P, S, flags, ACTS, tap, useOn, frogTap, FROGS, walkable, findPath, CAM, give:k => { give(k); drawInv(); } };
 </script>
 </body>
 </html>
