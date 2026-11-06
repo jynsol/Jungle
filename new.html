@@ -254,7 +254,7 @@ SITES.forEach((s,i) => {
       for (let cy = Math.min(SY,y); cy <= Math.max(SY,y); cy++) if (type[id(x,cy)] !== FLOOR) setT(x,cy,BUSH);
       clear(x+1, y+1, 2.8); for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) setT(x+dx, y+dy, RUIN);
       break; } } }
-clear(SX+.5, SY+.5, 3.2); for (let y = SY - 8; y <= SY + 8; y++) for (let x = SX - 8; x <= SX + 8; x++) if (type[id(x, y)] === WATER && Math.hypot(x - SX, y - SY) < 8) setT(x, y, BUSH);   // 모닥불 둘레엔 물이 없게
+clear(SX+.5, SY+.5, 3.2); for (let y = SY - 18; y <= SY + 18; y++) for (let x = SX - 18; x <= SX + 18; x++) if (type[id(x, y)] === WATER && Math.hypot(x - SX, y - SY) < 18) setT(x, y, BUSH);   // 모닥불 둘레(둥근 큰길 안쪽)엔 큰 호수가 없게
 // 짐승 길: 모닥불에서 네 지역으로 풀이 눌린 오솔길. 길 끝이 그 지역의 퍼즐 자리
 const TRAIL = new Uint8Array(W*H);
 REGIONS.forEach((rg, i) => {
@@ -264,7 +264,7 @@ REGIONS.forEach((rg, i) => {
   for (let t = 3; t <= end; t += .25) {
     const wob = (Math.sin(t*.2 + ph)*4 + Math.sin(t*.47 + ph*2)*2.2)*Math.min(1, t/6), x = FIRE.x + ux*t + px*wob, y = FIRE.y + uy*t + py*wob; hx = x; hy = y;   // 꼬불꼬불
     (rg.pts || (rg.pts = [])).push([x, y]);
-    if (rg.key !== 'dawn' && t < end - 9) continue;   // 모닥불에서 바로 가는 길은 새벽(1장) 하나뿐. 다른 지역은 둘레길로 이어짐
+    if (rg.key !== 'dawn' && t < end - 2.5) continue;   // 모닥불에서 바로 가는 길은 새벽(1장) 하나뿐. 다른 지역은 둘레길(큰길 한 줄)로만 이어짐 — 쓸데없는 갈림길 없음
     for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
       const tx = Math.floor(x) + dx, ty = Math.floor(y) + dy; if (Math.hypot(tx + .5 - x, ty + .5 - y) > (t % 7 < 2 ? 1.5 : 1.2)) continue;
       const k = id(tx, ty); if (type[k] === RUIN) continue; type[k] = FLOOR; TRAIL[k] = 1;
@@ -4387,7 +4387,7 @@ function draw(dt = .016){
 }
 
 /* ---- 저장 (내 위치와 그림첩, 이 브라우저에) ---- */
-if (location.search.includes('dbg')) window.__g = { scene, camera, P, keys, REGIONS, SITES, STORY_SPOTS, FIRE, WATERFALL, giveMask, get bag(){ return bag; }, PUZZLES, pzSave, lookTargets, sing, get clock(){ return clock; }, get yaw(){ return yaw; }, set yaw(v){ yaw = v; }, get pitch(){ return pitch; }, set pitch(v){ pitch = v; }, get map(){ return type; }, get trail(){ return TRAIL; }, get shortcuts(){ return SHORTCUTS; } };   // 시험용 (주소에 ?dbg)
+if (location.search.includes('dbg')) window.__g = { scene, camera, P, keys, REGIONS, SITES, STORY_SPOTS, FIRE, WATERFALL, giveMask, get bag(){ return bag; }, PUZZLES, pzSave, lookTargets, sing, get clock(){ return clock; }, get yaw(){ return yaw; }, set yaw(v){ yaw = v; }, get pitch(){ return pitch; }, set pitch(v){ pitch = v; }, get map(){ return type; }, get dims(){ return [W, H]; }, get trail(){ return TRAIL; }, get shortcuts(){ return SHORTCUTS; } };   // 시험용 (주소에 ?dbg)
 const KEY = 'denggul6-v3';
 function save(){ if (window.__resetting) return; try { localStorage.setItem(KEY, JSON.stringify({ p:[P.x,P.y], found, c:clock })); } catch (e) {} }
 function load(){
