@@ -296,12 +296,12 @@ const PLACED = [];
 // 둘레 큰길 (새벽 → 아침 → 한낮 → 오후 → 황혼 → 밤): 지역 큰 퍼즐 자리를 차례로 잇는 한 줄. 장소를 놓기 전에 먼저 냄 (장소는 이 길을 따라 놓음)
 const SHORTCUTS = [];
 { const node = p => { const dx = wd(p.x - FIRE.x, W), dy = wd(p.y - FIRE.y, H); return { a:Math.atan2(dx, -dy), r:Math.hypot(dx, dy) }; };
-  const ring = ['dawn', 'high', 'water', 'flower', 'dusk', 'ruin'].map(k => node(REGIONS[RGI(k)].hub));   // 새벽 → 아침 → 한낮 → 오후 → 황혼 → 밤 (큰 퍼즐은 큰길 위)   // 새벽 → 아침 → 한낮 → 오후 → 황혼 → 밤
+  const ring = ['dawn', 'high', 'water', 'flower', 'dusk', 'ruin'].map(k => { const n = node(REGIONS[RGI(k)].hub); if (k === 'water') n.r -= 6.5; return n; });   // 물가: 큰길은 연못 섬이 아니라 연못 물기슭(모닥불 쪽)을 따라 지나감   // 새벽 → 아침 → 한낮 → 오후 → 황혼 → 밤 (큰 퍼즐은 큰길 위)   // 새벽 → 아침 → 한낮 → 오후 → 황혼 → 밤
   for (let i = 0; i < ring.length - 1; i++) { const A = ring[i], B = ring[i + 1]; let da = B.a - A.a; while (da <= 0) da += Math.PI*2;
     const pts = [], L = da*(A.r + B.r)/2;
     for (let t = 0; t <= 1.0001; t += .25/L) { const a = A.a + da*t, r = A.r + (B.r - A.r)*t + (Math.sin(t*Math.PI*4 + i)*2.6 + Math.sin(t*Math.PI*9 + i*2)*1.1)*Math.sin(t*Math.PI), x = FIRE.x + Math.sin(a)*r, y = FIRE.y - Math.cos(a)*r; pts.push([x, y]);
       for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const tx = Math.floor(x) + dx, ty = Math.floor(y) + dy; if (Math.hypot(tx + .5 - x, ty + .5 - y) > 1.1) continue; const k = id(tx, ty); if (type[k] === RUIN) continue;
-        if (type[k] === WATER && (wdist(tx + .5, ty + .5, REGIONS[2].hub.x, REGIONS[2].hub.y) < 7.5)) continue;   // 연못·폭포 웅덩이·거울 연못은 건드리지 않음 (다른 물은 얕은 여울길로)
+        if (type[k] === WATER && (wdist(tx + .5, ty + .5, REGIONS[2].hub.x, REGIONS[2].hub.y) < 5)) continue;   // 연못·폭포 웅덩이·거울 연못은 건드리지 않음 (다른 물은 얕은 여울길로)
         type[k] = FLOOR; TRAIL[k] = 1; } }
     const gate = pts.find(([x, y]) => wdist(x, y, pts[0][0], pts[0][1]) > 5.5) || pts[2];   // 출발 지역 바로 바깥에 덩굴 휘장
     const gtiles = []; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const tx = Math.floor(gate[0]) + dx, ty = Math.floor(gate[1]) + dy; if (Math.hypot(tx + .5 - gate[0], ty + .5 - gate[1]) < 1.9 && type[id(tx, ty)] === FLOOR) gtiles.push(id(tx, ty)); }
