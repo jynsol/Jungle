@@ -1212,6 +1212,14 @@ const SHORTCUTS = [];
     const gate = pts.find(([x, y]) => wdist(x, y, pts[0][0], pts[0][1]) > 5.5) || pts[2];   // 출발 지역 바로 바깥에 덩굴 휘장
     const gtiles = []; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const tx = Math.floor(gate[0]) + dx, ty = Math.floor(gate[1]) + dy; if (Math.hypot(tx + .5 - gate[0], ty + .5 - gate[1]) < 1.9 && type[id(tx, ty)] === FLOOR) gtiles.push(id(tx, ty)); }
     SHORTCUTS.push({ i, pts, gate:{ x:gate[0], z:gate[1] }, tiles:gtiles, open:null }); }
+  // 길 잇기: 모닥불에서 시작한 큰길이 중간에 끊긴 데(연못 섬, 물가 등) 없이 모든 길 조각이 한 줄로 이어지게 — 끊긴 조각은 가장 가까운 큰길까지 땅으로 이어 줌
+  { const N8 = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]], gateT = new Set(); SHORTCUTS.forEach(sc => sc.tiles.forEach(k => gateT.add(k)));
+    const reach = () => { const d = new Uint8Array(W*H), q = []; for (let a = -6; a <= 6; a++) for (let c = -6; c <= 6; c++) { const k = id(Math.floor(FIRE.x) + a, Math.floor(FIRE.y) + c); if (TRAIL[k] && !d[k]) { d[k] = 1; q.push(k); } }
+      for (let i = 0; i < q.length; i++) { const k = q[i], x = k % W, y = k / W | 0; for (const [a, b] of N8) { const n = id(x + a, y + b); if (!d[n] && (TRAIL[n] || gateT.has(n))) { d[n] = 1; q.push(n); } } } return d; };
+    for (let it = 0; it < 30; it++) { const d = reach(); let any = false; for (let k = 0; k < W*H; k++) if (TRAIL[k] && !d[k]) { any = true; break; } if (!any) break;
+      const from = new Int32Array(W*H).fill(-2), q = []; for (let k = 0; k < W*H; k++) if (d[k]) { from[k] = -1; q.push(k); } let hit = -1;
+      for (let i = 0; i < q.length && hit < 0; i++) { const k = q[i], x = k % W, y = k / W | 0; for (const [a, b] of N8.slice(0, 4)) { const n = id(x + a, y + b); if (from[n] !== -2) continue; if (TRAIL[n] && !d[n]) { from[n] = k; hit = n; break; } if (type[n] === WATER || type[n] === RUIN) continue; from[n] = k; q.push(n); } }
+      if (hit < 0) break; for (let k = from[hit]; k >= 0 && !d[k]; k = from[k]) { const x = k % W, y = k / W | 0; for (const [a, b] of [[0,0], ...N8.slice(0, 4)]) { const n = id(x + a, y + b); if (type[n] !== WATER && type[n] !== RUIN) { type[n] = FLOOR; TRAIL[n] = 1; } } } } }
   // 장 물건은 그 장으로 들어가는 둘레길에서 몇 걸음 들어간 샛길 끝에
   const onArc = (sc, fromEnd, side) => { const pts = sc.pts, n = Math.max(4, pts.length - 1 - Math.round(fromEnd*4)), p = pts[n], q = pts[n - 4], dx = wd(p[0] - q[0], W), dy = wd(p[1] - q[1], H), l = Math.hypot(dx, dy) || 1; return [p[0] - dy/l*side, p[1] + dx/l*side]; };
   const put = (k, [x, y], r) => { const s = STORY_SPOTS.find(q => q.key === k); s.x = wrapX(Math.floor(x) + .5); s.y = wrapY(Math.floor(y) + .5); clear(s.x, s.y, r); };
@@ -4379,7 +4387,7 @@ function draw(dt = .016){
 }
 
 /* ---- 저장 (내 위치와 그림첩, 이 브라우저에) ---- */
-if (location.search.includes('dbg')) window.__g = { scene, camera, P, keys, REGIONS, SITES, STORY_SPOTS, FIRE, WATERFALL, giveMask, get bag(){ return bag; }, PUZZLES, pzSave, lookTargets, sing, get clock(){ return clock; }, get yaw(){ return yaw; }, set yaw(v){ yaw = v; }, get pitch(){ return pitch; }, set pitch(v){ pitch = v; }, get map(){ return type; } };   // 시험용 (주소에 ?dbg)
+if (location.search.includes('dbg')) window.__g = { scene, camera, P, keys, REGIONS, SITES, STORY_SPOTS, FIRE, WATERFALL, giveMask, get bag(){ return bag; }, PUZZLES, pzSave, lookTargets, sing, get clock(){ return clock; }, get yaw(){ return yaw; }, set yaw(v){ yaw = v; }, get pitch(){ return pitch; }, set pitch(v){ pitch = v; }, get map(){ return type; }, get trail(){ return TRAIL; }, get shortcuts(){ return SHORTCUTS; } };   // 시험용 (주소에 ?dbg)
 const KEY = 'denggul-v3';
 function save(){ if (window.__resetting) return; try { localStorage.setItem(KEY, JSON.stringify({ p:[P.x,P.y], found, c:clock })); } catch (e) {} }
 function load(){
