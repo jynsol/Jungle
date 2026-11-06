@@ -7,7 +7,7 @@
 <style>
   html, body { margin:0; height:100%; overflow:hidden; background:#c8d3bf; touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; font-family:sans-serif; }
   canvas#gl { display:block; width:100vw; height:100vh; }
-  #inv { position:fixed; left:50%; bottom:calc(10px + env(safe-area-inset-bottom)); transform:translateX(-50%); display:flex; gap:8px; padding:8px; border-radius:16px; background:rgba(28,40,32,.55); }
+  #inv { z-index:8; position:fixed; left:50%; bottom:calc(10px + env(safe-area-inset-bottom)); transform:translateX(-50%); display:flex; gap:8px; padding:8px; border-radius:16px; background:rgba(28,40,32,.55); }
   #inv:empty { display:none; }
   .slot { width:58px; height:58px; border-radius:12px; background:rgba(240,234,208,.12); border:2px solid rgba(240,234,208,.25); display:flex; align-items:center; justify-content:center; cursor:pointer; }
   .slot.sel { border-color:#ffd56a; background:rgba(255,213,106,.25); transform:translateY(-6px); }
@@ -20,6 +20,9 @@
   #hint canvas { width:96px; height:96px; display:block; }
   #reset { position:fixed; right:calc(10px + env(safe-area-inset-right)); top:calc(10px + env(safe-area-inset-top)); width:40px; height:40px; border-radius:50%; border:none; background:rgba(28,40,32,.5); cursor:pointer; padding:0; }
   #veil { position:fixed; inset:0; pointer-events:none; opacity:0; transition:opacity 1.2s; background:radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(30,120,100,.45) 100%); }
+  #dim { position:fixed; inset:0; background:#000; opacity:0; pointer-events:none; transition:opacity .7s; z-index:7; }
+  #room { position:fixed; inset:0; background:#0c0806; display:none; z-index:6; }
+  #room canvas { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
   #fade { position:fixed; inset:0; background:#f4edd2; opacity:0; pointer-events:none; transition:opacity 2.5s; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:24px; z-index:9; }
   #fade.show { opacity:1; pointer-events:auto; }
   #fade canvas { width:220px; height:220px; }
@@ -32,6 +35,8 @@
 <div id="inv"></div>
 <div id="hint"></div>
 <button id="reset" aria-label="처음부터"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#f3e6c8" stroke-width="2" stroke-linecap="round"><path d="M5 12a7 7 0 1 0 2-5"/><path d="M5 4v4h4"/></svg></button>
+<div id="room"><canvas id="roomc" width="1600" height="1000"></canvas></div>
+<div id="dim"></div>
 <div id="fade"><canvas id="endpic" width="220" height="220"></canvas><button id="again" aria-label="다시"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#3a2a1a" stroke-width="2" stroke-linecap="round"><path d="M5 12a7 7 0 1 0 2-5"/><path d="M5 4v4h4"/></svg></button></div>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
 <script type="module">
@@ -393,7 +398,7 @@ flat(T.hut, 7, 6.1, HUT_X + .05, 0, -5, -Math.PI/2);
 const door = new THREE.Group(); door.position.set(HUT_X, 0, -5.82); scene.add(door);
 { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.64, 2.88), new THREE.MeshBasicMaterial({ map:T.door, side:THREE.DoubleSide })); m.position.set(0, 1.44, .82); m.rotation.y = -Math.PI/2; door.add(m); }
 const shelf = flat(ctex(128, 96, (g) => { g.fillStyle = '#5a3c22'; g.fillRect(0, 50, 128, 14); g.fillStyle = '#3a2614'; g.fillRect(10, 64, 8, 32); g.fillRect(110, 64, 8, 32); }), 1.4, 1.05, HUT_X + 1.2, .6, -5, -Math.PI/2);
-const bottleB = bill(T.bottleE, .26, .46, HUT_X + 1.0, 1.15, -5, { near:0 });
+
 const CORD_ORDER = ['red', 'cream', 'indigo'];
 const CORD_Z = { cream:-5.42, indigo:-5.0, red:-4.58 };
 const cords = {}; for (const k in CORD_Z) { const m = flat(T.cords[k][0], .22, .58, HUT_X - .06, 1.0, CORD_Z[k], -Math.PI/2); cords[k] = m; }
@@ -500,13 +505,77 @@ for (const k in CORD_Z) act({ id:'cord-' + k, x:HUT_X - .1, y:1.3, z:CORD_Z[k], 
   pulled.push(k); cords[k].material.map = T.cords[k][1];
   if (pulled.some((p, i) => CORD_ORDER[i] !== p)) { const was = pulled.slice(); setTimeout(() => { for (const c of was) cords[c].material.map = T.cords[c][0]; }, 450); pulled = []; doorShake = 1; return true; }
   if (pulled.length === 3) { flags.door = 1; save(); } return true; } });
-act({ id:'bottle', x:HUT_X + 1.0, y:1.35, z:-5, r:.35, reach:2.8, vis:() => flags.door && !flags.bottle, on(){ flags.bottle = 1; if (has('flower')) { take('flower'); gain('fbottle', HUT_X + 1, 1.3, -5); } else gain('bottle', HUT_X + 1, 1.3, -5); return true; } });
+act({ id:'hutdoor', x:HUT_X + .3, y:1.3, z:-5, r:.7, reach:2.6, vis:() => flags.door, on(){ enterRoom(); return true; } });
 /* 반딧불 */
 act({ id:'ff', want:['fbottle', 'bottle'], x:FFB.x, y:1.3, z:FFB.z - .6, r:1.2, reach:2.8, vis:() => !flags.ff, on(it){ if (it === 'fbottle') { flags.ff = 1; swapItem('fbottle', 'ffbottle'); save(); drawInv(); ffGather = 1; return true; } ffScatter = 1; return it === 'bottle' ? 'scatter' : (it ? false : 'scatter'); } });
 /* 거미줄 */
 act({ id:'web', want:['ffbottle'], x:WEB.x, y:1.4, z:WEB.z, r:1.1, reach:2.6, vis:() => !flags.hung, on(it){ if (it === 'ffbottle') { flags.hung = 1; take('ffbottle'); save(); drawInv(); return true; } return false; } });
 act({ id:'wfluff', x:webPt(.25, .22)[0], y:webPt(.25, .22)[1], z:WEB.z, r:.32, reach:2.6, vis:() => !flags.fluff, on(){ if (!flags.hung) { spiderRush = 1; return false; } flags.fluff = 1; gain('fluff', ...webPt(.25, .22)); return true; } });
 wetTufts.forEach((w, i) => act({ id:'wet' + i, x:w.x, y:.15, z:w.z, r:.35, on(){ drip = { x:w.x, z:w.z, t:0 }; return false; } }));
+
+/* ============ 산파의 방 (들어가면 그림 한 장) ============ */
+const $room = document.getElementById('room'), $rc = document.getElementById('roomc'), $dim = document.getElementById('dim'), rg = $rc.getContext('2d');
+let inRoom = false, roomEyes = 0, roomT = 0;
+const ROOM_HIT = [
+  { id:'bottle', x:.705, y:.37, r:.045, vis:() => !flags.bottle, on(){ flags.bottle = 1; const at = roomPt(.705, .37); if (has('flower')) { take('flower'); give('fbottle'); } else give('bottle'); save(); drawInv(); flyFrom(has('fbottle') ? 'fbottle' : 'bottle', at); drawRoom(); } },
+  { id:'portrait', x:.36, y:.33, r:.08, on(){ roomEyes = 1 - roomEyes; drawRoom(); } },
+  { id:'candle', x:.52, y:.6, r:.05, on(){ const at = roomPt(.52, .6); noAt(at[0], at[1]); } },
+  { id:'out', x:.41, y:.93, r:.08, on(){ leaveRoom(); } }
+];
+let roomPan = 0;
+function roomBox(){ let k = Math.min(innerWidth/1600, innerHeight/1000); if (innerWidth/innerHeight < 1.2) k = innerHeight*.82/1000; const w = 1600*k, h = 1000*k, over = Math.max(0, (w - innerWidth)/2); roomPan = Math.max(-over, Math.min(over, roomPan)); return { k, w, h, x:(innerWidth - w)/2 + roomPan, y:(innerHeight - h)/2 }; }
+const roomPt = (u, v) => { const b = roomBox(); return [b.x + u*b.w, b.y + v*b.h]; };
+function noAt(x, y){ const d = document.createElement('div'); d.className = 'no'; d.textContent = '✕'; d.style.left = x + 'px'; d.style.top = y + 'px'; document.body.append(d); setTimeout(() => d.remove(), 800); }
+function flyFrom(k, at){ const c = iconCanvas(k); c.className = 'fx'; c.style.left = (at[0] - 28) + 'px'; c.style.top = (at[1] - 28) + 'px'; document.body.append(c); const slot = [...document.querySelectorAll('.slot')].find(s => s.dataset.k === k); const r = slot ? slot.getBoundingClientRect() : { left:innerWidth/2, top:innerHeight - 60 };
+  requestAnimationFrame(() => requestAnimationFrame(() => { c.style.transform = `translate(${r.left - at[0] + 28}px, ${r.top - at[1] + 28}px) scale(.8)`; c.style.opacity = .3; })); setTimeout(() => c.remove(), 700); }
+function drawRoom(){
+  const g = rg, W = 1600, H = 1000, r = rng(21);
+  g.fillStyle = '#7a4e30'; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 160; i++) { g.fillStyle = `rgba(${60 + r()*40},${36 + r()*20},${20 + r()*10},.25)`; g.beginPath(); g.ellipse(r()*W, r()*H*.75, 20 + r()*60, 8 + r()*20, 0, 0, 7); g.fill(); }
+  // 바닥
+  g.fillStyle = '#3a2618'; g.fillRect(0, 760, W, 240); g.strokeStyle = '#24160c'; g.lineWidth = 4; for (let x = -200; x < W + 200; x += 110) { g.beginPath(); g.moveTo(x, 760); g.lineTo(x + (x - W/2)*.5, 1000); g.stroke(); }
+  // 창: 초록빛이 비스듬히 들어옴
+  g.fillStyle = '#9fc49a'; g.fillRect(1120, 160, 260, 220); g.strokeStyle = '#3a2414'; g.lineWidth = 14; g.strokeRect(1120, 160, 260, 220); g.beginPath(); g.moveTo(1250, 160); g.lineTo(1250, 380); g.moveTo(1120, 270); g.lineTo(1380, 270); g.stroke();
+  for (let i = 0; i < 9; i++) { g.fillStyle = ['#2d4f3a', '#355a45', '#4d7356'][i % 3]; g.beginPath(); g.ellipse(1140 + i*30, 190 + (i % 3)*30, 30, 14, i, 0, 7); g.fill(); }
+  const sh = g.createLinearGradient(1250, 300, 900, 900); sh.addColorStop(0, 'rgba(220,240,190,.28)'); sh.addColorStop(1, 'rgba(220,240,190,0)'); g.fillStyle = sh; g.beginPath(); g.moveTo(1120, 380); g.lineTo(1380, 380); g.lineTo(1100, 1000); g.lineTo(640, 1000); g.closePath(); g.fill();
+  // 레타블로: 아기를 안은 여인 (누르면 눈을 뜸)
+  g.fillStyle = '#c99a3a'; g.fillRect(470, 160, 210, 270); g.fillStyle = '#20302a'; g.fillRect(490, 180, 170, 230);
+  g.fillStyle = '#2c3e7a'; g.beginPath(); g.moveTo(575, 220); g.quadraticCurveTo(640, 300, 630, 410); g.lineTo(520, 410); g.quadraticCurveTo(510, 300, 575, 220); g.fill();
+  g.fillStyle = '#c8956a'; g.beginPath(); g.arc(575, 240, 26, 0, 7); g.fill(); g.fillStyle = '#1a120a'; g.beginPath(); g.arc(575, 228, 28, Math.PI, 0); g.fill();
+  g.strokeStyle = '#1a120a'; g.lineWidth = 3; if (roomEyes) { g.fillStyle = '#f4ecd8'; for (const x of [565, 585]) { g.beginPath(); g.arc(x, 242, 5, 0, 7); g.fill(); } g.fillStyle = '#000'; for (const x of [565, 585]) { g.beginPath(); g.arc(x, 243, 2.5, 0, 7); g.fill(); } } else { for (const x of [565, 585]) { g.beginPath(); g.arc(x, 240, 5, .2, Math.PI - .2); g.stroke(); } }
+  g.fillStyle = '#efe2bd'; g.beginPath(); g.ellipse(580, 320, 30, 22, -.3, 0, 7); g.fill(); g.fillStyle = '#c8956a'; g.beginPath(); g.arc(566, 310, 11, 0, 7); g.fill();
+  g.strokeStyle = '#e8c36a'; g.lineWidth = 3; g.beginPath(); g.arc(575, 236, 40, Math.PI*1.1, Math.PI*1.9); g.stroke();
+  // 선반과 병들
+  g.fillStyle = '#4a2e18'; g.fillRect(960, 420, 360, 22); g.fillRect(960, 300, 360, 18);
+  for (const [x, h, c] of [[990, 70, '#6a8a7a'], [1040, 52, '#8a5a3a'], [1200, 60, '#5a6a8a'], [1270, 44, '#7a7a5a']]) { g.fillStyle = c; g.fillRect(x, 420 - h, 34, h); g.fillRect(x + 10, 420 - h - 14, 14, 14); }
+  for (const [x, h] of [[1000, 50], [1080, 60], [1240, 40]]) { g.fillStyle = '#7a6a4a'; g.beginPath(); g.ellipse(x + 16, 300 - h/2, 18, h/2, 0, 0, 7); g.fill(); }
+  if (!flags.bottle) g.drawImage(T.bottleE.userData.canvas, 1112, 300, 64, 112);
+  // 탁자와 꺼진 초
+  g.fillStyle = '#4a2e18'; g.fillRect(700, 620, 380, 26); g.fillRect(720, 646, 20, 140); g.fillRect(1040, 646, 20, 140);
+  for (const [x, h] of [[800, 70], [830, 50], [880, 84]]) { g.fillStyle = '#efe6cc'; g.fillRect(x, 620 - h, 20, h); g.strokeStyle = '#1a120a'; g.lineWidth = 3; g.beginPath(); g.moveTo(x + 10, 620 - h); g.lineTo(x + 10, 610 - h); g.stroke(); }
+  g.fillStyle = '#6a5040'; g.beginPath(); g.ellipse(980, 612, 60, 14, 0, 0, 7); g.fill();
+  // 빈 해먹과 바구니
+  g.strokeStyle = '#c9a46a'; g.lineWidth = 6; g.beginPath(); g.moveTo(60, 380); g.quadraticCurveTo(250, 640, 420, 380); g.stroke(); for (let i = 0; i < 12; i++) { g.lineWidth = 2; g.beginPath(); g.moveTo(60 + i*30, 380 + Math.sin(i/11*Math.PI)*0); g.lineTo(80 + i*28, 520 + Math.sin(i/11*Math.PI)*80); g.stroke(); }
+  g.fillStyle = '#b48a52'; g.beginPath(); g.ellipse(250, 800, 110, 40, 0, 0, 7); g.fill(); g.fillStyle = '#efe6cc'; g.beginPath(); g.ellipse(250, 790, 90, 22, 0, 0, 7); g.fill();
+  // 문 (나가기)
+  g.fillStyle = 'rgba(200,230,180,.25)'; g.beginPath(); g.moveTo(560, 1000); g.lineTo(760, 1000); g.lineTo(720, 880); g.lineTo(600, 880); g.closePath(); g.fill();
+  // 어둠
+  const v = g.createRadialGradient(W*.6, H*.45, 200, W*.5, H*.5, 950); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.6)'); g.fillStyle = v; g.fillRect(0, 0, W, H);
+}
+function layoutRoom(){ const b = roomBox(); $rc.style.width = b.w + 'px'; $rc.style.height = b.h + 'px'; $rc.style.left = b.x + 'px'; $rc.style.top = b.y + 'px'; $rc.style.transform = 'none'; }
+let rp = null;
+$room.addEventListener('pointerdown', e => { rp = { x:e.clientX, p:roomPan, moved:false }; });
+$room.addEventListener('pointermove', e => { if (!rp) return; const dx = e.clientX - rp.x; if (Math.abs(dx) > 8) rp.moved = true; if (rp.moved) { roomPan = rp.p + dx; layoutRoom(); } });
+$room.addEventListener('pointerup', () => { setTimeout(() => { rp = null; }, 0); });
+addEventListener('resize', layoutRoom);
+let ac = null;
+function steps(n = 4){ try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); const sr = ac.sampleRate;
+  for (let i = 0; i < n; i++) { const t0 = ac.currentTime + i*.32, len = .12, buf = ac.createBuffer(1, sr*len, sr), d = buf.getChannelData(0); for (let k = 0; k < d.length; k++) d[k] = (Math.random()*2 - 1)*Math.pow(1 - k/d.length, 3);
+    const src = ac.createBufferSource(), lp = ac.createBiquadFilter(), gn = ac.createGain(); src.buffer = buf; lp.type = 'lowpass'; lp.frequency.value = 500 + Math.random()*200; gn.gain.value = .5; src.connect(lp).connect(gn).connect(ac.destination); src.start(t0); } } catch (e) {} }
+function enterRoom(){ if (inRoom) return; inRoom = true; route = null; steps(4); $dim.style.opacity = 1; setTimeout(() => { roomPan = 0; drawRoom(); layoutRoom(); $room.style.display = 'block'; $dim.style.opacity = 0; }, 900); }
+function leaveRoom(){ steps(3); $dim.style.opacity = 1; setTimeout(() => { $room.style.display = 'none'; inRoom = false; P.x = HUT_X - 2.2; P.z = -5; CAM.yaw = -Math.PI/2; P.fx = -1; P.fz = 0; $dim.style.opacity = 0; }, 800); }
+$room.addEventListener('click', e => { if (rp && rp.moved) return; const b = roomBox(), u = (e.clientX - b.x)/b.w, v = (e.clientY - b.y)/b.h;
+  const h = ROOM_HIT.filter(o => !o.vis || o.vis()).find(o => Math.hypot((u - o.x)*1.6, v - o.y) < o.r*1.6 + .02); if (h) h.on(); });
 
 /* ============ 징검다리 ============ */
 function hopTo(t, fromNorth){
@@ -575,7 +644,7 @@ cvs.addEventListener('contextmenu', e => e.preventDefault());
 
 function curLevel(){ return P.mode === 'top' ? 'top' : P.mode === 'helix' ? 'helix' : 'ground'; }
 function tap(sx, sy){
-  if (flags.ended) return;
+  if (flags.ended || inRoom) return;
   let best = null, bd = 1e9;
   for (const a of ACTS) { if (!a.vis()) continue; V3.set(a.x, a.y, a.z); const dist = V3.distanceTo(camera.position); V3.project(camera); if (V3.z > 1) continue; const px = (V3.x + 1)/2*innerWidth, py = (1 - V3.y)/2*innerHeight;
     const rp = Math.max(26, a.r/dist*innerHeight*.9); const d = Math.hypot(px - sx, py - sy); if (d < rp && dist < bd) { bd = dist; best = a; } }
@@ -614,7 +683,7 @@ function step(dt){
   U.uTime.value += dt; const t = U.uTime.value;
   let mv = null;
   if (P.mode === 'ground' || P.mode === 'top') {
-    const iv = inputVec(); if (iv) { route = null; P.goal = null; mv = iv; }
+    const iv = inRoom ? null : inputVec(); if (iv) { route = null; P.goal = null; mv = iv; }
     else if (route && route.length) { const [tx, tz] = route[0]; const dx = tx - P.x, dz = tz - P.z, d = Math.hypot(dx, dz); if (d < .35) { route.shift(); if (!route.length) { route = null; const f = routeAct; routeAct = null; if (f) f(); } } else mv = [dx/d, dz/d]; }
     else if (P.goal) { const dx = P.goal[0] - P.x, dz = P.goal[1] - P.z, d = Math.hypot(dx, dz); if (d < .2) P.goal = null; else mv = [dx/d, dz/d]; }
   }
@@ -661,7 +730,7 @@ function step(dt){
   gourd.visible = !flags.gourd;
   /* 오두막 */
   { const open = flags.door ? 1 : 0; door.userData.k = (door.userData.k || 0) + (open - (door.userData.k || 0))*Math.min(1, dt*2); door.rotation.y = -door.userData.k*1.6 + Math.sin(t*50)*doorShake*.02; doorShake = Math.max(0, doorShake - dt*1.5);
-    for (const k in cords) cords[k].visible = !flags.door; bottleB.visible = !!flags.door && !flags.bottle; }
+    for (const k in cords) cords[k].visible = !flags.door; }
   /* 반딧불 */
   ffScatter = Math.max(0, ffScatter - dt*.5); ffGather = Math.max(0, ffGather - dt*.5);
   ffs.forEach((f, i) => { const sc = 1 + ffScatter*4; let x = FFB.x + Math.cos(t*.7 + f.ph)*f.r*sc, y = 1.1 + Math.sin(t*1.3 + f.ph*2)*.5 + ffScatter*2, z = FFB.z - .6 + Math.sin(t*.9 + f.ph)*f.r*.6*sc;
