@@ -2105,13 +2105,13 @@ const SMOKE_TEX = ctex(64, 64, (g) => { const r = g.createRadialGradient(32, 32,
 // 지역마다 공기 속에 떠다니는 것: 새벽 물안개, 아침 햇살 속 먼지, 오후 꽃가루, 황혼 마른 잎 (밤은 반딧불)
 const AIR_LEAF_T = ctex(32, 24, (g) => { g.fillStyle = '#c47a34'; g.beginPath(); g.ellipse(16, 12, 13, 7, .4, 0, Math.PI*2); g.fill(); g.strokeStyle = '#7a4418'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(4, 16); g.lineTo(28, 8); g.stroke(); });
 const AIR = [];
-for (let i = 0; i < 44; i++) { const kind = ['mist', 'mote', 'pollen', 'leaf'][i % 4];
+for (let i = 0; i < 44; i++) { const kind = ['mote', 'pollen', 'leaf'][i % 3];
   const m = kind === 'mist' ? cutout(plane(2.6, 1.0, false), new THREE.MeshBasicMaterial({ map:SMOKE_TEX, transparent:true, depthWrite:false, opacity:0, color:'#fff4f6' }))
     : kind === 'leaf' ? cutout(plane(.16, .12, false), mat(AIR_LEAF_T))
     : cutout(plane(kind === 'mote' ? .04 : .05, kind === 'mote' ? .04 : .05, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0, color:kind === 'mote' ? '#fffbe8' : '#ffd86a' }));
   AIR.push({ m, kind, ox:(hash(i*31) - .5)*16, oz:(hash(i*37) - .5)*16, ph:hash(i*41)*6.28, r:hash(i*43) }); }
 function updateAir(dt){
-  const w = regionW(P.x, P.y), wk = k => Math.min(1, w[RGI(k)] || 0), amt = { mist:wk('dawn')*(window.DAWN_FOG_LEFT ?? 1)*1.2, mote:wk('high'), pollen:wk('flower'), leaf:wk('dusk') };
+  const w = regionW(P.x, P.y), wk = k => Math.min(1, w[RGI(k)] || 0), amt = { mote:wk('high'), pollen:wk('flower'), leaf:wk('dusk') };
   for (const a of AIR) { const on = a.r < amt[a.kind]; a.m.visible = on; if (!on) continue; const t = clock + a.ph*10;
     let x = P.x + ((a.ox + Math.sin(t*.07)*3 + 24) % 16) - 8, z = P.y + ((a.oz + Math.cos(t*.05)*3 + 24) % 16) - 8, y;
     if (a.kind === 'mist') { y = .25 + Math.sin(t*.2)*.1; a.m.material.opacity = .35*Math.min(1, amt.mist); }   // 땅에 낮게 깔린 물안개
@@ -3732,7 +3732,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
       else [1046, 1318, 1568, 2093].forEach((f, n) => setTimeout(() => tick(f, .5, .035), 300 + n*180)); };
     GT.update = (dt, camX, camZ) => { SHORTCUTS.forEach((sc, i) => { const open = OPEN_IF[i](); if (open !== sc.open) { const first = sc.open === false; sc.open = open; if (!SKELETON) for (const k of sc.tiles) type[k] = open ? FLOOR : RUIN; if (open) { sc.t = first ? clock : clock - 99; if (first) setTimeout(() => farSound(sc.kind), 400); } }   // 풀었을 때만 열리는 모습과 소리 (다시 들어왔을 땐 이미 열려 있음)
       const k = sc.open ? Math.min(1, (clock - sc.t)/(sc.kind === 'bud' ? 4 : 3)) : 0, [x, z] = wrapNear(sc.gate.x, sc.gate.z, camX, camZ), ang = Math.atan2(camX - x, camZ - z), sh = clock - (sc.shake || -9) < .6 ? Math.sin((clock - sc.shake)*30)*.04 : 0;
-      if (sc.kind === 'fog') { const op = 1 - k; [sc.m, ...sc.fogs].forEach((m, n) => { m.visible = op > .01; const ox = n ? Math.sin(clock*.2 + n*2)*1.6 : 0, oy = n ? .4 + (n % 2)*.8 : 1.2; m.position.set(x + Math.cos(ang)*ox, oy, z - Math.sin(ang)*ox); m.lookAt(camera.position.x, oy, camera.position.z); m.material.opacity = (n ? .75 : .95)*op; }); }   // 알이 깨면 안개가 걷힘
+      if (sc.kind === 'fog') { const op = 1 - k; [sc.m, ...sc.fogs].forEach((m, n) => { m.visible = false; const ox = n ? Math.sin(clock*.2 + n*2)*1.6 : 0, oy = n ? .4 + (n % 2)*.8 : 1.2; m.position.set(x + Math.cos(ang)*ox, oy, z - Math.sin(ang)*ox); m.lookAt(camera.position.x, oy, camera.position.z); m.material.opacity = (n ? .75 : .95)*op; }); }   // 알이 깨면 안개가 걷힘
       else if (sc.kind === 'bud') { sc.m.visible = true; sc.m.position.set(x, 0, z); sc.m.lookAt(camera.position.x, 0, camera.position.z); sc.m.rotation.z = sh; sc.m.material.map = k > .6 ? BUD_OPEN : BUD_SHUT;   // 나비 떼가 내려앉으면 꽃이 피고, 핀 꽃은 길 양옆으로 비켜 섬
         sc.m.scale.set(1 + (k > .6 ? (k - .6)*.6 : 0), 1, 1); if (k >= 1) { sc.m.position.set(x + Math.cos(ang)*2.2, 0, z - Math.sin(ang)*2.2); }
         sc.flies.forEach((f, n) => { const on = sc.open && k < 1; f.visible = on || (sc.open && n < 3); if (!f.visible) return; const a = clock*2 + n*.8, r = k < .6 ? (1 - k/.6)*8 + .6 : .5 + (n % 3)*.3; f.position.set(x + Math.cos(a)*r, 1.4 + Math.sin(a*1.3)*.4 + (k < .6 ? (1 - k/.6)*2 : 0), z + Math.sin(a)*r*.6); f.lookAt(camera.position); f.scale.set(1, .5 + Math.abs(Math.sin(clock*14 + n))*.5, 1); }); }
@@ -4365,7 +4365,7 @@ function draw(dt = .016){
   updateTrees(dt, camX, camZ);
   // 낮과 밤
   const { dark, label, dusk:duskR, dawn } = dayState(), nt = Math.max(0, Math.min(1, (dark - .12)/.66));
-  const dusk = Math.min(1, duskR), st = stormLevel(), fogL = dawn*(window.DAWN_FOG_LEFT ?? 1);   // 새벽 물안개: 1장 퍼즐을 풀수록 걷힘
+  const dusk = Math.min(1, duskR), st = stormLevel(), fogL = 0;
   U.uTime.value = clock; U.uWind.value = .05 + .22*st;
   tintCol.copy(DAY_TINT).lerp(NIGHT_TINT, nt).lerp(DUSK_TINT, dusk*.45).lerp(DAWN_TINT, dawn*.5).multiplyScalar(1 - .3*st); for (const m of tinted) m.color.copy(tintCol);
   scene.background.copy(DAY_SKY).lerp(NIGHT_SKY, nt).lerp(DUSK_SKY, dusk*.75).lerp(DAWN_SKY, dawn*.8).lerp(STORM_SKY, st*.65); hazeCol.copy(FAR_COL).multiply(tintCol); scene.fog.color.copy(scene.background).lerp(hazeCol, .6).lerp(deepTmp.copy(DEEP_COL).multiply(tintCol), .45);   // 멀수록 흐려지되, 숲 그늘 쪽으로 조금 가라앉은 안개
