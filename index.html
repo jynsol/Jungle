@@ -4470,7 +4470,7 @@ function draw(dt = .016){
 }
 
 /* ---- 저장 (내 위치와 그림첩, 이 브라우저에) ---- */
-if (location.search.includes('dbg')) window.__g = { scene, camera, P, keys, REGIONS, SITES, STORY_SPOTS, FIRE, WATERFALL, giveMask, get bag(){ return bag; }, PUZZLES, pzSave, lookTargets, sing, get clock(){ return clock; }, get yaw(){ return yaw; }, set yaw(v){ yaw = v; }, get pitch(){ return pitch; }, set pitch(v){ pitch = v; }, get map(){ return type; }, get dims(){ return [W, H]; }, get trail(){ return TRAIL; }, get path2(){ return PATH2; }, get slots(){ return SLOTS; }, get gates(){ return SHORTCUTS.map(sc => sc.gate); }, get shortcuts(){ return SHORTCUTS; } };   // 시험용 (주소에 ?dbg)
+if (location.search.includes('dbg')) window.__g = { scene, camera, P, keys, REGIONS, SITES, STORY_SPOTS, FIRE, WATERFALL, giveMask, get bag(){ return bag; }, PUZZLES, pzSave, lookTargets, sing, get clock(){ return clock; }, get yaw(){ return yaw; }, set yaw(v){ yaw = v; }, get pitch(){ return pitch; }, set pitch(v){ pitch = v; }, get map(){ return type; }, get dims(){ return [W, H]; }, get trail(){ return TRAIL; }, get path2(){ return PATH2; }, get slots(){ return SLOTS; }, sky:() => dayState(), rw:() => regionW(P.x, P.y), get gates(){ return SHORTCUTS.map(sc => sc.gate); }, get shortcuts(){ return SHORTCUTS; } };   // 시험용 (주소에 ?dbg)
 const KEY = 'denggul-v3';
 function save(){ if (window.__resetting) return; try { localStorage.setItem(KEY, JSON.stringify({ p:[P.x,P.y], found, c:clock })); } catch (e) {} }
 function load(){
