@@ -115,7 +115,7 @@ function flat(tex, w, h, x, y, z, rotY = 0, o = {}){
 }
 
 /* ============ 지도 ============ */
-const CLEAR_R = 7.5, TRUNK_R = 3.0, TREE_H = 5;
+const CLEAR_R = 7.5, TRUNK_R = 1.0, TREE_H = 5;
 const ROAD_CP = [[4.6,-5.6],[9,-11],[14,-19],[20,-25],[27,-27],[33,-20],[34,-8],[32,5],[26,17],[14,25],[0,27],[-13,25],[-24,17],[-30,5],[-31,-8],[-26,-19],[-16,-24],[-9,-17],[-6,-10],[-4.6,-5.6]];
 const FLOWER_CP = [[4.8,4.8],[9,9],[15,15],[23,21],[30,29],[36,38],[41,48]];
 /* 장소: 큰길에서 오솔길로 들어감 (오두막은 조금, 빨래터는 중간, 반딧불 덤불은 깊이) */
@@ -333,36 +333,86 @@ const ICON = {
   fluff:(g) => g.drawImage(T.fluff.userData.canvas, 0, 12, 96, 72),
   stone:(g) => { g.drawImage(T.hotstone.userData.canvas, 4, 14, 88, 66); g.drawImage(T.gown.userData.canvas, 0, 30, 96, 80); },
   egg:(g) => { g.drawImage(T.gourd.userData.canvas, 0, 40, 96, 56); g.drawImage(T.egg.userData.canvas, 30, 6, 36, 46); },
-  mask:(g) => g.drawImage(T.mask.userData.canvas, 0, 0, 96, 96)
+  mask:(g) => g.drawImage(T.mask.userData.canvas, 0, 0, 96, 96),
+  banana:(g) => g.drawImage(T.banana.userData.canvas, 0, 0, 96, 96)
 };
 const TL_IMG = {}; { const im = new Image(); im.onload = () => { TL_IMG.whitespike = im; drawInv(); }; im.src = '../assets/whitespike.png'; }
 function iconCanvas(k){ const c = document.createElement('canvas'); c.width = c.height = 96; const g = c.getContext('2d'); try { (ICON[k] || HINT_ICON[k])(g); } catch (e) {} return c; }
 
-/* ============ 큰 나무 ============ */
-const trunk = new THREE.Mesh(new THREE.CylinderGeometry(TRUNK_R*.92, TRUNK_R*1.1, TREE_H, 28, 1, false), new THREE.MeshBasicMaterial({ map:T.trunk }));
-trunk.position.set(0, TREE_H/2, 0); scene.add(trunk);
-{ const top = new THREE.Mesh(new THREE.CircleGeometry(TRUNK_R*.92, 28), new THREE.MeshBasicMaterial({ color:'#5a4a38' })); top.rotation.x = -Math.PI/2; top.position.y = TREE_H + .01; scene.add(top); }
-/* 판뿌리: 줄기 둘레의 세운 판 */
-for (let i = 0; i < 7; i++) { const a = i/7*Math.PI*2 + .3; if (Math.abs(((a - (Math.PI/2 + .55) + Math.PI*3) % (Math.PI*2)) - Math.PI) < .8) continue;
-  const fin = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(2.2, 0), new THREE.Vector2(0, 3.2)])), new THREE.MeshBasicMaterial({ map:T.trunk, side:THREE.DoubleSide }));
-  fin.position.set(Math.cos(a)*TRUNK_R*.95, 0, Math.sin(a)*TRUNK_R*.95); fin.rotation.y = -a; scene.add(fin); }
-/* 나뭇잎 지붕: 꼭대기 둘레 */
-{ const leaves = []; const r = rng(77); for (let i = 0; i < 26; i++) { const a = r()*Math.PI*2, d = 3 + r()*6; leaves.push([Math.cos(a)*d, TREE_H + 8 + r()*4, Math.sin(a)*d, 5 + r()*3, 4 + r()*3]); }
-  const m = new THREE.InstancedMesh(quad, billMat(artTex('heartleaf'), { near:4, sway:0, occ:true }), leaves.length); m.frustumCulled = false; leaves.forEach((b, i) => { M4.compose(V3.set(b[0], b[1], b[2]), Q0, SC.set(b[3], b[4], 1)); m.setMatrixAt(i, M4); }); scene.add(m); }
-/* 요람과 우체통, 흰 꽃 */
+/* ============ 큰 나무 (예전 나무 위 오두막 나무) ============ */
+const RG = { line:'#14261c', vein:'#86a888', mid:'#355a45' }, LEAVES = ['#2d4f3a', '#4d7356', '#26443a', '#6a8a5a'];
+function leafShape(g, x, y, len, rot, col, wid = .28){ g.save(); g.translate(x, y); g.rotate(rot); g.fillStyle = col; g.strokeStyle = LINE; g.lineWidth = Math.max(1.5, len/28);
+  g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(len*.5, -len*wid, len, 0); g.quadraticCurveTo(len*.5, len*wid, 0, 0); g.fill(); g.stroke(); g.lineWidth = Math.max(1, len/45); g.beginPath(); g.moveTo(len*.05, 0); g.lineTo(len*.85, 0); g.stroke(); g.restore(); }
+function ovate(g, x, y, len, ang, wid, fill, vein = RG.vein){ g.save(); g.translate(x, y); g.rotate(ang); g.fillStyle = fill; g.strokeStyle = RG.line; g.lineWidth = 1.6;
+  g.beginPath(); g.moveTo(0, 0); g.bezierCurveTo(len*.25, -wid, len*.72, -wid*.85, len, 0); g.bezierCurveTo(len*.72, wid*.85, len*.25, wid, 0, 0); g.fill(); g.stroke();
+  g.strokeStyle = vein; g.lineWidth = 1.3; g.beginPath(); g.moveTo(len*.04, 0); g.lineTo(len*.9, 0); for (let i = 1; i < 5; i++) { const t = len*i/5.3; g.moveTo(t, 0); g.lineTo(t + len*.13, -wid*.55); g.moveTo(t, 0); g.lineTo(t + len*.13, wid*.55); } g.stroke(); g.restore(); }
+T.bigtree = ctex(320, 480, (g, w, h) => {
+  g.lineJoin = 'round'; g.fillStyle = '#4a3b2a'; g.strokeStyle = RG.line; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(100, h); g.quadraticCurveTo(138, h - 36, 140, h - 110); g.lineTo(146, 90); g.lineTo(176, 90); g.lineTo(182, h - 110); g.quadraticCurveTo(186, h - 36, 222, h); g.closePath(); g.fill(); g.stroke();
+  g.strokeStyle = '#3a2e20'; g.lineWidth = 2; for (let i = 0; i < 11; i++) { g.beginPath(); g.moveTo(150 + (i % 3)*9, 110 + i*30); g.quadraticCurveTo(160, 124 + i*30, 154 + (i % 2)*12, 136 + i*30); g.stroke(); }
+  g.fillStyle = '#2a1e14'; g.beginPath(); g.ellipse(160, h - 150, 9, 14, 0, 0, Math.PI*2); g.fill();
+  for (let i = 0; i < 34; i++) ovate(g, 14 + (i*47) % 292, 6 + (i*29) % 120, 72 + (i % 3)*12, (i % 7)*.9 - 2.8, LEAVES[i % 4], 20); });
+T.deck = ctex(256, 256, (g, w, h) => { g.save(); g.beginPath(); g.arc(128, 128, 124, 0, Math.PI*2); g.clip();
+  for (let i = 0; i < 12; i++) { g.fillStyle = i % 2 ? '#8a6438' : '#7a5530'; g.fillRect(0, i*22, w, 22); g.strokeStyle = '#4a3220'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, i*22); g.lineTo(w, i*22); g.stroke(); }
+  g.restore(); g.strokeStyle = '#3a2618'; g.lineWidth = 8; g.beginPath(); g.arc(128, 128, 120, 0, Math.PI*2); g.stroke();
+  g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.arc(128, 128, 30, 0, Math.PI*2); g.fill(); });
+const slothPaint = mode => ctex(96, 128, (g) => {
+  g.lineJoin = 'round'; g.strokeStyle = '#3a2e22'; g.lineWidth = 7; g.lineCap = 'round'; g.beginPath(); g.moveTo(30, 6); g.quadraticCurveTo(24, 30, 36, 52); g.moveTo(66, 6); g.quadraticCurveTo(72, 30, 60, 52); g.stroke();
+  g.strokeStyle = '#2a2016'; g.lineWidth = 2; for (const x of [26, 30, 34, 62, 66, 70]) { g.beginPath(); g.moveTo(x, 10); g.quadraticCurveTo(x - 2, 2, x + 3, 0); g.stroke(); }
+  g.fillStyle = '#8a7a62'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.beginPath(); g.ellipse(48, 78, 30, 40, 0, 0, Math.PI*2); g.fill(); g.stroke();
+  g.strokeStyle = '#a8987c'; g.lineWidth = 1.5; for (let i = 0; i < 16; i++) { const x = 26 + (i*13) % 44, y = 60 + (i*17) % 50; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 3, y + 8); g.stroke(); }
+  g.fillStyle = '#e6d8b8'; g.beginPath(); g.ellipse(48, 58, 17, 14, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = '#3a2e22';
+  if (mode === 'sleep') { g.strokeStyle = '#3a2e22'; g.lineWidth = 2; for (const x of [40, 56]) { g.beginPath(); g.arc(x, 56, 4, .2, Math.PI - .2); g.stroke(); } }
+  else for (const [x, a] of [[39, .5], [57, -.5]]) { g.save(); g.translate(x, 56); g.rotate(a); g.beginPath(); g.ellipse(0, 0, 7, 3.5, 0, 0, Math.PI*2); g.fill(); g.restore(); g.fillStyle = '#f5ecd8'; g.beginPath(); g.arc(x + (x < 48 ? 1 : -1), 55, 1.4, 0, Math.PI*2); g.fill(); g.fillStyle = '#3a2e22'; }
+  g.beginPath(); g.ellipse(48, 63, 3.5, 2.5, 0, 0, Math.PI*2); g.fill(); g.strokeStyle = '#3a2e22'; g.lineWidth = 1.5; g.beginPath(); g.arc(48, 64, 6, .3, Math.PI - .3); g.stroke();
+  if (mode === 'eat') { g.fillStyle = '#f2d84a'; g.strokeStyle = '#6b5a22'; g.lineWidth = 1.5; g.save(); g.translate(60, 72); g.rotate(-.6); g.beginPath(); g.ellipse(0, 0, 5, 14, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.restore(); } });
+T.sloth = { idle:slothPaint('idle'), eat:slothPaint('eat'), sleep:slothPaint('sleep') };
+T.vine = ctex(40, 320, (g, w, h) => { g.strokeStyle = '#4a6a34'; g.lineWidth = 4; g.lineCap = 'round'; g.beginPath(); g.moveTo(20, 0); g.quadraticCurveTo(28, h*.5, 18, h - 16); g.stroke();
+  for (let y = 14; y < h - 20; y += 22) leafShape(g, 20 + Math.sin(y)*4, y, 16, Math.PI/2 + (y % 44 ? .9 : -.9), LEAVES[(y/22 | 0) % 4], .34);
+  g.strokeStyle = '#5a4a2a'; g.lineWidth = 3; g.beginPath(); g.ellipse(18, h - 10, 8, 9, 0, 0, Math.PI*2); g.stroke(); });
+T.basket = ctex(96, 72, (g) => { g.fillStyle = '#b08848'; g.strokeStyle = '#5a3c1a'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(8, 14); g.lineTo(88, 14); g.lineTo(78, 70); g.lineTo(18, 70); g.closePath(); g.fill(); g.stroke();
+  g.strokeStyle = '#8a6430'; g.lineWidth = 2; for (let y = 24; y < 70; y += 9) { g.beginPath(); g.moveTo(10 + (y - 14)*.18, y); g.lineTo(86 - (y - 14)*.18, y); g.stroke(); } for (let x = 20; x < 80; x += 10) { g.beginPath(); g.moveTo(x, 14); g.lineTo(x + (48 - x)*.15, 70); g.stroke(); }
+  g.fillStyle = '#9a7438'; g.strokeStyle = '#5a3c1a'; g.beginPath(); g.ellipse(48, 14, 40, 7, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.strokeStyle = '#5a3c1a'; g.lineWidth = 3; g.beginPath(); g.arc(48, 12, 14, Math.PI, 0); g.stroke(); });
+T.ladder = ctex(64, 448, (g, w, h) => { g.strokeStyle = '#7a5a32'; g.lineWidth = 4; g.beginPath(); g.moveTo(10, 0); g.lineTo(12, h); g.moveTo(54, 0); g.lineTo(52, h); g.stroke(); g.strokeStyle = '#8a6438'; g.lineWidth = 6; for (let y = 16; y < h; y += 34) { g.beginPath(); g.moveTo(10, y); g.lineTo(54, y + 2); g.stroke(); } });
+T.rolled = ctex(96, 48, (g) => { g.fillStyle = '#8a6438'; g.strokeStyle = '#4a3220'; g.lineWidth = 2; g.beginPath(); g.ellipse(48, 26, 40, 16, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.strokeStyle = '#6a4a28'; for (let i = 1; i < 4; i++) { g.beginPath(); g.ellipse(48, 26, 40 - i*9, 16 - i*3.5, 0, 0, Math.PI*2); g.stroke(); } g.strokeStyle = '#c0402a'; g.lineWidth = 4; g.beginPath(); g.moveTo(40, 6); g.lineTo(44, 46); g.stroke(); });
+T.monkey = ctex(80, 100, (g) => { g.strokeStyle = RG.line; g.lineWidth = 2; g.fillStyle = '#4a3424'; g.beginPath(); g.moveTo(60, 80); g.quadraticCurveTo(78, 60, 70, 30); g.stroke(); g.beginPath(); g.ellipse(40, 70, 22, 26, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.beginPath(); g.arc(40, 32, 18, 0, Math.PI*2); g.fill(); g.stroke();
+  g.fillStyle = '#c7a07a'; g.beginPath(); g.ellipse(40, 36, 11, 10, 0, 0, Math.PI*2); g.fill(); g.fillStyle = '#1a120a'; for (const x of [35, 45]) { g.beginPath(); g.arc(x, 32, 2.4, 0, Math.PI*2); g.fill(); }
+  g.fillStyle = '#e8822e'; g.beginPath(); g.arc(40, 66, 11, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = '#ffd08a'; g.beginPath(); g.arc(36, 62, 3, 0, Math.PI*2); g.fill(); g.fillStyle = '#4a3424'; for (const x of [26, 54]) { g.beginPath(); g.ellipse(x, 66, 6, 10, x < 40 ? .5 : -.5, 0, Math.PI*2); g.fill(); g.stroke(); } });
+T.orange = ctex(32, 32, (g) => { g.fillStyle = '#f2992e'; g.strokeStyle = '#8a4a1a'; g.lineWidth = 2; g.beginPath(); g.arc(16, 17, 12, 0, Math.PI*2); g.fill(); g.stroke(); leafShape(g, 16, 6, 9, -.6, RG.mid, .35); });
+T.log = ctex(128, 40, (g) => { g.fillStyle = '#6b4a2a'; g.strokeStyle = RG.line; g.lineWidth = 2.5; g.beginPath(); g.roundRect(4, 8, 120, 28, 12); g.fill(); g.stroke(); g.fillStyle = '#c8a070'; g.beginPath(); g.ellipse(114, 22, 9, 13, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.strokeStyle = '#4a3020'; g.lineWidth = 1.5; for (const y of [16, 26]) { g.beginPath(); g.moveTo(14, y); g.lineTo(96, y + 1); g.stroke(); } });
+T.banana = ctex(96, 96, (g) => { g.strokeStyle = '#6b5a22'; g.lineWidth = 2.5; for (let i = 0; i < 4; i++) { g.save(); g.translate(48 + (i - 1.5)*9, 30); g.rotate(-.5 + i*.33); g.fillStyle = i % 2 ? '#f2d84a' : '#e8c83a'; g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(22, 26, 6, 58); g.quadraticCurveTo(2, 30, -8, 4); g.closePath(); g.fill(); g.stroke(); g.restore(); } g.fillStyle = '#5a4a22'; g.fillRect(40, 18, 14, 14); });
+T.star = ctex(48, 48, (g) => { g.fillStyle = '#ffe98c'; g.beginPath(); for (let i = 0; i < 10; i++) { const a = i*Math.PI/5 - Math.PI/2, r = i % 2 ? 9 : 22; g.lineTo(24 + Math.cos(a)*r, 24 + Math.sin(a)*r); } g.fill(); });
+const bubbleTex = (draw) => ctex(128, 112, (g) => { g.fillStyle = 'rgba(244,237,210,.95)'; g.strokeStyle = '#3a2a1a'; g.lineWidth = 4; g.beginPath(); g.ellipse(64, 50, 58, 44, 0, 0, 7); g.fill(); g.stroke(); g.beginPath(); g.arc(46, 102, 7, 0, 7); g.fill(); g.stroke(); draw(g); });
+const BIG = { scale:.72 }, DECK = TREE_H, BR = 3.3, MY = 3.95;
+const SPOT = { sloth:[1.4, 1.6], ladder:[-1.4, 1.6], vine:[.35, 2.05], monkey:[.7, .9] };
+const bigTree = bill(T.bigtree, 7.5*BIG.scale, 13*BIG.scale, 0, 0, 0, { near:1.8 });
+{ const d = new THREE.Mesh(new THREE.CircleGeometry(2.45, 40), new THREE.MeshBasicMaterial({ map:T.deck, transparent:true, alphaTest:.3, side:THREE.DoubleSide })); d.rotation.x = -Math.PI/2; d.position.y = DECK; scene.add(d); }
+const brS = bill(T.log, 1.9, .32, SPOT.sloth[0], BR - .26, SPOT.sloth[1], { near:0 }), brM = bill(T.log, 1.5, .28, SPOT.monkey[0], MY - .26, SPOT.monkey[1], { near:0 });
+const slothB = bill(T.sloth.sleep, 1.1, 1.45, SPOT.sloth[0], BR - 1.45, SPOT.sloth[1], { near:0, push:.05 });
+const monkeyB = bill(T.monkey, .5, .62, SPOT.monkey[0], MY, SPOT.monkey[1], { near:0, push:.05 });
+const vineB = bill(T.vine, .38, BR - 1.3, SPOT.vine[0], 1.3, SPOT.vine[1], { near:0 });
+const basketB = bill(T.basket, .95, .72, SPOT.sloth[0], 0, SPOT.sloth[1], { near:0 });
+const inBasket = bill(T.banana, .42, .42, SPOT.sloth[0], .5, SPOT.sloth[1], { near:0, push:.05 });
+const ropeB = new THREE.Mesh(new THREE.PlaneGeometry(.04, 1), new THREE.MeshBasicMaterial({ color:'#7a5a32' })); scene.add(ropeB);
+const orangeB = bill(T.orange, .24, .24, 0, 0, 0, { near:0, push:.1 }); orangeB.visible = false;
+const stars = [0, 1, 2, 3].map(() => bill(T.star, .16, .16, 0, 0, 0, { near:0, push:.15 }));
+const wantB = bill(bubbleTex((g) => g.drawImage(T.banana.userData.canvas, 34, 14, 60, 60)), .7, .62, 0, 0, 0, { near:0, push:.2, glow:true }); wantB.visible = false;
+const wakeB = bill(bubbleTex((g) => { g.drawImage(T.sloth.sleep.userData.canvas, 52, 8, 52, 68); g.drawImage(T.orange.userData.canvas, 18, 14, 30, 30); g.strokeStyle = '#3a2410'; g.lineWidth = 2; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(26, 80); g.quadraticCurveTo(18, 56, 30, 44); g.stroke(); }), .8, .7, 0, 0, 0, { near:0, push:.2, glow:true }); wakeB.visible = false;
+const A_L = Math.atan2(SPOT.ladder[1], SPOT.ladder[0]), NX = 1.15, NZ = -.85;
+const LAD = { bx:SPOT.ladder[0]*1.08, bz:SPOT.ladder[1]*1.08, tx:SPOT.ladder[0]*.7, tz:SPOT.ladder[1]*.7 };
+const ladderGeo = new THREE.PlaneGeometry(.75, DECK); ladderGeo.translate(0, -DECK/2, 0);
+const ladderM = new THREE.Mesh(ladderGeo, new THREE.MeshBasicMaterial({ map:T.ladder, transparent:true, alphaTest:.45, side:THREE.DoubleSide })); ladderM.position.set(SPOT.ladder[0]*1.06, DECK, SPOT.ladder[1]*1.06); ladderM.rotation.y = Math.atan2(SPOT.ladder[0], SPOT.ladder[1]); scene.add(ladderM);
+const rolledB = bill(T.rolled, .8, .4, SPOT.ladder[0]*1.04, DECK - .2, SPOT.ladder[1]*1.04, { near:0 });
+/* 나무늘보 단계: 0 잠듦, 1 깨어남, 2 바구니 올라가 먹음, 3 발판 밑으로 기어감, 4 사다리 풀려 내려옴, 5 사다리 있음 */
+if (S.f.sl >= 2 && S.f.sl < 5) S.f.sl = 5; S.f.sl = S.f.sl || 0;
+const SL = { t:0, last:-1, orange:null, throwT:2, bonks:0, trial:null, wantT:0, wakeT:0, starT:-9 };
+/* 요람과 우체통, 흰 꽃, 바나나 나무 */
+bill(artTex('banana'), 2.2, 3.2, -6.4, 0, -2.6, { near:0 });
+const bananaBunch = bill(T.banana, .55, .55, -6.1, 1.35, -2.4, { near:0, push:.2 });
 const cradle = bill(T.cradle, 1.0, 2.0, 3.0, 1.0, 5.0, { near:0 });
 const cradleGown = bill(T.gown, .5, .5, 3.0, 1.62, 5.0, { near:0, push:.08 });
 const mailbox = bill(artTex('mailbox'), .6, 1.5, -5.2, 0, 4.4, { near:0 });
 const flowers = [[5.4, 3.0], [6.1, 2.2], [5.0, 3.9]].map(([x, z]) => bill(artTex('whitespike'), .62, 1.18, x, 0, z, { near:0 }));
-/* 오르는 길 (홈 셋이 다 차면 자라남) */
-const A_L = Math.PI/2 + .55, NX = Math.cos(A_L - 1.35)*2.15, NZ = Math.sin(A_L - 1.35)*2.15;
-const LAD = { bx:Math.cos(A_L)*3.55, bz:Math.sin(A_L)*3.55, tx:Math.cos(A_L)*2.3, tz:Math.sin(A_L)*2.3 };
-/* 위로 이어지는 줄기 (둥지는 굵은 가지 위, 줄기 옆) */
-{ const up = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.55, 12, 20, 1, true), new THREE.MeshBasicMaterial({ map:T.trunk })); up.position.set(0, TREE_H + 6, 0); scene.add(up); }
-/* 줄사다리: 줄기에 기대어 늘어짐 */
-T.ladder = ctex(128, 512, (g) => { g.strokeStyle = '#8a6a3a'; g.lineWidth = 7; g.beginPath(); g.moveTo(22, 0); g.bezierCurveTo(16, 170, 26, 340, 20, 512); g.moveTo(106, 0); g.bezierCurveTo(112, 170, 100, 340, 108, 512); g.stroke();
-  g.strokeStyle = '#5a3a1a'; g.lineWidth = 9; for (let y = 24; y < 512; y += 44) { g.beginPath(); g.moveTo(18, y + 4); g.lineTo(110, y); g.stroke(); } });
-{ const m = flat(T.ladder, 1.1, TREE_H + .5, Math.cos(A_L)*3.25, 0, Math.sin(A_L)*3.25, Math.PI/2 - A_L); }
 
 /* 꼭대기 둥지 */
 const nestB = bill(T.nest, 1.5, .75, NX, TREE_H, NZ, { near:0 });
@@ -483,8 +533,14 @@ act({ id:'mail', x:-5.2, y:1.1, z:4.4, r:.6, on(){ showHint(); return true; } })
 /* 흰 꽃 */
 act({ id:'flower', x:5.5, y:.7, z:3.0, r:.9, want:['bottle'], on(it){ if (it === 'bottle') { swapItem('bottle', 'fbottle'); save(); drawInv(); return true; } if (has('flower') || has('fbottle') || has('ffbottle') || flags.hung) return false; gain('flower', 5.5, .9, 3.0); return true; } });
 /* 오르는 길 첫 칸 */
-act({ id:'ladder', x:LAD.bx, y:1.4, z:LAD.bz, r:.9, reach:2.4, on(){ startClimb(true); return true; } });
-act({ id:'ladderTop', level:'top', x:Math.cos(A_L)*2.9, y:TREE_H + .5, z:Math.sin(A_L)*2.9, r:.7, reach:2.4, on(){ startClimb(false); return true; } });
+act({ id:'ladder', vis:() => flags.sl >= 5, x:LAD.bx, y:1.4, z:LAD.bz, r:.9, reach:2.4, on(){ startClimb(true); return true; } });
+/* 나무늘보 퍼즐 */
+act({ id:'monkey', x:SPOT.monkey[0], y:MY + .3, z:SPOT.monkey[1], r:.5, reach:99, on(){ if (flags.sl === 0 && Math.hypot(P.x, P.z) < 5) throwOrange(); return true; } });
+act({ id:'sloth', x:SPOT.sloth[0], y:BR - .7, z:SPOT.sloth[1], r:.7, reach:99, on(){ if (flags.sl === 1) SL.wantT = 3.5; return true; } });
+act({ id:'vine', x:SPOT.vine[0], y:1.7, z:SPOT.vine[1], r:.4, reach:2.4, on(){ return pullVine(); } });
+act({ id:'basket', want:['banana'], x:SPOT.sloth[0], y:.4, z:SPOT.sloth[1], r:.5, reach:2.4, vis:() => flags.sl < 2 && !SL.trial, on(it){ if (it === 'banana') { flags.bb = 1; take('banana'); save(); drawInv(); return true; } if (flags.bb) { flags.bb = 0; gain('banana', SPOT.sloth[0], .5, SPOT.sloth[1]); return true; } return false; } });
+act({ id:'bananaTree', x:-6.1, y:1.6, z:-2.4, r:1.0, reach:2.6, vis:() => !flags.banana, on(){ flags.banana = 1; gain('banana', -6.1, 1.6, -2.4); return true; } });
+act({ id:'ladderTop', level:'top', vis:() => flags.sl >= 5, x:SPOT.ladder[0]*1.04, y:TREE_H + .3, z:SPOT.ladder[1]*1.04, r:.7, reach:2.4, on(){ startClimb(false); return true; } });
 /* 둥지 */
 act({ id:'nest', level:'top', want:['fluff', 'stone', 'egg'], x:NX, y:TREE_H + .3, z:NZ, r:.8, reach:2.6, on(it){
   if (flags.hatched) { if (!flags.maskTaken) { flags.maskTaken = 1; gain('mask', NX, TREE_H + .5, NZ); return true; } return false; }
@@ -599,6 +655,8 @@ function splash(x, z){ for (let i = 0; i < 6; i++) bubbles[i].t = 0; splashAt = 
 
 /* ============ 힌트 ============ */
 const HINT_ICON = {
+  wake:(g) => g.drawImage(wakeB.m.material.uniforms.map.value.userData.canvas, 0, 6, 96, 84),
+  vine:(g) => { g.drawImage(T.vine.userData.canvas, 10, 0, 16, 96); g.drawImage(T.basket.userData.canvas, 30, 50, 56, 42); g.drawImage(T.banana.userData.canvas, 40, 28, 34, 34); },
   knot:(g) => { ['red', 'cream', 'indigo'].forEach((k, i) => { g.drawImage(T.cords[k][1].userData.canvas, 14 + i*26, 8, 22, 60); }); g.drawImage(T.clothes.red.userData.canvas, 10, 64, 24, 30); g.drawImage(T.clothes.cream.userData.canvas, 36, 64, 24, 30); g.drawImage(T.clothes.indigo.userData.canvas, 62, 64, 24, 30); },
   reeds:(g) => { g.drawImage(T.reeds.userData.canvas, 4, 20, 88, 76); g.drawImage(T.bird.userData.canvas, 30, 0, 60, 45); },
   hot:(g) => { g.drawImage(T.spring.userData.canvas, 4, 30, 88, 60); g.drawImage(T.hotstone.userData.canvas, 26, 40, 44, 32); },
@@ -613,6 +671,8 @@ const HINT_ICON = {
 function nextHint(){
   if (flags.maskOn) return 'path';
   if (flags.maskTaken) return 'wear';
+  if (flags.sl === 0) return 'wake';
+  if (flags.sl === 1) return has('banana') || flags.bb ? 'vine' : 'banana';
   if (!flags.sawNest) return 'up';
   const need = [];
   if (!S.nest.stone) need.push(has('stone') ? 'up' : !flags.gown ? 'cradle' : has('cloth') ? 'wetcloth' : P.z > -40 && !flags.crossed ? 'stones' : 'hot');
@@ -676,7 +736,7 @@ function tap(sx, sy){
   const ray = new THREE.Raycaster(); ray.setFromCamera({ x:sx/innerWidth*2 - 1, y:-(sy/innerHeight*2 - 1) }, camera);
   const planeY = P.mode === 'top' ? TREE_H : 0; const t = (planeY - ray.ray.origin.y)/ray.ray.direction.y; if (!(t > 0)) return;
   const hx = ray.ray.origin.x + ray.ray.direction.x*t, hz = ray.ray.origin.z + ray.ray.direction.z*t;
-  if (P.mode === 'top') { const d = Math.hypot(hx, hz); if (d > 2.7) { startClimb(false); return; } P.topGoal = { a:Math.atan2(hz, hx) }; return; }
+  if (P.mode === 'top') { const d = Math.hypot(hx, hz); if (d > 2.5) { if (flags.sl >= 5) startClimb(false); return; } P.topGoal = { a:Math.atan2(hz, hx) }; return; }
   if (P.mode !== 'ground') return;
   route = findPath(P.x, P.z, [hx, hz], .6); routeAct = null;
 }
@@ -704,6 +764,56 @@ function inputVec(){ let ix = 0, iz = 0; if (keys.w || keys.arrowup) iz -= 1; if
   const L = Math.hypot(ix, iz); if (L < .05) return null; const k = Math.min(1, L); ix /= L; iz /= L;
   const [fx, fz] = camFwd(); const rx = -fz, rz = fx; return [(fx*-iz + rx*ix)*k, (fz*-iz + rz*ix)*k]; }
 
+/* ============ 나무늘보와 원숭이 ============ */
+const ease2 = k => { k = Math.max(0, Math.min(1, k)); return k*k*(3 - 2*k); };
+function throwOrange(){ if (SL.orange) return; const under = Math.hypot(P.x - SPOT.sloth[0], P.z - SPOT.sloth[1]) < .85; SL.orange = { t:0, x0:SPOT.monkey[0], z0:SPOT.monkey[1], x1:P.x, z1:P.z, under }; }
+function pullVine(){ if (SL.trial || flags.sl >= 2) return true; if (flags.sl === 1 && flags.bb) { flags.bb = 0; flags.sl = 2; save(); return true; } SL.trial = { t:0, kind:flags.sl === 0 ? 'sleep' : flags.bb ? 'x' : 'empty' }; return true; }
+function setSL(n){ flags.sl = n; save(); }
+function updateSloth(dt, t){
+  const st = flags.sl; if (st !== SL.last) { SL.t = 0; SL.last = st; } SL.t += dt; const el = SL.t, d = Math.hypot(P.x, P.z);
+  const high = P.y > 2.5; bigTree.visible = !high; bigTree.upd();
+  /* 바구니 높이 */
+  const LOW = .02, HIGH = BR - 2.2; let bh = LOW;
+  if (st === 2) bh = el < 2 ? LOW + (HIGH - LOW)*ease2(el/2) : el < 4.2 ? HIGH : LOW + (HIGH - LOW)*(1 - ease2((el - 4.2)/1.6));
+  if (SL.trial) { const tr = SL.trial; tr.t += dt; const te = tr.t; bh = te < 2 ? LOW + (HIGH - LOW)*ease2(te/2) : te < 3.4 ? HIGH : LOW + (HIGH - LOW)*(1 - ease2((te - 3.4)/1.8)); if (te > 2.2 && !tr.seen) { tr.seen = true; if (tr.kind !== 'sleep') SL.wantT = 3; } if (te > 5.4) SL.trial = null; }
+  basketB.at(SPOT.sloth[0], bh, SPOT.sloth[1]);
+  ropeB.position.set(SPOT.sloth[0], (bh + .62 + BR)/2, SPOT.sloth[1]); ropeB.scale.set(1, Math.max(.01, BR - (bh + .62)), 1); ropeB.lookAt(camera.position.x, ropeB.position.y, camera.position.z);
+  const item = st === 2 ? el < 2.4 : st < 2 && flags.bb; inBasket.visible = !!item; inBasket.at(SPOT.sloth[0], bh + .45, SPOT.sloth[1]);
+  /* 나무늘보: 자다가 → 깨어 → 먹고 → 줄기를 타고 발판 끝 매듭까지 */
+  const crawl = st === 3 ? ease2(el/3.2) : st >= 4 ? 1 : 0;
+  const sx = SPOT.sloth[0] + (SPOT.ladder[0]*.95 - SPOT.sloth[0])*crawl, sz = SPOT.sloth[1] + (SPOT.ladder[1]*.95 - SPOT.sloth[1])*crawl;
+  const eating = st === 2 && el > 2 && el < 4.2;
+  slothB.m.material.uniforms.map.value = eating ? T.sloth.eat : (st === 0 || st >= 5) ? T.sloth.sleep : T.sloth.idle;
+  slothB.at(sx, BR - 1.45 + crawl*(DECK - BR) + Math.sin(t*(st === 0 ? .35 : .6))*.02, sz);
+  if (st === 2 && el > 6) setSL(3);
+  if (st === 3 && el > 3.4) setSL(4);
+  if (st === 4 && el > 1.4) setSL(5);
+  /* 사다리: 말려 있다가 → 풀려 내려옴 */
+  rolledB.visible = st < 4; const lk = st === 4 ? ease2(el/1.2) : st >= 5 ? 1 : 0; ladderM.visible = st >= 4; ladderM.scale.set(1, Math.max(.02, lk), 1);
+  /* 덩굴 */
+  vineB.at(SPOT.vine[0] + Math.sin(t*.9)*.02, 1.3, SPOT.vine[1]);
+  /* 원숭이: 나무 아래로 오면 내 머리를 겨냥해 오렌지를 던짐 (나무늘보가 깨면 그만) */
+  monkeyB.at(SPOT.monkey[0], MY + Math.abs(Math.sin(t*1.3))*.03, SPOT.monkey[1]);
+  if (st === 0 && P.mode === 'ground' && d < 4.5 && !SL.orange && (SL.throwT -= dt) <= 0) { SL.throwT = 3 + Math.random()*2; throwOrange(); }
+  const o = SL.orange;
+  if (o) { o.t += dt; const k = o.t; let px, pz, py; orangeB.visible = true;
+    if (k < .9) { const u = k/.9; px = o.x0 + (o.x1 - o.x0)*u; pz = o.z0 + (o.z1 - o.z0)*u; py = MY + (1.2 - MY)*u + Math.sin(u*Math.PI)*1.4; }
+    else if (o.under) { const u = Math.min(1, (k - .9)/.6); px = o.x1; pz = o.z1; py = 1.2 + (BR - 1 - 1.2)*Math.sin(u*Math.PI/2);
+      if (u >= 1 && !o.hit2) { o.hit2 = true; if (flags.sl === 0) setSL(1); }
+      if (k > 1.5) { const u2 = Math.min(1, (k - 1.5)/.7); py = BR - 1 - (BR - 1.2)*u2*u2; } }
+    else { const u = Math.min(1, (k - .9)/.9), tx = SPOT.sloth[0] - o.x1, tz = SPOT.sloth[1] - o.z1, tl = Math.hypot(tx, tz) || 1, run = Math.min(tl - .3, 1.6); px = o.x1 + tx/tl*run*u; pz = o.z1 + tz/tl*run*u; py = Math.max(.12, 1.2 + Math.sin(u*Math.PI)*.8 - 1.1*u); }
+    if (k > .9 && !o.hit) { o.hit = true; if (Math.hypot(P.x - o.x1, P.z - o.z1) < 1.2) { SL.starT = t; if (!o.under && flags.sl === 0 && ++SL.bonks >= 2) setTimeout(() => { SL.wakeT = 3.5; }, 700); } }
+    orangeB.at(px, py - .12, pz); if (k > 3) { SL.orange = null; orangeB.visible = false; } }
+  /* 머리 위 별 */
+  const sk = (t - SL.starT)/1.3; stars.forEach((b, i) => { b.visible = sk >= 0 && sk < 1; if (b.visible) { const a = t*5 + i*1.57; b.at(P.x + Math.cos(a)*.28, P.y + 1.2 + Math.sin(a*2)*.04, P.z + Math.sin(a)*.28); b.op = 1 - sk; } });
+  /* 생각 풍선 */
+  SL.wantT = Math.max(0, SL.wantT - dt); wantB.visible = SL.wantT > 0 || (st === 1 && !flags.bb && d < 5 && P.mode === 'ground' && Math.sin(t*.6) > .3); wantB.at(sx, BR + .25, sz);
+  SL.wakeT = Math.max(0, SL.wakeT - dt); wakeB.visible = SL.wakeT > 0; wakeB.at(P.x, P.y + 1.35, P.z);
+  bananaBunch.visible = !flags.banana;
+  /* 나무 밑에선 위를 올려다봄 */
+  CAM.lookUp = (P.mode === 'ground' && d < 4.8 && !P.moving && st < 5) ? 1 : 0;
+}
+
 function step(dt){
   U.uTime.value += dt; const t = U.uTime.value;
   let mv = null;
@@ -714,12 +824,12 @@ function step(dt){
   }
   P.moving = false;
   if (P.mode === 'ground' && mv) { const sp = SPEED*slow(P.x, P.z), nx = P.x + mv[0]*sp*dt, nz = P.z + mv[1]*sp*dt; if (moveTry(nx, nz)) { P.moving = true; P.fx = mv[0]; P.fz = mv[1]; } else route = null;
-    if (Math.hypot(P.x - LAD.bx, P.z - LAD.bz) < .7 && (mv[0]*-LAD.bx + mv[1]*-LAD.bz) > .5) startClimb(true); }
-  if (P.mode === 'top' && P.topGoal && !inputVec()) { const g0 = P.topGoal, a0 = Math.atan2(P.z, P.x); let da = g0.a - a0; da = Math.atan2(Math.sin(da), Math.cos(da)); const r0 = 2.3, step = SPEED*.8*dt/r0;
+    if (flags.sl >= 5 && Math.hypot(P.x - LAD.bx, P.z - LAD.bz) < .7 && (mv[0]*-LAD.bx + mv[1]*-LAD.bz) > .5) startClimb(true); }
+  if (P.mode === 'top' && P.topGoal && !inputVec()) { const g0 = P.topGoal, a0 = Math.atan2(P.z, P.x); let da = g0.a - a0; da = Math.atan2(Math.sin(da), Math.cos(da)); const r0 = 1.5, step = SPEED*.8*dt/r0;
     if (Math.abs(da) < .08 || (g0.act && Math.hypot(P.x - g0.act.x, P.z - g0.act.z) < g0.act.reach - .2)) { P.topGoal = null; if (g0.act) useOn(g0.act); }
     else { const na = a0 + Math.sign(da)*Math.min(Math.abs(da), step); const nx = Math.cos(na)*r0, nz = Math.sin(na)*r0; P.fx = nx - P.x; P.fz = nz - P.z; P.x = nx; P.z = nz; P.moving = true; } }
-  if (P.mode === 'top') { if (mv) { P.topGoal = null; const nx = P.x + mv[0]*SPEED*.8*dt, nz = P.z + mv[1]*SPEED*.8*dt; const d = Math.hypot(nx, nz); if (d < 2.6 && d > 1.85) { P.x = nx; P.z = nz; P.moving = true; P.fx = mv[0]; P.fz = mv[1]; } else P.goal = null;
-      const r1 = Math.hypot(P.x, P.z); if (r1 > 2.2 && (mv[0]*P.x + mv[1]*P.z)/r1 > .2) { let da = Math.atan2(P.z, P.x) - A_L; da = Math.atan2(Math.sin(da), Math.cos(da)); if (Math.abs(da) < .6) startClimb(false); } } if (P.mode === 'top') P.y = TREE_H; }
+  if (P.mode === 'top') { if (mv) { P.topGoal = null; const nx = P.x + mv[0]*SPEED*.8*dt, nz = P.z + mv[1]*SPEED*.8*dt; const d = Math.hypot(nx, nz); if (d < 2.2 && d > .7) { P.x = nx; P.z = nz; P.moving = true; P.fx = mv[0]; P.fz = mv[1]; } else P.goal = null;
+      const r1 = Math.hypot(P.x, P.z); if (flags.sl >= 5 && r1 > 1.9 && (mv[0]*P.x + mv[1]*P.z)/r1 > .2) { let da = Math.atan2(P.z, P.x) - A_L; da = Math.atan2(Math.sin(da), Math.cos(da)); if (Math.abs(da) < .6) startClimb(false); } } if (P.mode === 'top') P.y = TREE_H; }
   if (P.mode === 'climb') updateClimb(dt);
   if (P.mode === 'ground') P.y = 0;
   /* 징검다리 위 */
@@ -731,6 +841,7 @@ function step(dt){
   frogs.forEach((f, i) => { f.t -= dt; if (f.t < 0) { f.t = 2.5 + hash(t + i)*3; const ok = stones.map((s, k) => k).filter(k => stones[k].ok && k !== P.stone && frogs.every(o => o === f || o.at !== k)); f.from = f.at >= 0 ? f.at : ok[0]; f.at = ok[Math.floor(hash(t*7 + i)*ok.length)]; f.hop = 0; }
     const a = stones[f.from ?? f.at], b = stones[f.at]; if (!b) return; f.hop = Math.min(1, (f.hop ?? 1) + dt*2.2); const k = f.hop; f.b.at(a.x + (b.x - a.x)*k, .08 + Math.sin(k*Math.PI)*.5, a.z + (b.z - a.z)*k); });
   /* 큰 나무 */
+  updateSloth(dt, t);
   cradleKick = Math.max(0, cradleKick - dt*.4); { const sw = Math.sin(t*1.1)*.06 + Math.sin(t*5)*cradleKick*.2; cradle.at(3.0 + sw, 1.0, 5.0); cradleGown.at(3.0 + sw, 1.62, 5.0); cradleGown.visible = !flags.gown; }
   mailbox.upd();
   flowers.forEach(f => f.visible = true);
@@ -789,10 +900,10 @@ function step(dt){
   CAM.manual = Math.max(0, (CAM.manual || 0) - dt);
   if (P.moving && !CAM.manual) { const want = Math.atan2(-P.fx, -P.fz); let d = want - CAM.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); CAM.yaw += d*Math.min(1, dt*(P.mode === 'climb' ? 2.6 : 1.1)); }
   let cd = P.mode === 'top' ? 3.2 : CAM.dist; const chh = P.mode === 'top' ? 1.9 : CAM.h;
-  if (P.mode !== 'top') for (let k = 0; k < 30 && Math.hypot(P.x + Math.sin(CAM.yaw)*cd, P.z + Math.cos(CAM.yaw)*cd) < TRUNK_R + 1.0; k++) cd -= .2;
-  const wx = P.x + Math.sin(CAM.yaw)*cd, wz = P.z + Math.cos(CAM.yaw)*cd, wy = P.y + chh;
+  let wx = P.x + Math.sin(CAM.yaw)*cd, wz = P.z + Math.cos(CAM.yaw)*cd; const wy = P.y + chh;
+  if (P.mode !== 'top' && P.y < 3) { const rr = Math.hypot(wx, wz); if (rr < TRUNK_R + 1) { wx *= (TRUNK_R + 1)/(rr || 1); wz *= (TRUNK_R + 1)/(rr || 1); } }
   CAM.x += (wx - CAM.x)*Math.min(1, dt*4); CAM.y += (wy - CAM.y)*Math.min(1, dt*4); CAM.z += (wz - CAM.z)*Math.min(1, dt*4);
-  camera.position.set(CAM.x, CAM.y, CAM.z); { const [fx, fz] = camFwd(), ah = P.mode === 'top' ? 2 : 3; camera.lookAt(P.x + fx*ah, P.y + (P.mode === 'top' ? .55 : 1.05), P.z + fz*ah); } U.uPlayer.value.set(P.x, P.y, P.z);
+  camera.position.set(CAM.x, CAM.y, CAM.z); { const [fx, fz] = camFwd(), ah = P.mode === 'top' ? 2 : 3; CAM.up = (CAM.up || 0) + ((CAM.lookUp || 0) - (CAM.up || 0))*Math.min(1, dt*.8); camera.lookAt(P.x + fx*ah, P.y + (P.mode === 'top' ? .55 : 1.05) + CAM.up*2.4, P.z + fz*ah); } U.uPlayer.value.set(P.x, P.y, P.z);
   hintT -= dt; if (hintT <= 0) document.getElementById('hint').style.display = 'none';
   saveT += dt; if (saveT > 2) { saveT = 0; S.x = P.mode === 'ground' ? P.x : S.x; S.z = P.mode === 'ground' ? P.z : S.z; save(); }
 }
