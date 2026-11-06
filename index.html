@@ -289,6 +289,12 @@ REGIONS.forEach((rg, i) => {
 { const bs = SITES.find(q => q.key === 'butterflies'), pts = REGIONS[0].pts, p = pts.find(([x, y]) => wdist(x, y, FIRE.x, FIRE.y) > 10) || pts[0];   // 오두막 가는 길 3분의 1쯤
   for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) setT(bs.x + dx, bs.y + dy, FLOOR);   // 옛 자리의 돌은 치움
   const x = Math.floor(p[0] + 6.5), y = Math.floor(p[1]); bs.x = x; bs.y = y; bs.cx = x + 1; bs.cy = y + 1; clear(x + 1, y + 1, 2.8); }   // 나비 공터엔 돌제단 없이 트인 풀밭
+// 빨래 터 (2장): 동쪽 꽃숲 길가 오솔길 끝으로 옮김. 높은 가지에 하늘로 날아가던 이불 한 장이 걸려 있음 (범선의 첫 돛)
+{ const rs = SITES.find(q => q.key === 'rising'), pts = REGIONS[1].pts, h = REGIONS[1].hub;
+  for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) setT(rs.x + dx, rs.y + dy, FLOOR);   // 옛 자리의 돌은 치움
+  let best = null; for (const side of [7, -7, 5, -5]) { const p = pts.find(([x, y]) => wdist(x, y, h.x, h.y) < 15) || pts[pts.length - 1], q = pts[Math.max(0, pts.indexOf(p) - 4)], dx = wd(p[0] - q[0], W), dy = wd(p[1] - q[1], H), l = Math.hypot(dx, dy) || 1, cx = p[0] - dy/l*side, cy = p[1] + dx/l*side;
+    let ok = true; for (let yy = -3; yy <= 3 && ok; yy++) for (let xx = -3; xx <= 3 && ok; xx++) { const t = type[id(Math.floor(cx) + xx, Math.floor(cy) + yy)]; if (t === WATER || t === RUIN) ok = false; } if (ok) { best = [cx, cy]; break; } }
+  const [cx, cy] = best || [h.x - 9, h.y - 9]; rs.x = Math.floor(cx) - 1; rs.y = Math.floor(cy) - 1; rs.cx = rs.x + 1; rs.cy = rs.y + 1; clear(rs.cx, rs.cy, 3); }
 // 나비 길잡이: 공터에서 덤불 너머 숨은 빈터까지 풀이 눌린 가는 길 (큰길에선 안 보임). 나비가 서너 번 내려앉으며 데려감
 { const bs = SITES.find(q => q.key === 'butterflies'); let best = null;
   for (let t = 0; t < 16 && !best; t++) { const a = t*.785 + .3, r = 9 + (t >> 3)*2, gx = bs.cx + Math.cos(a)*r, gy = bs.cy + Math.sin(a)*r; let ok = true;
@@ -1172,9 +1178,12 @@ for (const key of [...Object.keys(NEAR_RING), ...STORY_KEYS.filter(k => !NEAR_RI
 if (REGIONS[3].temple) VISTA_CLEAR.push({ x:REGIONS[3].temple.cx + .5, y:REGIONS[3].temple.cy + .5, r:5.8 }, { x:REGIONS[3].temple.cx + 7.2, y:REGIONS[3].temple.cy - 2, r:1.6 });
 VISTA_CLEAR.push(...STORY_SPOTS.map(s => ({ x:s.x, y:s.y, r:s.key === 'galleon' ? 4.1 : s.key === 'piano' ? 3 : 1.5 })));
 // 거울 연못: 물을 넓혀 둘레를 걸을 수 있게
-{ const m = SITE.mirror; clear(m.cx, m.cy, 4.4);
-  for (let y = Math.floor(m.cy - 3); y <= m.cy + 3; y++) for (let x = Math.floor(m.cx - 3); x <= m.cx + 3; x++) if (Math.hypot(x + .5 - m.cx, y + .5 - m.cy) < 1.95) setT(x, y, WATER);
-  VISTA_CLEAR.push({ x:m.cx, y:m.cy, r:4.2 }); }
+// 거울 연못 (2장): 물에 비친 징검돌만 보이고 진짜 돌은 안 보임. 비친 자리만 디디면 가운데 바위(돛)까지 건넘. 다른 데를 디디면 첨벙, 기슭으로
+const POND_FAKE = new Uint8Array(W*H);   // 겉보기엔 물이지만 디딜 수 있는 칸 (빠지면 기슭으로 돌려보냄)
+{ const m = SITE.mirror, ox = Math.floor(m.cx), oy = Math.floor(m.cy); clear(m.cx, m.cy, 5.6);
+  m.stones = [[0, 3], [0, 2], [-1, 2], [-1, 1], [0, 1]]; m.ox = ox; m.oy = oy;
+  for (let y = oy - 5; y <= oy + 5; y++) for (let x = ox - 5; x <= ox + 5; x++) { const d = Math.hypot(x + .5 - (ox + .5), y + .5 - (oy + .5)); if (d < 3.3 && !(x === ox && y === oy)) { setT(x, y, FLOOR); POND_FAKE[id(x, y)] = 1; } }
+  VISTA_CLEAR.push({ x:m.cx, y:m.cy, r:5.4 }); }
 
 // 지름길 둘레길: 장을 풀 때마다 그 지역에서 다음 장 지역으로 바로 가는 길이 열림 (처음엔 덩굴 휘장이 막고 있음)
 //   북 오두막 → 동 범선 → 남 물가 → 서 폐허 → 북서 꽃봉오리
@@ -1226,7 +1235,7 @@ const GPX = 8, gcv = document.createElement('canvas'); gcv.width = W*GPX; gcv.he
   const tint = (b, tbl, rw) => { const c = b.slice(); rw.forEach((w, i) => { for (let j = 0; j < 3; j++) c[j] += (tbl[i][j] - b[j])*w; }); return `rgb(${c.map(v => v | 0).join(',')})`; };
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const k = id(x,y), t0 = type[k], t = t0 === BUSH && TRAIL_EDGE[k] ? FLOOR : t0, rw = (t === FLOOR || t === BUSH) ? regionW(x + .5, y + .5) : null;
-    g.fillStyle = t === FLOOR && TRAIL[k] ? '#8a744c' : t === FLOOR ? tint(BF, RGF, rw) : t === BUSH ? tint(BB, RGB_, rw) : base[t]; g.fillRect(x*GPX, y*GPX, GPX, GPX);
+    g.fillStyle = POND_FAKE[k] ? COLORS.water : t === FLOOR && TRAIL[k] ? '#8a744c' : t === FLOOR ? tint(BF, RGF, rw) : t === BUSH ? tint(BB, RGB_, rw) : base[t]; g.fillRect(x*GPX, y*GPX, GPX, GPX); if (POND_FAKE[k]) continue;
     if (t === FLOOR && TRAIL[k]) { g.fillStyle = 'rgba(40,30,18,.3)'; if (hash(k*41) < .5) g.fillRect(x*GPX + 2, y*GPX + 2, 2, 2); if (hash(k*43) < .12) { g.fillStyle = '#9a8c6a'; g.beginPath(); g.ellipse(x*GPX + 4, y*GPX + 4, 1.5, 1, hash(k*45)*3, 0, Math.PI*2); g.fill(); } continue; }
     if (t === FLOOR && rw && rw[1] > .4 && hash(k*47) < .45) { g.fillStyle = '#e8a0b4'; g.fillRect(x*GPX + 3, y*GPX + 2, 2, 2); }   // 꽃숲: 떨어진 꽃잎
     if (t === FLOOR && rw && rw[3] > .4 && hash(k*49) < .35) { g.fillStyle = '#8a8670'; g.fillRect(x*GPX + 1, y*GPX + 4, 4, 3); }   // 폐허: 돌 부스러기
@@ -2230,9 +2239,13 @@ const REFLECT_TEX = ctex(256, 256, (g, w, h) => {
   g.fillStyle = 'rgba(255,255,255,.18)'; for (let i = 0; i < 7; i++) g.fillRect(40 + (i*37) % 170, 150 + i*12, 50, 2);   // 잔물결 빛
   g.restore();
 });
+const STONEREF_TEX = ctex(256, 256, (g) => { const S = 256/6.8, at = (dx, dy) => [128 + (dx + .5)*S, 128 + (dy + .5)*S];   // 물에만 비치는 징검돌 (진짜 돌은 안 보임) — 돌지 않는 판에 따로
+  for (const [dx, dy] of MR.stones || []) { const [x, y] = at(dx, dy); g.fillStyle = 'rgba(40,52,58,.5)'; g.beginPath(); g.ellipse(x, y, S*.36, S*.26, .2, 0, Math.PI*2); g.fill(); g.strokeStyle = 'rgba(220,235,240,.45)'; g.lineWidth = 2; g.beginPath(); g.ellipse(x, y - 2, S*.3, S*.16, .2, Math.PI*1.1, Math.PI*1.9); g.stroke(); }
+  const [cx, cy] = at(0, 0); g.fillStyle = 'rgba(40,52,58,.55)'; g.beginPath(); g.ellipse(cx, cy, S*.55, S*.42, 0, 0, Math.PI*2); g.fill(); });
 const pond = new THREE.Group(); scene.add(pond);
-const reflect = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 4.6), mat(REFLECT_TEX, false, { alphaTest:.1, transparent:true, opacity:.92, depthWrite:false }));
+const reflect = new THREE.Mesh(new THREE.PlaneGeometry(6.8, 6.8), mat(REFLECT_TEX, false, { alphaTest:.1, transparent:true, opacity:.92, depthWrite:false }));
 reflect.rotation.x = -Math.PI/2; reflect.position.y = .03; reflect.renderOrder = 1; pond.add(reflect);
+const stoneRef = new THREE.Mesh(new THREE.PlaneGeometry(6.8, 6.8), new THREE.MeshBasicMaterial({ map:STONEREF_TEX, transparent:true, depthWrite:false })); stoneRef.rotation.x = -Math.PI/2; stoneRef.renderOrder = 2; scene.add(stoneRef);
 const pondMoon = new THREE.Mesh(new THREE.PlaneGeometry(.8, .8), new THREE.MeshBasicMaterial({ map:MOON_TEX, transparent:true, depthWrite:false, opacity:0 }));
 pondMoon.rotation.x = -Math.PI/2; pondMoon.position.set(.2, .04, -.9); pondMoon.renderOrder = 2; pond.add(pondMoon);
 const RING_TEX = ctex(64, 64, (g) => { g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 3; g.beginPath(); g.arc(32, 32, 28, 0, Math.PI*2); g.stroke(); });
@@ -2294,7 +2307,7 @@ function updateScenes(dt, camX, camZ, nt, storm){
   }
   // 거울 연못
   { const [px, pz] = wrapNear(MR.cx, MR.cy, camX, camZ);
-    pond.position.set(px, 0, pz); pond.rotation.y = Math.atan2(camX - px, camZ - pz);
+    pond.position.set(px, 0, pz); pond.rotation.y = Math.atan2(camX - px, camZ - pz); stoneRef.position.set(px, .036, pz); stoneRef.material.opacity = .55 + Math.sin(clock*.8)*.15;
     REFLECT_TEX.offset.x = Math.sin(clock*.5)*.006; REFLECT_TEX.offset.y = Math.sin(clock*.37)*.004;
     reflect.material.color.setRGB(.55 + .45*day, .6 + .4*day, .75 + .25*day);
     pondMoon.material.opacity = nt > .5 ? .8*(nt - .5)*2 : .15;
@@ -3442,6 +3455,36 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
       beacon.visible = st < 2 && d > 6 && d < 40; if (beacon.visible) { const [x, z] = wrapNear(C.x, C.z, camX, camZ); beacon.position.set(x, 4, z); beacon.lookAt(camera.position); beacon.material.opacity = .22 + Math.sin(clock*.8)*.06; } };
     PUZZLES.push(FL); }
 
+  /* 2장 빨래 터: 높은 가지에 걸린 흰 이불(첫 돛). 몇 초마다 숲을 쓸고 가는 바람에 이불이 가지에서 들릴 때 빨랫줄을 당기면 툭 떨어짐 */
+  { const rs = SITE.rising, LD = { id:'laundry', x:rs.cx, y:rs.cy, done:2, fallT:-99, thumb:() => window.SAIL_ROLL_T && window.SAIL_ROLL_T.image }, SH = { x:wrapX(rs.cx + .6), z:wrapY(rs.cy - 1.4) }, LINE = { x:rs.cx, z:wrapY(rs.cy + .2) };
+    const SHEET_T = ctex(128, 96, (g) => { g.fillStyle = '#f6f0e0'; g.strokeStyle = '#8a7a5a'; g.lineWidth = 3; g.beginPath(); g.moveTo(10, 8); g.quadraticCurveTo(64, 20, 118, 6); g.quadraticCurveTo(124, 50, 112, 90); g.quadraticCurveTo(64, 78, 16, 92); g.quadraticCurveTo(2, 50, 10, 8); g.fill(); g.stroke(); g.strokeStyle = 'rgba(138,122,90,.3)'; for (const x of [40, 64, 88]) { g.beginPath(); g.moveTo(x, 16); g.quadraticCurveTo(x + 4, 50, x, 84); g.stroke(); } });
+    const sheet = cutout(plane(1.4, 1.05, false), mat(SHEET_T)), limb = cutout(plane(2.6, .3, false), mat(LOG_TEX)), posts = [-1.3, 1.3].map(() => cutout(plane(.16, 1.8), mat(LOG_TEX))), rope = cutout(plane(2.6, .04, false), new THREE.MeshBasicMaterial({ color:'#d8cfb0' }));
+    const gust = (x, z) => Math.pow(Math.max(0, Math.sin((x*.8 + z*.6)*.09 - clock*.55)), 10);   // 숲을 쓸고 가는 바람 물결 (풀과 나무가 흔들리는 것과 같은 박자)
+    LD.targets = () => { const st = pzStep(LD), L = [];
+      if (st === 0) L.push({ key:'pz-line', noSeen:true, x:LINE.x, h:1.5, z:LINE.z, reach:3, me:rope, act:() => { const [x, z] = wrapNear(SH.x, SH.z, camera.position.x, camera.position.z);
+        if (gust(x, z) > .3) { LD.fallT = clock; setPzStep(LD, 1); pzSfx.rope(.08); } else { LD.twang = clock; tick(220, .25, .06, 'triangle'); } } });   // 바람에 들렸을 때 당기면 빠짐, 아니면 줄만 퉁
+      if (st === 1 && clock - LD.fallT > 1.2) L.push({ key:'pz-sheet', noSeen:true, x:LINE.x, h:.2, z:LINE.z, reach:2.6, me:sheet, act:() => { pzSave.carry = (pzSave.carry || 0) + 1; savePz(); paintBag(); pickFx.push({ img:SHEET_T.userData.canvas, x:LINE.x, z:LINE.z, t:clock }); pickChime(); setPzStep(LD, 2); } });
+      return L; };
+    LD.update = (dt, camX, camZ) => { const st = pzStep(LD), [sx, sz] = wrapNear(SH.x, SH.z, camX, camZ), gu = gust(sx, sz), [lx, lz] = wrapNear(LINE.x, LINE.z, camX, camZ), ang = Math.atan2(camX - lx, camZ - lz);
+      limb.position.set(sx, 3.9, sz); limb.lookAt(camera.position.x, 3.9, camera.position.z);
+      posts.forEach((m, j) => { m.position.set(lx + Math.cos(ang)*(j ? 1.3 : -1.3), 0, lz - Math.sin(ang)*(j ? 1.3 : -1.3)); m.rotation.y = ang; });
+      rope.position.set(lx, 1.6 + (clock - (LD.twang || -9) < .5 ? Math.sin((clock - LD.twang)*40)*.04 : 0), lz); rope.rotation.y = ang;
+      sheet.visible = st < 2; if (st === 0) { sheet.position.set(sx, 3.3 + gu*.5, sz); sheet.lookAt(camera.position.x, 3.3, camera.position.z); sheet.rotation.z = Math.sin(clock*3)*.05 + gu*.35; sheet.scale.set(1, 1 - gu*.3, 1); }   // 바람이 오면 가지에서 들려 펄럭
+      else if (st === 1) { const k = Math.min(1, (clock - LD.fallT)/1.2); sheet.position.set(sx + (lx - sx)*k, 3.3*(1 - k*k) + .25, sz + (lz - sz)*k); sheet.lookAt(camera.position.x, sheet.position.y, camera.position.z); sheet.rotation.z = Math.sin(k*9)*.4*(1 - k); if (k >= 1 && !LD.landed) { LD.landed = true; popAt(LINE.x, LINE.z, .3); } if (k >= 1) sparkleWhile(LINE.x, LINE.z, LD.on ??= () => pzStep(LD) === 1); }
+      if (st === 0 && wdist(P.x, P.y, rs.cx, rs.cy) < 14) { if (gu > .25 && !LD.wh) { LD.wh = true; sfx((ac, t) => { const src = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = noiseBuf(ac, 1.6); bp.type = 'bandpass'; bp.frequency.value = 500; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.06, t + .4); g.gain.exponentialRampToValueAtTime(.0001, t + 1.5); src.connect(bp).connect(g).connect(ac.destination); src.start(t); src.stop(t + 1.6); }); } if (gu < .05) LD.wh = false; } };   // 바람 소리: 휘잉
+    PUZZLES.push(LD); }
+
+  /* 2장 거울 연못: 물 위엔 징검돌 그림자만 비침. 비친 자리만 디디면 가운데 바위까지 — 둘째 돛. 다른 데를 디디면 첨벙, 기슭으로 */
+  { const m = SITE.mirror, MP = { id:'mirror', x:m.cx, y:m.cy, done:2, thumb:() => window.SAIL_ROLL_T && window.SAIL_ROLL_T.image }, ST = new Set(m.stones.map(([a, b]) => id(m.ox + a, m.oy + b))), ROCK = { x:m.ox + .5, z:m.oy + .5 }, SHORE = { x:m.ox + .5, z:m.oy + 4.6 };
+    const rockM = cutout(plane(1.1, .55), mat(ctex(96, 48, (g) => { g.fillStyle = '#7a7666'; g.strokeStyle = RG.line; g.lineWidth = 3; g.beginPath(); g.ellipse(48, 30, 44, 16, 0, 0, Math.PI*2); g.fill(); g.stroke(); }))), rollM = cutout(plane(.7, .35), mat(window.SAIL_ROLL_T));
+    const splash = () => sfx((ac, t) => { const src = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = noiseBuf(ac, 1); bp.type = 'bandpass'; bp.frequency.value = 800; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.14, t + .03); g.gain.exponentialRampToValueAtTime(.0001, t + .9); src.connect(bp).connect(g).connect(ac.destination); src.start(t); src.stop(t + 1); });
+    MP.targets = () => pzStep(MP) >= 1 ? [] : [{ key:'pz-roll', noSeen:true, x:ROCK.x, h:.6, z:ROCK.z, reach:1.6, me:rollM, act:() => { pzSave.carry = (pzSave.carry || 0) + 1; savePz(); paintBag(); pickFx.push({ img:window.SAIL_ROLL_T.userData.canvas, x:ROCK.x, z:ROCK.z, t:clock }); pickChime(); setPzStep(MP, 1); } }];
+    MP.update = (dt, camX, camZ) => { place(rockM, ROCK, 0, camX, camZ); rollM.visible = pzStep(MP) < 1; if (rollM.visible) place(rollM, ROCK, .45, camX, camZ);
+      const k = id(Math.floor(P.x), Math.floor(P.y));
+      if (POND_FAKE[k] && !ST.has(k) && !(clock - (MP.dunkT || -9) < 1.2)) { MP.dunkT = clock; splash(); popFx.push({ x:P.x, z:P.y, h:.05, t:clock }); P.goto = null; keys.clear(); setTimeout(() => { P.x = SHORE.x; P.y = SHORE.z; }, 350); }   // 비친 데가 아닌 곳: 첨벙 빠졌다가 기슭으로
+    };
+    PUZZLES.push(MP); }
+
   /* 2장 범선 (첫 모양): 동쪽 꽃숲에 기울어 묻힌 범선. 배 밑창에 물이 가득 차 있음. 수달 탈을 쓰고 들여다보면 물속으로 들어가 밑창 마개를 뽑음 → 물이 빠지며 남쪽 물가로 가는 물길이 드러남
         (나중에 배 안을 걸어 다니는 큰 퍼즐로 키울 자리) */
   { const gs = spot('galleon'), GL = { id:'galleon', x:gs.x, y:gs.z, done:1, thumb:() => STORIES.find(q => q.key === 'galleon').me.material.map.image };
@@ -3455,16 +3498,18 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     const PLUG_T = ctex(64, 64, (g) => { g.fillStyle = '#7a5530'; g.strokeStyle = '#2a1808'; g.lineWidth = 3; g.fillRect(16, 24, 32, 30); g.strokeRect(16, 24, 32, 30); g.fillStyle = '#c8a24a'; g.beginPath(); g.arc(32, 18, 9, 0, Math.PI*2); g.fill(); g.stroke(); });
     const hatchM = cutout(plane(1.0, .8), mat(HATCH_T));
     const splash = () => sfx((ac, t) => { const src = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = noiseBuf(ac, 1); bp.type = 'bandpass'; bp.frequency.value = 900; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.12, t + .03); g.gain.exponentialRampToValueAtTime(.0001, t + .8); src.connect(bp).connect(g).connect(ac.destination); src.start(t); src.stop(t + 1); });
-    GL.targets = () => pzStep(GL) >= 1 || GL.diveT ? [] : [{ key:'pz-hatch', noSeen:true, x:HATCH.x, h:.4, z:HATCH.z, reach:3, me:hatchM, act:() => {
+    const righted = () => (pzSave.hung || 0) >= 2, gal = STORIES.find(q => q.key === 'galleon');   // 돛 둘을 달면 바람을 받아 기울었던 배가 일어서고, 물에 잠겨 있던 밑창 문이 드러남
+    window.GAL_TILT = () => { if (!righted()) return .12; if (GL.upT == null) GL.upT = clock; const k = Math.min(1, (clock - GL.upT)/3); if (k < 1 && !GL.creak) { GL.creak = true; for (let i = 0; i < 6; i++) setTimeout(() => tick(90 + Math.random()*40, .4, .05, 'sawtooth'), i*450); } return .12*(1 - k*k*(3 - 2*k)); };
+    GL.targets = () => !righted() ? [{ key:'pz-mast', noSeen:true, x:gs.x, h:3.5, h0:1.5, h1:6, z:gs.z, reach:6, act:() => { if (pzSave.carry > 0) hangSail(); else { want(window.SAIL_ROLL_T, gs.x, 6.5, gs.z); pzSfx.rope(.04); } } }] : pzStep(GL) >= 1 || GL.diveT || (gal && Math.abs(gal.me.rotation.z) > .02) ? [] : [{ key:'pz-hatch', noSeen:true, x:HATCH.x, h:.4, z:HATCH.z, reach:3, me:hatchM, act:() => {
       if (pzSave.mask !== 'otter') { want(MASK_TEX.otter[1], HATCH.x, 1.4, HATCH.z); tick(200, .3, .05, 'sine'); return; }   // 물이 차서 못 들어감 → 수달 탈을 떠올림
       GL.diveT = clock; GL.dx = P.x; GL.dz = P.y; keys.clear(); splash(); } }];
     GL.update = (dt, camX, camZ) => { const st = pzStep(GL);
-      { const [x, z] = wrapNear(HATCH.x, HATCH.z, camX, camZ); hatchM.position.set(x, .02, z); face(hatchM, x, z, camX, camZ); hatchM.material.map = st >= 1 || (GL.outT && clock - GL.outT > 3) ? DRAIN_T : HATCH_T; }
+      { const [x, z] = wrapNear(HATCH.x, HATCH.z, camX, camZ); hatchM.visible = righted() && !(gal && Math.abs(gal.me.rotation.z) > .02); hatchM.position.set(x, .02, z); face(hatchM, x, z, camX, camZ); hatchM.material.map = st >= 1 || (GL.outT && clock - GL.outT > 3) ? DRAIN_T : HATCH_T; }
       if (GL.diveT && !GL.outT) { const e = clock - GL.diveT; P.x = GL.dx; P.y = GL.dz; P.diveUntil = clock + .1;   // 물속에서 마개를 찾는 중: 거품이 보글보글
         if (e > 2.6) { GL.outT = clock; P.diveUntil = 0; splash(); pickFx.push({ img:PLUG_T.userData.canvas, x:HATCH.x, z:HATCH.z, t:clock }); popAt(HATCH.x, HATCH.z, .5);
           for (let i = 0; i < 14; i++) setTimeout(() => tick(110 + Math.random()*70, .3, .06*Math.max(.2, 1 - wdist(P.x, P.y, HATCH.x, HATCH.z)/12), 'sine'), i*220);   // 콸콸
           setTimeout(() => { setPzStep(GL, 1); pzSfx.chime(.1); }, 3400); } } };
-    GL.overlay = () => { const st = pzStep(GL), s = toScreen(HATCH.x, .1, HATCH.z); if (!s || wdist(P.x, P.y, HATCH.x, HATCH.z) > 14) return;
+    GL.overlay = () => { const st = pzStep(GL), s = toScreen(HATCH.x, .1, HATCH.z); if (!s || !hatchM.visible || wdist(P.x, P.y, HATCH.x, HATCH.z) > 14) return;
       ctx.strokeStyle = 'rgba(170,220,235,.85)'; ctx.lineWidth = 2;
       if (st < 1 && !GL.outT) for (let i = 0; i < 3; i++) { const k = (clock*.9 + i/3) % 1; ctx.globalAlpha = 1 - k; ctx.beginPath(); ctx.moveTo(s[0] - 14 + i*14, s[1] + 2 + k*14); ctx.lineTo(s[0] - 14 + i*14, s[1] + 8 + k*14); ctx.stroke(); }   // 가장자리로 졸졸
       if (GL.diveT && !GL.outT) { ctx.fillStyle = 'rgba(220,245,250,.85)'; for (let i = 0; i < 8; i++) { const k = ((clock - GL.diveT)*1.3 + i/8) % 1; ctx.globalAlpha = 1 - k; ctx.beginPath(); ctx.arc(s[0] + Math.sin(i*2.3 + clock*3)*12, s[1] - 18 - k*50, 2 + (i % 3), 0, Math.PI*2); ctx.fill(); } }   // 거품
@@ -4166,7 +4211,7 @@ function draw(dt = .016){
   oldman.rotation.y = yaw;
   const face = me => { me.rotation.y = Math.atan2(camX - me.position.x, camZ - me.position.z); };
   ALTARS.forEach(face); TIGERS.forEach(face); MONKEYS.forEach(face); critters.forEach(c => face(c.me));
-  for (const st of STORIES) { face(st.me); if (st.key === 'swing') st.me.rotation.z = Math.sin(clock*.8)*.12; }
+  for (const st of STORIES) { face(st.me); if (st.key === 'swing') st.me.rotation.z = Math.sin(clock*.8)*.12; if (st.key === 'galleon' && window.GAL_TILT) st.me.rotation.z = window.GAL_TILT(); }   // 범선: 돛 둘을 달기 전엔 기울어 있음
   updateChair(dt); updateLamp(nt, camX, camZ);
   // 이불, 나비, 흩날리는 잎, 반딧불, 재규어 눈 (공터 나비 떼는 구슬 퍼즐을 푼 뒤에만: 그 전엔 구슬 위 나비가 눈에 띄게)
   sheetMeshes.forEach((me, i) => { const s = sheets[i]; me.visible = !!s; if (s) { me.position.set(s.x + Math.sin(clock + i)*.3 + (s.h - 1)*.15, s.h, s.z); me.rotation.set(0, yaw, Math.sin(clock*2 + i)*.25); me.scale.setScalar(1 + s.h*.05); proj(me, false); } });
