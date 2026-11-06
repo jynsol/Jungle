@@ -429,7 +429,7 @@ const chick = bill(T.chick, .5, .5, NX, TREE_H + .5, NZ, { near:0, push:.2 });
 /* 개울가 바위 다섯: 개구리가 한 마리씩. 조약돌 수가 노래 순서 */
 const NOTE_OF = [3, 0, 4, 1, 2], PEBBLES = [2, 4, 1, 5, 3], SONG = [0, 1, 2, 3, 4].sort((a, b) => PEBBLES[a] - PEBBLES[b]);
 const rockTex = n => ctex(96, 64, (g) => { g.fillStyle = '#6e6a5a'; g.strokeStyle = LINE; g.lineWidth = 2.5; g.beginPath(); g.ellipse(48, 44, 42, 18, 0, 0, 7); g.fill(); g.stroke(); g.fillStyle = '#e8e0c8'; for (let k = 0; k < n; k++) { g.beginPath(); g.arc(48 + (k - (n - 1)/2)*11, 48, 3.6, 0, 7); g.fill(); } });
-const FROGS = [27, 29, 31.6, 33.6, 35.6].map((x, i) => { const z = zs(x) + 3.15 + (i % 2)*.35; return { i, x, z, rock:bill(rockTex(PEBBLES[i]), .9, .6, x, 0, z, { near:0 }), b:bill(T.frog, .5, .38, x, .3, z, { near:0, push:.05 }), pop:-9, tilt:-9, leap:0 }; });
+const FROGS = [27, 29, 31.6, 33.6, 35.6].map((x, i) => { const z = zs(x) + 3.15 + (i % 2)*.35; return { i, x, z, rock:bill(rockTex(0), .9, .6, x, 0, z, { near:0 }), b:bill(T.frog, .5, .38, x, .3, z, { near:0, push:.05 }), pop:-9, tilt:-9, leap:0 }; });
 const PADS = [-35.45, -36.5, -37.55, -38.6, -39.65].map((z, i) => { const x = 31 + Math.sin(i*1.7)*.35, m = flat(T.pad, 1.25, 1.25, x, .05, z, 0, { center:true }); m.rotation.x = -Math.PI/2; return { x, z, m }; });
 const SB = [31, -33.6];
 const SONGS = { prog:0, melT:3, melI:-1, melStart:0 };
@@ -693,7 +693,7 @@ const HINT_ICON = {
   up:(g) => { g.drawImage(T.nest.userData.canvas, 12, 6, 72, 36); g.strokeStyle = '#3a2a1a'; g.lineWidth = 6; g.lineCap = 'round'; g.beginPath(); g.moveTo(48, 92); g.lineTo(48, 50); g.moveTo(34, 64); g.lineTo(48, 50); g.lineTo(62, 64); g.stroke(); },
   wear:(g) => { g.drawImage(T.mask.userData.canvas, 10, 10, 76, 76); },
   path:(g) => { for (let i = 0; i < 5; i++) g.drawImage(T.pflower.userData.canvas, 4 + i*16, 70 - i*14, 28, 28); },
-  stones:(g) => { [1, 4, 2, 5, 3].forEach((n, i) => g.drawImage(rockTex(n).userData.canvas, 4 + (i % 3)*30, 50 - Math.floor(i/3)*30, 34, 22)); g.drawImage(T.frog.userData.canvas, 50, 8, 40, 30); return; for (let i = 0; i < 4; i++) g.drawImage(T.stone.userData.canvas, 10 + (i % 2)*40, 70 - i*18, 36, 30); g.drawImage(T.frog.userData.canvas, 50, 40, 36, 26); }
+  stones:(g) => { [0, 0, 0, 0, 0].forEach((n, i) => g.drawImage(rockTex(n).userData.canvas, 4 + (i % 3)*30, 50 - Math.floor(i/3)*30, 34, 22)); g.drawImage(T.frog.userData.canvas, 50, 8, 40, 30); return; for (let i = 0; i < 4; i++) g.drawImage(T.stone.userData.canvas, 10 + (i % 2)*40, 70 - i*18, 36, 30); g.drawImage(T.frog.userData.canvas, 50, 40, 36, 26); }
 };
 function nextHint(){
   if (flags.maskOn) return 'path';
@@ -865,7 +865,7 @@ function step(dt){
     if (k >= 1) { P.jump = null; if (j.si === -1) { P.mode = 'ground'; P.stone = -1; P.y = 0; if (P.z < -40) flags.crossed = 1; } else { P.stone = j.si; const st = stones[j.si]; if (!st.ok) { st.sink = .001; } } } }
   /* 개구리: 가까이 있으면 몇 초마다 조약돌 순서대로 노래 */
   { const dC = Math.hypot(P.x - 31, P.z - (zs(31) + 3)); const solveK = flags.pads ? (SONGS.solveT ? (t - SONGS.solveT)/2.5 : 9) : -1;
-    if (!flags.pads && SONGS.melI < 0 && dC < 10 && (SONGS.melT -= dt) <= 0) { SONGS.melI = 0; SONGS.melT = 8; SONGS.melStart = t; }
+    if (!flags.pads && SONGS.melI < 0 && dC < 10 && (SONGS.melT -= dt) <= 0) { SONGS.melI = 0; SONGS.melT = 5; SONGS.melStart = t; }
     if (SONGS.melI >= 0 && t >= SONGS.melStart + SONGS.melI*.7) { const fi = SONG[SONGS.melI]; FROGS[fi].pop = t; snd.frog(NOTE_OF[fi], .14*Math.max(0, 1 - dC/14)); SONGS.melI++; if (SONGS.melI >= 5) SONGS.melI = -1; }
     FROGS.forEach((f, i) => { const pk = t - f.pop, puff = pk < .5 ? Math.sin(pk/.5*Math.PI)*.25 : 0, tk = t - f.tilt, tilt = tk < 1.2 ? Math.sin(tk*9)*.12*(1 - tk/1.2) : 0;
       if (solveK >= 0) { const k = Math.max(0, Math.min(1, solveK*5 - i)), pd = PADS[i]; f.b.at(f.x + (pd.x + .35 - f.x)*k, .3 + Math.sin(k*Math.PI)*1.2 - k*.22, f.z + (pd.z - f.z)*k); }
