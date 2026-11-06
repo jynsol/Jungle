@@ -985,8 +985,20 @@ const SPECIES = [
   } },
   { key:'sansevieria', w:.7, h:1.4, cw:144, ch:288, wt:.07, paint:(g, w, h, r) => {
     for (let i = 0; i < 8; i++) banded(g, w/2 + (r() - .5)*36, h - 2, 170 + r()*100, -Math.PI/2 + (i - 3.5)*.11 + (r() - .5)*.08, 16 + r()*5, i % 2 ? RG.dark : RG.mid);
+  } },
+  // 지역 고유 풀: 새벽 낮은 꽃밭, 황혼 마른 갈대, 밤 메리골드
+  { key:'flowerbed', w:1.05, h:.6, cw:256, ch:150, wt:.004, paint:(g, w, h, r) => {   // 새벽: 이슬 맺힌 낮은 꽃밭 (분홍·흰 작은 꽃)
+    for (let i = 0; i < 30; i++) blade(g, 20 + r()*(w - 40), h - 1, 40 + r()*60, -Math.PI/2 + (r() - .5)*1.1, 4 + r()*3, [RG.sage, RG.moss, RG.pale][i % 3], null);
+    for (let i = 0; i < 22; i++) { const x = 24 + r()*(w - 48), y = 30 + r()*(h - 70); g.fillStyle = ['#f3c6d4', '#fbeef2', '#e8a0bc', '#ffffff'][i % 4]; for (let k = 0; k < 5; k++) { g.beginPath(); g.arc(x + Math.cos(k*1.26)*5, y + Math.sin(k*1.26)*5, 4.2, 0, Math.PI*2); g.fill(); } g.fillStyle = '#f2d06a'; g.beginPath(); g.arc(x, y, 2.6, 0, Math.PI*2); g.fill(); }
+  } },
+  { key:'reed', w:.9, h:2.3, cw:176, ch:440, wt:.004, paint:(g, w, h, r) => {   // 황혼: 키 큰 마른 갈대, 끝에 깃털 같은 이삭
+    for (let i = 0; i < 14; i++) { const x = 20 + r()*(w - 40), top = 30 + r()*130, bend = (r() - .5)*40; g.strokeStyle = ['#c9a35a', '#b0884a', '#d8b878', '#9a7440'][i % 4]; g.lineWidth = 3 + r()*2; g.beginPath(); g.moveTo(x, h); g.quadraticCurveTo(x + bend*.4, (h + top)/2, x + bend, top); g.stroke();
+      g.fillStyle = 'rgba(232,206,160,.85)'; g.beginPath(); g.ellipse(x + bend, top - 18, 7, 26, bend*.01, 0, Math.PI*2); g.fill(); blade(g, x + bend*.3, h*.7, 60 + r()*40, -Math.PI/2 + (r() - .5)*1.2, 5, '#a88a50', null); }
+  } },
+  { key:'marigold', w:.8, h:.55, cw:200, ch:140, wt:.004, paint:(g, w, h, r) => {   // 밤: 메리골드 (죽은 이의 날의 주황 꽃)
+    for (let i = 0; i < 16; i++) blade(g, 20 + r()*(w - 40), h - 1, 40 + r()*40, -Math.PI/2 + (r() - .5)*1.2, 6, [RG.moss, RG.dark][i % 2], null);
+    for (let i = 0; i < 9; i++) { const x = 26 + r()*(w - 52), y = 26 + r()*(h - 60), R0 = 11 + r()*5; for (let k = 0; k < 14; k++) { g.fillStyle = ['#f08a1c', '#f6a830', '#e06a10'][k % 3]; g.beginPath(); g.ellipse(x + Math.cos(k*.45)*R0*.55, y + Math.sin(k*.45)*R0*.45, R0*.45, R0*.3, k*.45, 0, Math.PI*2); g.fill(); } g.fillStyle = '#c04a08'; g.beginPath(); g.arc(x, y, 3, 0, Math.PI*2); g.fill(); }
   } }
-
 ];
 const TREES = [
   { key:'palm', w:2.8, h:6.2, cw:256, ch:568, paint:(g, w, h, r) => {
@@ -1312,16 +1324,18 @@ ground.rotation.x = -Math.PI/2; ground.position.set(W/2, 0, H/2);
 const dummy = new THREE.Object3D();
 const SP_SUM = SPECIES.reduce((a, p) => a + p.wt, 0);
 const pickSpecies = u => { let acc = 0; for (let i = 0; i < SPECIES.length; i++) { acc += SPECIES[i].wt/SP_SUM; if (u < acc) return i; } return SPECIES.length - 1; };
-const RG_MULT = [
-  { broadleaf:2, banana:1.7, fern:1.3, lily:.5, whitespike:.5 },
-  { lily:3.2, whitespike:3, heartleaf:1.4, agave:.6 },
-  { fern:1.6, grass:1.6, heartleaf:1.3, sansevieria:.4 },
-  { sansevieria:3, agave:2.6, grass:1.4, banana:.4, broadleaf:.5 }
+const RG_MULT = [   // 지역마다 자라는 풀 (REGIONS 순서: 아침 오두막, 오후 범선 마을, 한낮 물가, 밤 폐허, 새벽, 황혼)
+  { broadleaf:2.2, banana:1.6, fern:1.4, lily:.4, whitespike:.4, flowerbed:3 },
+  { banana:2.6, heartleaf:1.6, lily:1.4, whitespike:1.6, grass:1.2, agave:.6, reed:8 },
+  { fern:2, lily:2.2, heartleaf:1.4, grass:1.4, sansevieria:.3, reed:10 },
+  { sansevieria:3, agave:2.6, grass:.9, banana:.2, broadleaf:.3, fern:.6, marigold:120 },
+  { grass:1.8, lily:1.6, fern:1.1, broadleaf:.5, banana:.4, agave:.3, flowerbed:160 },
+  { grass:1.4, agave:.6, broadleaf:.2, banana:.2, fern:.4, reed:220 }
 ];
 const SP_TABLES = [null, ...RG_MULT].map(m => { const ws = SPECIES.map(p => p.wt*((m && m[p.key]) || 1)), sum = ws.reduce((a, b) => a + b, 0); let acc = 0; return ws.map(w => acc += w/sum); });
 function pickSpeciesAt(u, k, j){
   const rw = regionW(k % W + .5, (k / W | 0) + .5); let v = hash(k*17 + j*5), ti = 0;
-  for (let i = 0; i < 4; i++) { if (v < rw[i]) { ti = i + 1; break; } v -= rw[i]; }
+  for (let i = 0; i < REGIONS.length; i++) { if (v < rw[i]) { ti = i + 1; break; } v -= rw[i]; }
   const T = SP_TABLES[ti]; for (let i = 0; i < T.length; i++) if (u < T[i]) return i; return T.length - 1;
 }
 const GRASS = SPECIES.findIndex(p => p.key === 'grass'), AGAVE = SPECIES.findIndex(p => p.key === 'agave'), FERN = SPECIES.findIndex(p => p.key === 'fern');
@@ -2080,6 +2094,22 @@ function drawTwinkles(){   // 덤불 속에서 가끔 반짝여서 찾을 수 �
 
 /* ---- 모닥불 연기: 나무 위로 높이 올라가서 멀리서도 보임 ---- */
 const SMOKE_TEX = ctex(64, 64, (g) => { const r = g.createRadialGradient(32, 32, 2, 32, 32, 32); r.addColorStop(0, 'rgba(255,255,255,.95)'); r.addColorStop(.6, 'rgba(255,255,255,.5)'); r.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64); });
+// 지역마다 공기 속에 떠다니는 것: 새벽 물안개, 아침 햇살 속 먼지, 오후 꽃가루, 황혼 마른 잎 (밤은 반딧불)
+const AIR_LEAF_T = ctex(32, 24, (g) => { g.fillStyle = '#c47a34'; g.beginPath(); g.ellipse(16, 12, 13, 7, .4, 0, Math.PI*2); g.fill(); g.strokeStyle = '#7a4418'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(4, 16); g.lineTo(28, 8); g.stroke(); });
+const AIR = [];
+for (let i = 0; i < 44; i++) { const kind = ['mist', 'mote', 'pollen', 'leaf'][i % 4];
+  const m = kind === 'mist' ? cutout(plane(2.6, 1.0, false), new THREE.MeshBasicMaterial({ map:SMOKE_TEX, transparent:true, depthWrite:false, opacity:0, color:'#fff4f6' }))
+    : kind === 'leaf' ? cutout(plane(.16, .12, false), mat(AIR_LEAF_T))
+    : cutout(plane(kind === 'mote' ? .04 : .05, kind === 'mote' ? .04 : .05, false), new THREE.MeshBasicMaterial({ map:GLOW_TEX, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0, color:kind === 'mote' ? '#fffbe8' : '#ffd86a' }));
+  AIR.push({ m, kind, ox:(hash(i*31) - .5)*16, oz:(hash(i*37) - .5)*16, ph:hash(i*41)*6.28, r:hash(i*43) }); }
+function updateAir(dt){
+  const w = regionW(P.x, P.y), wk = k => Math.min(1, w[RGI(k)] || 0), amt = { mist:wk('dawn')*(window.DAWN_FOG_LEFT ?? 1)*1.2, mote:wk('high'), pollen:wk('flower'), leaf:wk('dusk') };
+  for (const a of AIR) { const on = a.r < amt[a.kind]; a.m.visible = on; if (!on) continue; const t = clock + a.ph*10;
+    let x = P.x + ((a.ox + Math.sin(t*.07)*3 + 24) % 16) - 8, z = P.y + ((a.oz + Math.cos(t*.05)*3 + 24) % 16) - 8, y;
+    if (a.kind === 'mist') { y = .25 + Math.sin(t*.2)*.1; a.m.material.opacity = .35*Math.min(1, amt.mist); }   // 땅에 낮게 깔린 물안개
+    else if (a.kind === 'leaf') { const f = ((t*.12) % 1); y = 3.2 - f*3.1; x += Math.sin(t*1.3)*.4 + f*1.5; a.m.rotation.z = t*2; }   // 바람에 비스듬히 떨어지는 마른 잎
+    else { y = .6 + ((t*.03 + a.r) % 1)*2.2; x += Math.sin(t*.9)*.3; a.m.material.opacity = (.5 + .5*Math.sin(t*1.7))*(a.kind === 'mote' ? .55 : .8); }   // 빛 속에 떠도는 먼지·꽃가루
+    a.m.position.set(x, y, z); if (a.kind !== 'leaf') a.m.lookAt(camera.position); else { a.m.lookAt(camera.position); a.m.rotateZ(t*2); } } }
 const SMOKE_DAY = new THREE.Color('#ecebe2'), SMOKE_NIGHT = new THREE.Color('#8f8aa0');
 const smoke = Array.from({ length:30 }, (_, i) => {
   const m = new THREE.Mesh(plane(1, 1, false), new THREE.MeshBasicMaterial({ map:SMOKE_TEX, transparent:true, depthWrite:false, fog:false, opacity:.5 }));
@@ -4251,7 +4281,7 @@ function updateAmbience(dt, nt){
     amb.drone = drone;
   } catch (e) { amb = {}; }
   if (amb.cicadaL) {
-    amb.canopy.gain.setTargetAtTime(.09*quiet, t, .6);
+    { const rw = regionW(P.x, P.y), duskW = Math.min(1, rw[RGI('dusk')] || 0); amb.canopy.gain.setTargetAtTime(.09*quiet*(1 + duskW*1.8), t, .6); }   // 황혼: 갈대를 스치는 바람이 더 셈
     amb.cicadaL.gain.setTargetAtTime(.045*quiet*(.35 + day*.8), t, .6); amb.cicadaR.gain.setTargetAtTime(.035*quiet*(.35 + day*.8), t, .6);
     amb.insects.gain.setTargetAtTime(.03*quiet*(.4 + nt*1.2), t, .6);
     amb.drone.gain.setTargetAtTime(.012*quiet*(1 + nt*.8), t, 1.5);
@@ -4375,6 +4405,7 @@ function draw(dt = .016){
   hintButterflies(bf);
   bflyMeshes.forEach((me, i) => { const b = bf[i]; me.visible = !!b; if (b) { me.position.set(b[0], b[1], b[2]); me.rotation.y = yaw; me.scale.x = .3 + Math.abs(Math.sin(clock*16 + b[3]))*.9; } });
   leafMeshes.forEach((me, i) => { const p = parts[i]; me.visible = !!p; if (p) { me.position.set(p.x, p.h, p.y); me.rotation.set(0, yaw, p.rot); } });
+  updateAir(dt);
   fireflies.forEach(f => { f.me.visible = nt > .45; if (f.me.visible) { f.me.position.set(P.x + f.ox + Math.sin(clock*.5 + f.ph)*.8, .5 + Math.abs(Math.sin(clock*.8 + f.ph))*1.4, P.y + f.oz + Math.cos(clock*.4 + f.ph)*.8); if (f.me.position.distanceTo(camera.position) < 2.2) f.me.visible = false; } });   // 카메라 바로 앞 반딧불은 커다란 빛 덩어리로 보여서 숨김
   for (const e of EYES) {
     const d = wdist(e.me.position.x, e.me.position.z, P.x, P.y); face(e.me); face(e.mk);
