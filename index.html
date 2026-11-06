@@ -264,7 +264,7 @@ REGIONS.forEach((rg, i) => {
   for (let t = 3; t <= end; t += .25) {
     const wob = (Math.sin(t*.2 + ph)*4 + Math.sin(t*.47 + ph*2)*2.2)*Math.min(1, t/6), x = FIRE.x + ux*t + px*wob, y = FIRE.y + uy*t + py*wob; hx = x; hy = y;   // 꼬불꼬불
     (rg.pts || (rg.pts = [])).push([x, y]);
-    if (rg.key !== 'dawn' && t < end - 2.5) continue;   // 모닥불에서 바로 가는 길은 새벽(1장) 하나뿐. 다른 지역은 둘레길(큰길 한 줄)로만 이어짐 — 쓸데없는 갈림길 없음
+    if (rg.key !== 'dawn') continue;   // 큰길: 모닥불에서 새벽까지 한 줄, 거기서부터 둘레길 한 줄 (지역 가운데 = 큰 퍼즐 자리는 큰길 위)
     for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
       const tx = Math.floor(x) + dx, ty = Math.floor(y) + dy; if (Math.hypot(tx + .5 - x, ty + .5 - y) > (t % 7 < 2 ? 1.5 : 1.2)) continue;
       const k = id(tx, ty); if (type[k] === RUIN) continue; type[k] = FLOOR; TRAIL[k] = 1;
@@ -292,16 +292,36 @@ REGIONS.forEach((rg, i) => {
 // 이야기 자리들을 일생의 시간대에 맞는 지역으로: [지역, 지역 가운데에서 거리, 모닥불→지역 방향에서 비튼 각도(도)]
 const DRY = (x, y, r) => { for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { const t = type[id(Math.floor(x) + dx, Math.floor(y) + dy)]; if (t === WATER || t === RUIN) return false; } return true; };
 const PLACED = [];
+// 둘레 큰길 (새벽 → 아침 → 한낮 → 오후 → 황혼 → 밤): 지역 큰 퍼즐 자리를 차례로 잇는 한 줄. 장소를 놓기 전에 먼저 냄 (장소는 이 길을 따라 놓음)
+const SHORTCUTS = [];
+{ const node = p => { const dx = wd(p.x - FIRE.x, W), dy = wd(p.y - FIRE.y, H); return { a:Math.atan2(dx, -dy), r:Math.hypot(dx, dy) }; };
+  const ring = ['dawn', 'high', 'water', 'flower', 'dusk', 'ruin'].map(k => node(REGIONS[RGI(k)].hub));   // 새벽 → 아침 → 한낮 → 오후 → 황혼 → 밤 (큰 퍼즐은 큰길 위)   // 새벽 → 아침 → 한낮 → 오후 → 황혼 → 밤
+  for (let i = 0; i < ring.length - 1; i++) { const A = ring[i], B = ring[i + 1]; let da = B.a - A.a; while (da <= 0) da += Math.PI*2;
+    const pts = [], L = da*(A.r + B.r)/2;
+    for (let t = 0; t <= 1.0001; t += .25/L) { const a = A.a + da*t, r = A.r + (B.r - A.r)*t + (Math.sin(t*Math.PI*4 + i)*2.6 + Math.sin(t*Math.PI*9 + i*2)*1.1)*Math.sin(t*Math.PI), x = FIRE.x + Math.sin(a)*r, y = FIRE.y - Math.cos(a)*r; pts.push([x, y]);
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const tx = Math.floor(x) + dx, ty = Math.floor(y) + dy; if (Math.hypot(tx + .5 - x, ty + .5 - y) > 1.1) continue; const k = id(tx, ty); if (type[k] === RUIN) continue;
+        if (type[k] === WATER && (wdist(tx + .5, ty + .5, REGIONS[2].hub.x, REGIONS[2].hub.y) < 7.5)) continue;   // 연못·폭포 웅덩이·거울 연못은 건드리지 않음 (다른 물은 얕은 여울길로)
+        type[k] = FLOOR; TRAIL[k] = 1; } }
+    const gate = pts.find(([x, y]) => wdist(x, y, pts[0][0], pts[0][1]) > 5.5) || pts[2];   // 출발 지역 바로 바깥에 덩굴 휘장
+    const gtiles = []; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const tx = Math.floor(gate[0]) + dx, ty = Math.floor(gate[1]) + dy; if (Math.hypot(tx + .5 - gate[0], ty + .5 - gate[1]) < 1.9 && type[id(tx, ty)] === FLOOR) gtiles.push(id(tx, ty)); }
+    SHORTCUTS.push({ i, pts, gate:{ x:gate[0], z:gate[1] }, tiles:gtiles, open:null }); } }
 function spotIn(rk, dist, turn, keep = 6){ const rg = REGIONS[RGI(rk)], base = Math.atan2(wd(rg.hub.x - FIRE.x, W), -wd(rg.hub.y - FIRE.y, H));
   for (let k = 0; k < 60; k++) { const a = base + (turn + (k % 2 ? 1 : -1)*Math.ceil(k/2)*7)*Math.PI/180, d = dist + (k % 3 - 1)*1.5, x = rg.hub.x + Math.sin(a)*d, y = rg.hub.y - Math.cos(a)*d;
     if (DRY(x, y, 2) && !PLACED.some(q => wdist(q[0], q[1], x, y) < keep) && wdist(x, y, rg.hub.x, rg.hub.y) > 5) { PLACED.push([x, y]); return [wrapX(x), wrapY(y)]; } }
   const x = rg.hub.x + Math.sin(base + turn*Math.PI/180)*dist, y = rg.hub.y - Math.cos(base + turn*Math.PI/180)*dist; PLACED.push([x, y]); return [wrapX(x), wrapY(y)]; }
-{ const SITE_AT = { butterflies:['dawn', 9, -70], labels:['flower', 9, 70], rising:['water', 10, -75], mirror:['water', 12, -140], fork:['dusk', 9, -70], oldman:['dusk', 8, 60] };
+const approach = rk => { const n = ['dawn', 'high', 'water', 'flower', 'dusk', 'ruin'].indexOf(rk); return n <= 0 ? REGIONS[RGI('dawn')].pts : SHORTCUTS[n - 1].pts; };   // 그 지역 큰 퍼즐로 들어오는 큰길
+function nearRoad(rk, frac, side, keep = 5){   // 큰 퍼즐로 가는 큰길 옆 몇 걸음 (frac: 들어오는 길의 어디쯤 0~1, side: 길 왼쪽(-)/오른쪽(+)으로 몇 칸) — 오솔길은 짧게
+  const pts = approach(rk);
+  for (let k = 0; k < 50; k++) { const f = Math.max(.08, Math.min(.92, frac + (k % 5 - 2)*.035)), sd = side*(1 + Math.floor(k/10)*.15)*(k % 10 < 5 ? 1 : -1), n = Math.floor(f*(pts.length - 1)), p = pts[n], q = pts[Math.max(0, n - 4)], dx = wd(p[0] - q[0], W), dy = wd(p[1] - q[1], H), l = Math.hypot(dx, dy) || 1, x = p[0] - dy/l*sd, y = p[1] + dx/l*sd;
+    if (DRY(x, y, 2) && !PLACED.some(q => wdist(q[0], q[1], x, y) < keep) && !REGIONS.some(r => wdist(x, y, r.hub.x, r.hub.y) < 4.5)) { PLACED.push([x, y]); return [wrapX(x), wrapY(y)]; } }
+  return spotIn(rk, 6, side > 0 ? 90 : -90); }
+{ const SITE_AT = { butterflies:['dawn', .3, -5], labels:['flower', .45, 5], rising:['water', .3, 5], mirror:['water', .55, -5], fork:['dusk', .3, -5], oldman:['dusk', .6, 5] };   // [지역, 들어오는 길 어디쯤, 길 옆 몇 칸] — 큰 퍼즐 가기 전 길가 오솔길 끝
   for (const s of SITES) { const at = SITE_AT[s.key]; if (!at) continue;
     for (let dy = -2; dy <= 3; dy++) for (let dx = -2; dx <= 3; dx++) { const t = type[id(s.x + dx, s.y + dy)]; if ((t === RUIN || t === WATER) && dy >= 0 && dy < 2 && dx >= 0 && dx < 2) setT(s.x + dx, s.y + dy, BUSH); }   // 옛 자리의 돌은 치움
-    const [cx, cy] = spotIn(...at); s.x = Math.floor(cx) - 1; s.y = Math.floor(cy) - 1; s.cx = s.x + 1; s.cy = s.y + 1;
+    const [cx, cy] = nearRoad(...at); s.x = Math.floor(cx) - 1; s.y = Math.floor(cy) - 1; s.cx = s.x + 1; s.cy = s.y + 1;   // 나비 공터: 새벽 가는 길 3분의 1쯤, 옆 오솔길
     clear(s.cx, s.cy, s.key === 'labels' ? 3.6 : 2.8); if (s.key !== 'butterflies') for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) setT(s.x + dx, s.y + dy, s.key === 'mirror' ? WATER : RUIN); } }
-const CEIBA_AT = spotIn('dawn', 8, 80); clear(CEIBA_AT[0], CEIBA_AT[1], 2.6);   // 새벽: 세이바 나무와 거미줄
+const DAWN_LOG_AT = nearRoad('dawn', .55, 5); clear(DAWN_LOG_AT[0], DAWN_LOG_AT[1], 1.8);   // 새벽: 덩굴 감긴 쓰러진 나무 — 둥지로 가는 길 옆 오솔길 끝
+const CEIBA_AT = nearRoad('dawn', .78, -6); clear(CEIBA_AT[0], CEIBA_AT[1], 2.6);   // 새벽: 세이바 나무와 거미줄 — 반대편 오솔길 끝
 // 나비 길잡이: 공터에서 덤불 너머 숨은 빈터까지 풀이 눌린 가는 길 (큰길에선 안 보임). 나비가 서너 번 내려앉으며 데려감
 { const bs = SITES.find(q => q.key === 'butterflies'); let best = null;
   for (let t = 0; t < 16 && !best; t++) { const a = t*.785 + .3, r = 9 + (t >> 3)*2, gx = bs.cx + Math.cos(a)*r, gy = bs.cy + Math.sin(a)*r; let ok = true;
@@ -1161,14 +1181,14 @@ function farSpot(minF, maxF, avoid, dir){   // dir: 처음 바라보는 쪽(북)
   }
   return { x:FIRE.x + minF, y:FIRE.y };
 }
-const WATERFALL = { x:wrapX(Math.floor(REGIONS[2].hub.x) - 10 + .5), y:wrapY(Math.floor(REGIONS[2].hub.y) + 13 + .5) }, LOOKOUT = farSpot(18, 32, [{ ...WATERFALL, r:16 }]);   // 폭포는 물가 연못의 남서쪽 (2장)
+const WATERFALL = (() => { const h = REGIONS[2].hub, dx = wd(h.x - FIRE.x, W), dy = wd(h.y - FIRE.y, H), l = Math.hypot(dx, dy); return { x:wrapX(Math.floor(h.x + dx/l*15 - dy/l*3) + .5), y:wrapY(Math.floor(h.y + dy/l*15 + dx/l*3) + .5) }; })(), LOOKOUT = farSpot(18, 32, [{ ...WATERFALL, r:16 }]);   // 폭포: 연못 바깥쪽(둘레길 밖), 큰길이 동굴을 지나가지 않게   // 폭포는 물가 연못의 남서쪽 (2장)
 clear(WATERFALL.x, WATERFALL.y + .8, 4.2);
 for (let y = Math.floor(WATERFALL.y - 3); y <= WATERFALL.y + 1; y++) for (let x = Math.floor(WATERFALL.x - 3); x <= WATERFALL.x + 3; x++)
   if ((x + .5 - WATERFALL.x)**2/5 + (y + .5 - (WATERFALL.y - 1))**2/2.2 <= 1) setT(x, y, WATER);   // 폭포 웅덩이
 // 폭포 뒤 동굴: 웅덩이 오른쪽 바위턱(세로 한 줄)을 따라 폭포 뒤로 들어가면 7×7 동굴 방
 { const X = Math.floor(WATERFALL.x), Y = Math.floor(WATERFALL.y);
   for (let y = Y - 12; y <= Y - 4; y++) for (let x = X - 4; x <= X + 5; x++) setT(x, y, (x === X - 4 || x === X + 5 || y === Y - 12 || y === Y - 4) ? RUIN : FLOOR);   // 안쪽 8×7
-  for (let y = Y - 4; y <= Y + 1; y++) { setT(X + 3, y, FLOOR); setT(X + 4, y, FLOOR); setT(X + 5, y, RUIN); TRAIL[id(X + 3, y)] = TRAIL[id(X + 4, y)] = 1; }   // 두 칸 너비 바위턱 (오솔길처럼 보임)
+  for (let y = Y - 4; y <= Y + 1; y++) { setT(X + 3, y, FLOOR); setT(X + 4, y, FLOOR); setT(X + 5, y, RUIN); }   // 두 칸 너비 바위턱 (큰길이 아니라 폭포 오솔길의 끝)
   setT(X + 4, Y - 4, FLOOR);
   window.CAVE = { X, Y, inside:(px, py) => { const dx = wd(px - (X - 3), W), dy = wd(py - (Y - 11), H); return dx >= 0 && dx < 8 && dy >= 0 && dy < 7; } }; }
 // 전망 바위는 뺌 (길을 막고 하는 일이 없어서)
@@ -1200,18 +1220,11 @@ VISTA_CLEAR.push(...STORY_SPOTS.map(s => ({ x:s.x, y:s.y, r:s.key === 'galleon' 
 //   북 오두막 → 동 범선 → 남 물가 → 서 폐허 → 북서 꽃봉오리
 const BUD_SPOT = { x:wrapX(REGIONS[3].hub.x + 9), y:wrapY(REGIONS[3].hub.y - 4) };   // 꽃봉오리: 밤 지역 안, 신전 곁
 clear(BUD_SPOT.x, BUD_SPOT.y, 3.8);
-const SHORTCUTS = [];
-{ const node = p => { const dx = wd(p.x - FIRE.x, W), dy = wd(p.y - FIRE.y, H); return { a:Math.atan2(dx, -dy), r:Math.hypot(dx, dy) }; };
-  const ring = ['dawn', 'high', 'water', 'flower', 'dusk', 'ruin'].map(k => node(REGIONS[RGI(k)].hub));   // 새벽 → 아침 → 한낮 → 오후 → 황혼 → 밤
-  for (let i = 0; i < ring.length - 1; i++) { const A = ring[i], B = ring[i + 1]; let da = B.a - A.a; while (da <= 0) da += Math.PI*2;
-    const pts = [], L = da*(A.r + B.r)/2;
-    for (let t = 0; t <= 1.0001; t += .25/L) { const a = A.a + da*t, r = A.r + (B.r - A.r)*t + (Math.sin(t*Math.PI*4 + i)*2.6 + Math.sin(t*Math.PI*9 + i*2)*1.1)*Math.sin(t*Math.PI), x = FIRE.x + Math.sin(a)*r, y = FIRE.y - Math.cos(a)*r; pts.push([x, y]);
-      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const tx = Math.floor(x) + dx, ty = Math.floor(y) + dy; if (Math.hypot(tx + .5 - x, ty + .5 - y) > 1.1) continue; const k = id(tx, ty); if (type[k] === RUIN) continue;
-        if (type[k] === WATER && (wdist(tx + .5, ty + .5, REGIONS[2].hub.x, REGIONS[2].hub.y) < 7.5 || wdist(tx + .5, ty + .5, WATERFALL.x, WATERFALL.y) < 5 || wdist(tx + .5, ty + .5, SITE.mirror.cx, SITE.mirror.cy) < 4.5)) continue;   // 연못·폭포 웅덩이·거울 연못은 건드리지 않음 (다른 물은 얕은 여울길로)
-        type[k] = FLOOR; TRAIL[k] = 1; } }
-    const gate = pts.find(([x, y]) => wdist(x, y, pts[0][0], pts[0][1]) > 5.5) || pts[2];   // 출발 지역 바로 바깥에 덩굴 휘장
-    const gtiles = []; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const tx = Math.floor(gate[0]) + dx, ty = Math.floor(gate[1]) + dy; if (Math.hypot(tx + .5 - gate[0], ty + .5 - gate[1]) < 1.9 && type[id(tx, ty)] === FLOOR) gtiles.push(id(tx, ty)); }
-    SHORTCUTS.push({ i, pts, gate:{ x:gate[0], z:gate[1] }, tiles:gtiles, open:null }); }
+{
+  // 퍼즐 안쪽 공간(연못 섬, 신전 안, 폭포 동굴 안)은 큰길이 아님 — 큰길 칠을 지움 (큰길에 억지로 이어 붙지 않게)
+  { const wh = REGIONS[RGI('water')].hub, T = REGIONS[RGI('ruin')].temple;
+    for (let k = 0; k < W*H; k++) { if (!TRAIL[k]) continue; const x = k % W + .5, y = (k / W | 0) + .5;
+      if (wdist(x, y, wh.x, wh.y) < 2.2 || (T && Math.abs(wd(x - (T.cx + .5), W)) < 4.6 && Math.abs(wd(y - (T.cy + .5), H)) < 4.6) || (window.CAVE && window.CAVE.inside(x, y))) TRAIL[k] = 0; } }
   // 길 잇기: 모닥불에서 시작한 큰길이 중간에 끊긴 데(연못 섬, 물가 등) 없이 모든 길 조각이 한 줄로 이어지게 — 끊긴 조각은 가장 가까운 큰길까지 땅으로 이어 줌
   { const N8 = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]], gateT = new Set(); SHORTCUTS.forEach(sc => sc.tiles.forEach(k => gateT.add(k)));
     const reach = () => { const d = new Uint8Array(W*H), q = []; for (let a = -6; a <= 6; a++) for (let c = -6; c <= 6; c++) { const k = id(Math.floor(FIRE.x) + a, Math.floor(FIRE.y) + c); if (TRAIL[k] && !d[k]) { d[k] = 1; q.push(k); } }
@@ -1229,19 +1242,35 @@ const SHORTCUTS = [];
       for (let t = 0; t <= L + 1.5 && ok; t += .3) { const k = id(Math.floor(p[0] + dx*t/L), Math.floor(p[1] + dy*t/L)); if (type[k] === WATER || type[k] === RUIN) ok = false; }
       if (ok) return q; }
     return onArc(sc, fromEnd, side*.4); };
-  put('gramophone', spotIn('flower', 8, -60), 1.8);   // 오후 마을: 술집 처마 밑 축음기
-  put('clock', spotIn('dusk', 10, 35), 1.8); put('piano', spotIn('dusk', 10, -35), 2.4); put('chair', spotIn('dusk', 6, 0), 1.4);   // 황혼: 멈춘 시계, 이끼 낀 피아노, 흔들의자
-  put('bicycle', spotIn('high', 9, 60), 1.4); put('swing', spotIn('water', 9, 25), 1.4); }   // 아침: 자전거 / 한낮: 나란한 그네   // 물가 → 폐허 길: 먼저 괘종시계, 신전 가까이 피아노
+  // 큰 퍼즐 가기 전 큰길 옆 몇 걸음 (짧은 오솔길 끝): [지역, 들어오는 길 어디쯤, 길 옆]
+  put('gramophone', nearRoad('flower', .7, -5), 1.8);   // 오후 마을: 술집 처마 밑 축음기
+  put('chair', nearRoad('dusk', .45, -5), 1.4); put('piano', nearRoad('dusk', .75, 5), 2.4);   // 황혼: 흔들의자, 이끼 낀 피아노
+  { const h = REGIONS[RGI('dusk')].hub; put('clock', [h.x + 2.5, h.y], 1.8); }   // 황혼의 큰 퍼즐: 멈춘 괘종시계 (큰길 위)
+  put('bicycle', nearRoad('high', .4, 5), 1.4); put('swing', nearRoad('high', .7, -5), 1.4); }   // 아침: 자전거, 아이 그네   // 아침: 자전거 / 한낮: 나란한 그네   // 물가 → 폐허 길: 먼저 괘종시계, 신전 가까이 피아노
 // 샛길: 소리 없는 볼거리마다 가까운 짐승 길에서 좁은 오솔길이 갈라져 나감 (풀이 눌린 한 줄)
+const PATH2 = new Uint8Array(W*H);   // 오솔길 칸 (큰길과 다르게 그림)
 { const main = []; for (let k = 0; k < W*H; k++) if (TRAIL[k]) main.push(k);
   const goals = [...SITES.map(s => ({ x:s.cx, y:s.cy })), ...STORY_SPOTS.map(s => ({ x:s.x, y:s.y })), { x:WATERFALL.x + 3.5, y:WATERFALL.y + 2.5 }];
   goals.push({ x:CEIBA_AT[0], y:CEIBA_AT[1] });
+  goals.push({ x:DAWN_LOG_AT[0], y:DAWN_LOG_AT[1] });
+  // 오솔길: 큰길에서 갈라져 덤불 사이로 굽이굽이 들어가는 좁은 길 (끝엔 반드시 무언가). 굽은 길이 물·돌에 막히면 다른 굽이로, 그래도 안 되면 땅을 따라 돌아감
+  const walk = k => type[k] !== WATER && type[k] !== RUIN;
   for (const [gi, gl] of goals.entries()) {
-    let best = null, bd = 1e9; for (const k of main) { const d = wdist(k % W + .5, (k / W | 0) + .5, gl.x, gl.y); if (d < bd) { bd = d; best = k; } }
-    if (!best || bd < 3) continue;
-    const sx = best % W + .5, sy = (best / W | 0) + .5, dx = wd(gl.x - sx, W), dy = wd(gl.y - sy, H), L = Math.hypot(dx, dy), nx = -dy/L, ny = dx/L;
-    for (let t = 0; t <= L - 1.2; t += .3) { const u = t/L, wob = Math.sin(u*Math.PI)*(Math.sin(u*9 + gi)*2.2 + Math.sin(u*17 + gi)*.8), x = sx + dx*u + nx*wob, y = sy + dy*u + ny*wob, k = id(Math.floor(x), Math.floor(y));
-      if (type[k] === WATER || type[k] === RUIN) continue; type[k] = FLOOR; TRAIL[k] = 1; } }
+    let gk = -1, gd = 1e9; for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) { const k = id(Math.floor(gl.x) + dx, Math.floor(gl.y) + dy), d = Math.hypot(dx, dy); if (walk(k) && d < gd) { gd = d; gk = k; } }   // 목표 곁의 디딜 수 있는 칸
+    if (gk < 0 || TRAIL[gk]) continue;
+    const gx = gk % W + .5, gy = (gk / W | 0) + .5;
+    let best = null, bd = 1e9; for (const k of main) { const d = wdist(k % W + .5, (k / W | 0) + .5, gx, gy); if (d < bd) { bd = d; best = k; } }
+    if (best == null || bd < 2) continue;
+    const sx = best % W + .5, sy = (best / W | 0) + .5, dx = wd(gx - sx, W), dy = wd(gy - sy, H), L = Math.hypot(dx, dy), nx = -dy/L, ny = dx/L;
+    let done = false;
+    for (let tr = 0; tr < 10 && !done; tr++) { const amp = Math.min(5, L*(.22 + (tr % 4)*.06))*(tr % 2 ? -1 : 1), fq = 1 + (tr % 3)*.45 + (gi % 3)*.15, cells = [];   // 굽이: 길이에 맞춰 한두 번 크게 꺾임
+      for (let t = 0; t <= L; t += .25) { const u = t/L, wob = Math.sin(u*Math.PI)*(Math.sin(u*Math.PI*fq + gi)*amp + Math.sin(u*Math.PI*fq*2.3 + gi*2)*amp*.35), k = id(Math.floor(sx + dx*u + nx*wob), Math.floor(sy + dy*u + ny*wob)); if (!walk(k)) { cells.length = 0; break; } cells.push(k); }
+      if (cells.length) { for (const k of cells) if (!TRAIL[k]) { type[k] = FLOOR; PATH2[k] = 1; } done = true; } }
+    if (!done) {   // 굽은 길이 다 막히면 땅을 따라 (물과 돌을 비켜) 가장 가까운 큰길로
+      const from = new Int32Array(W*H).fill(-2), dist = new Int32Array(W*H).fill(1e9), B = [[gk]]; from[gk] = -1; dist[gk] = 0; let hit = -1;   // 칸마다 걷기 힘든 정도를 들쭉날쭉하게 줘서 길이 구불구불해짐
+      for (let c = 0; c < B.length && hit < 0; c++) { for (const k of B[c] || []) { if (dist[k] !== c) continue; if (TRAIL[k]) { hit = k; break; } const x = k % W, y = k / W | 0;
+        for (const [a, b] of [[1,0],[-1,0],[0,1],[0,-1]]) { const n = id(x + a, y + b); if (!walk(n)) continue; const nc = c + 1 + Math.floor(hash(n*131)*6); if (nc < dist[n]) { dist[n] = nc; from[n] = k; (B[nc] || (B[nc] = [])).push(n); } } } }
+      for (let k = hit >= 0 ? hit : -1; k >= 0; k = from[k]) { if (!TRAIL[k]) { type[k] = FLOOR; PATH2[k] = 1; } } } }
   TRAIL_EDGE.fill(0); for (let k = 0; k < W*H; k++) if (!TRAIL[k] && type[k] === BUSH) { const x = k % W, y = k / W | 0; if (TRAIL[id(x + 1, y)] || TRAIL[id(x - 1, y)] || TRAIL[id(x, y + 1)] || TRAIL[id(x, y - 1)]) TRAIL_EDGE[k] = 1; } }
 
 /* 바닥: 지도 한 장을 땅에 깔기 */
@@ -1253,7 +1282,7 @@ const GPX = 8, gcv = document.createElement('canvas'); gcv.width = W*GPX; gcv.he
   const tint = (b, tbl, rw) => { const c = b.slice(); rw.forEach((w, i) => { for (let j = 0; j < 3; j++) c[j] += (tbl[i][j] - b[j])*w; }); return `rgb(${c.map(v => v | 0).join(',')})`; };
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const k = id(x,y), t0 = type[k], t = t0 === BUSH && TRAIL_EDGE[k] ? FLOOR : t0, rw = (t === FLOOR || t === BUSH) ? regionW(x + .5, y + .5) : null;
-    g.fillStyle = t === FLOOR && TRAIL[k] ? '#8a744c' : t === FLOOR ? tint(BF, RGF, rw) : t === BUSH ? tint(BB, RGB_, rw) : base[t]; g.fillRect(x*GPX, y*GPX, GPX, GPX);
+    g.fillStyle = t === FLOOR && TRAIL[k] ? '#8a744c' : t === FLOOR && PATH2[k] ? '#6f7448' : t === FLOOR ? tint(BF, RGF, rw) : t === BUSH ? tint(BB, RGB_, rw) : base[t]; g.fillRect(x*GPX, y*GPX, GPX, GPX);
     if (t === FLOOR && TRAIL[k]) { g.fillStyle = 'rgba(40,30,18,.3)'; if (hash(k*41) < .5) g.fillRect(x*GPX + 2, y*GPX + 2, 2, 2); if (hash(k*43) < .12) { g.fillStyle = '#9a8c6a'; g.beginPath(); g.ellipse(x*GPX + 4, y*GPX + 4, 1.5, 1, hash(k*45)*3, 0, Math.PI*2); g.fill(); } continue; }
     if (t === FLOOR && rw && rw[1] > .4 && hash(k*47) < .45) { g.fillStyle = '#e8a0b4'; g.fillRect(x*GPX + 3, y*GPX + 2, 2, 2); }   // 꽃숲: 떨어진 꽃잎
     if (t === FLOOR && rw && rw[3] > .4 && hash(k*49) < .35) { g.fillStyle = '#8a8670'; g.fillRect(x*GPX + 1, y*GPX + 4, 4, 3); }   // 폐허: 돌 부스러기
@@ -1299,7 +1328,7 @@ for (let k = 0; k < W*H; k++) {
   if (type[k] === BUSH) { const n = MOBILE ? 3 : 4; for (let j = 0; j < n; j++) addFlat(k, pickSpeciesAt(hash(k*7 + j), k, j), tx + .5 + (hash(k*3 + j) - .5)*.75, ty + .5/n + j/n, j); }
   else if (type[k] === FLOOR) {
     // 모닥불과 기적의 자리는 비워 둠
-    if (TRAIL[k] || wdist(tx + .5, ty + .5, FIRE.x, FIRE.y) < 3.4 || REGIONS.some(r => wdist(tx + .5, ty + .5, r.hub.x, r.hub.y) < 3) || SITES.some(s => wdist(tx + .5, ty + .5, s.cx, s.cy) < 2.3) || (window.CAVE && window.CAVE.inside(tx + .5, ty + .5)) || VISTA_CLEAR.some(v => wdist(tx + .5, ty + .5, v.x, v.y) < v.r)) continue;
+    if (TRAIL[k] || (PATH2[k] && hash(k*31) < .7) || wdist(tx + .5, ty + .5, FIRE.x, FIRE.y) < 3.4 || REGIONS.some(r => wdist(tx + .5, ty + .5, r.hub.x, r.hub.y) < 3) || SITES.some(s => wdist(tx + .5, ty + .5, s.cx, s.cy) < 2.3) || (window.CAVE && window.CAVE.inside(tx + .5, ty + .5)) || VISTA_CLEAR.some(v => wdist(tx + .5, ty + .5, v.x, v.y) < v.r)) continue;
     if (hash(k*53) < (MOBILE ? .35 : .55)) addFlat(k, GRASS, tx + .5 + (hash(k*61) - .5)*.6, ty + .3, 5);
     if (hash(k*59) < .08) addFlat(k, AGAVE, tx + .5, ty + .6, 6);
     else if (hash(k*67) < .14) addFlat(k, FERN, tx + .5 + (hash(k*71) - .5)*.5, ty + .7, 7);
@@ -3487,7 +3516,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
      안개: 가지 하나를 풀 때마다 한 겹씩 걷힘. 알이 깨면 다 걷히고 아침 숲으로 가는 안개 벽도 사라짐 */
   { const RD = REGIONS[RGI('dawn')], HB = RD.hub, ba = Math.atan2(wd(HB.x - FIRE.x, W), -wd(HB.y - FIRE.y, H)), OX = Math.sin(ba), OZ = -Math.cos(ba), SX_ = -OZ, SZ_ = OX;
     const at = (o, sd) => ({ x:wrapX(HB.x + OX*o + SX_*sd), z:wrapY(HB.y + OZ*o + SZ_*sd) });
-    const TREEP = at(1.2, 0), NEST0 = at(.2, -1.1), STUMP = at(-.5, 1.7), LOGP = at(-1.6, -3.0), ROPEP = at(1.0, .7), DEW = at(-1.3, -.9);
+    const TREEP = at(1.2, 0), NEST0 = at(.2, -1.1), STUMP = at(-.5, 1.7), LOGP = { x:DAWN_LOG_AT[0], z:DAWN_LOG_AT[1] }, ROPEP = at(1.0, .7), DEW = at(-1.3, -.9);
     const LEAVES = [-1.1, 0, 1.1].map(sd => at(3.2, sd)), CB = SITE.butterflies, GLADE = { x:wrapX(CB.gx - .7), z:wrapY(CB.gy + .3) };
     const CEI = { x:CEIBA_AT[0], z:CEIBA_AT[1] }, WEB = { x:wrapX(CEI.x + SX_*1.4), z:wrapY(CEI.z + SZ_*1.4) };
     const DS = pzSave.dawn || (pzSave.dawn = { vine:0, stone:0, hooked:0, tied:0, up:0, fluff:0, lined:0, leaves:[0, 0, 0], mir:0 });
@@ -4289,7 +4318,7 @@ function draw(dt = .016){
   scene.background.copy(DAY_SKY).lerp(NIGHT_SKY, nt).lerp(DUSK_SKY, dusk*.75).lerp(DAWN_SKY, dawn*.8).lerp(STORM_SKY, st*.65); hazeCol.copy(FAR_COL).multiply(tintCol); scene.fog.color.copy(scene.background).lerp(hazeCol, .6).lerp(deepTmp.copy(DEEP_COL).multiply(tintCol), .45);   // 멀수록 흐려지되, 숲 그늘 쪽으로 조금 가라앉은 안개
   openS += (Math.max(0, Math.min(1, (openness() - .35)/.5)) - openS)*Math.min(1, dt*1.2);   // 덤불이 적은 곳일수록
   const view = (1 + elevP*.4)*(1 + openS*1.4)*(energy < 30 ? .55 + .45*energy/30 : 1)*(MOBILE ? .85 : 1);   // 바위 위에선 멀리, 지치면 가까이
-  scene.fog.near = (6 - 2*nt)*(1 - .7*fogL); scene.fog.far = Math.min(44 + elevP*10, (38 - 10*nt - 9*st)*view*(1 - .62*fogL)); if (fogL > 0) scene.fog.color.lerp(DAWN_FOG, fogL*.8);   // 새벽 안개 속은 가까운 것만 보임 ringR = Math.max(10, Math.min(27 + elevP*4, scene.fog.far)); U.uCull.value = MOBILE ? Math.min(ringR, 23) : ringR;   // 높은 곳에선 훨씬 멀리, 안개 끝까지 그림 (폰은 조금 덜)
+  scene.fog.near = (6 - 2*nt)*(1 - .7*fogL); scene.fog.far = Math.min(44 + elevP*10, (38 - 10*nt - 9*st)*view*(1 - .62*fogL)); if (fogL > 0) scene.fog.color.lerp(DAWN_FOG, fogL*.8); ringR = Math.max(10, Math.min(27 + elevP*4, scene.fog.far)); U.uCull.value = MOBILE ? Math.min(ringR, 23) : ringR;   // 높은 곳에선 훨씬 멀리, 안개 끝까지 그림 (폰은 조금 덜)   // 새벽 안개 속은 가까운 것만 보임
   updateRings(camX, CAM_H + elevP, camZ, elevP);
   // 낮엔 옅은 해, 해질녘엔 크고 붉은 해(「해 질 녘의 처녀림」), 밤엔 큰 달(「뱀 부리는 여인」)
   sky.material.map = nt > .55 ? MOON_TEX : dusk > .35 ? RED_SUN_TEX : SUN_TEX;
@@ -4387,7 +4416,7 @@ function draw(dt = .016){
 }
 
 /* ---- 저장 (내 위치와 그림첩, 이 브라우저에) ---- */
-if (location.search.includes('dbg')) window.__g = { scene, camera, P, keys, REGIONS, SITES, STORY_SPOTS, FIRE, WATERFALL, giveMask, get bag(){ return bag; }, PUZZLES, pzSave, lookTargets, sing, get clock(){ return clock; }, get yaw(){ return yaw; }, set yaw(v){ yaw = v; }, get pitch(){ return pitch; }, set pitch(v){ pitch = v; }, get map(){ return type; }, get dims(){ return [W, H]; }, get trail(){ return TRAIL; }, get shortcuts(){ return SHORTCUTS; } };   // 시험용 (주소에 ?dbg)
+if (location.search.includes('dbg')) window.__g = { scene, camera, P, keys, REGIONS, SITES, STORY_SPOTS, FIRE, WATERFALL, giveMask, get bag(){ return bag; }, PUZZLES, pzSave, lookTargets, sing, get clock(){ return clock; }, get yaw(){ return yaw; }, set yaw(v){ yaw = v; }, get pitch(){ return pitch; }, set pitch(v){ pitch = v; }, get map(){ return type; }, get dims(){ return [W, H]; }, get trail(){ return TRAIL; }, get path2(){ return PATH2; }, get shortcuts(){ return SHORTCUTS; } };   // 시험용 (주소에 ?dbg)
 const KEY = 'denggul-v3';
 function save(){ if (window.__resetting) return; try { localStorage.setItem(KEY, JSON.stringify({ p:[P.x,P.y], found, c:clock })); } catch (e) {} }
 function load(){
