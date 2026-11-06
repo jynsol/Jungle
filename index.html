@@ -1624,8 +1624,8 @@ let selected = null, tapStart = null;
 cv.addEventListener('pointerdown', e => { tapStart = { x:e.clientX, y:e.clientY, t:performance.now(), id:e.pointerId }; });
 cv.addEventListener('pointerup', e => {
   if (!tapStart || tapStart.id !== e.pointerId) return;
-  const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y), quick = performance.now() - tapStart.t < 400; tapStart = null;
-  if (moved < 7 && quick) handleTap(e.clientX, e.clientY);   // 거의 안 움직이고 뗐으면 누른 것
+  const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y), quick = performance.now() - tapStart.t < (MOBILE ? 550 : 400); tapStart = null;
+  if (moved < (MOBILE ? 16 : 7) && quick) handleTap(e.clientX, e.clientY);   // 거의 안 움직이고 뗐으면 누른 것 (손가락은 조금 흔들려도)
 });
 function walkToScreen(x, y){   // 누른 땅으로 걸어감 (하늘을 누르면 그쪽으로 조금)
   const r = cv.getBoundingClientRect(), o = camera.position, v = new THREE.Vector3(((x - r.left)/r.width)*2 - 1, -((y - r.top)/r.height)*2 + 1, .5).unproject(camera).sub(o).normalize();
@@ -1650,7 +1650,9 @@ function handleTap(x, y){
     if (t.h0 != null) { const a = toScreen(t.x, t.h0, t.z), b = toScreen(t.x, t.h1, t.z); if (!a || !b) continue; d = segD(a, b); }   // 긴 물건은 길이 전체가 눌림
     else { const s = toScreen(t.x, t.h, t.z); if (!s) continue; d = (s[0] - x)**2 + (s[1] - y)**2; }
     if (t.act && wdist(t.x, t.z, P.x, P.y) < (t.reach || 4)) d *= .45;   // 손닿는 곳에 있는 건 더 잘 잡힘
-    if (t.me && t.me.visible) { const ar = tapInside(t.me, x, y); if (ar) d *= ar < 8000 ? .12 : .25; }   // 그림 위를 정확히 누르면 그걸 집음 (옆 물건에 뺏기지 않게)
+    const ar = t.me && t.me.visible ? tapInside(t.me, x, y) : 0, small = ar && ar < 30000;   // 화면을 크게 덮는 그림(큰 나무·배)은 '정확히 누름'으로 치지 않음
+    if (small) d *= ar < 8000 ? .12 : .25;   // 그림 위를 정확히 누르면 그걸 집음 (옆 물건에 뺏기지 않게)
+    if (!t.act && !small && d > 30*30) continue;   // 구경거리(짐승·새 등)는 그 그림을 정확히 눌렀을 때만: 아니면 땅을 누른 것으로 보고 걸어감
     if (d < bd) { bd = d; best = t; }
   }
   if (!best) { if (MOBILE) walkToScreen(x, y); return; }   // 땅을 눌러 걷기는 폰에서만 (컴퓨터는 키보드)
@@ -2706,7 +2708,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
       if (k > 3) { SL.orange = null; orange.visible = false; } }
     // 망원경: 다음 갈 곳 쪽을 크게 (움직이면 끝)
     if (spyOn) { if (P.moving || clock - spyOn.t > 7) { spyOn = null; fitRenderer(); }
-      else { const tgt = parrotHint(true) || { x:FIRE.x, y:FIRE.y }; const ty = Math.atan2(-wd(tgt.x - P.x, W), -wd(tgt.y - P.y, H)); yaw += wd(ty - yaw, Math.PI*2)*Math.min(1, dt*3); camera.fov = 16; camera.updateProjectionMatrix(); myMesh.visible = false; scene.fog.near = 25; scene.fog.far = 90; } }   // 망원경으론 안개 너머까지
+      else { const aim = window.SPY_AIM && window.SPY_AIM(), tgt = aim || parrotHint(true) || { x:FIRE.x, y:FIRE.y }; if (aim) pitch += (Math.atan2(aim.h - (P.upH || 0) - 1, wdist(P.x, P.y, aim.x, aim.y)) - pitch)*Math.min(1, dt*3); const ty = Math.atan2(-wd(tgt.x - P.x, W), -wd(tgt.y - P.y, H)); yaw += wd(ty - yaw, Math.PI*2)*Math.min(1, dt*3); camera.fov = 16; camera.updateProjectionMatrix(); myMesh.visible = false; scene.fog.near = 25; scene.fog.far = 90; } }   // 망원경으론 안개 너머까지
   };
   SL.overlay = () => {
     if (pzStep(SL) === 0 && wdist(P.x, P.y, hub.x, hub.y) < 12) { const s = toScreen(slothAt.x, 5.2, slothAt.z); if (s) { ctx.fillStyle = 'rgba(243,230,200,.75)'; ctx.font = 'italic 15px Georgia,serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; for (let j = 0; j < 3; j++) { const k = (clock*.4 + j/3) % 1; ctx.globalAlpha = Math.sin(k*Math.PI)*.8; ctx.fillText('z', s[0] + 14 + k*16, s[1] - 10 - k*26); } ctx.globalAlpha = 1; } }
@@ -3238,22 +3240,24 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
 
   /* 3. 큰부리새 둥지: 오두막 발판 곁 가지. 구슬을 주면 부리로 받고, 둥지에서 태엽 손잡이가 땅으로 떨어짐 */
   { const hub = REGIONS[0].hub, DECK = 7, NEST = { x:wrapX(hub.x - 1.9), z:wrapY(hub.y + .6) }, DROP = { x:wrapX(hub.x - 2.7), z:wrapY(hub.y + 1.4) };
-    const TC = { id:'toucan', x:NEST.x, y:NEST.z, done:2, gotT:-9, thumb:() => TOUCAN_TEX.image };
+    const TC = { id:'toucan', x:NEST.x, y:NEST.z, done:2, gotT:-9, thumb:() => TOUCAN_TEX.image }, FARN = { x:wrapX(hub.x - 8.5), z:wrapY(hub.y - 5.5) }, FARH = 8.6;   // 진짜 둥지는 먼 나무 꼭대기: 망원경으로 보면 파란 것만 모아 둠
+    window.SPY_AIM = () => pzStep(TC) === 0 ? { x:FARN.x, y:FARN.z, h:FARH } : null;
     const NEST_T = ctex(128, 64, (g) => { g.fillStyle = '#6b4a2a'; g.strokeStyle = RG.line; g.lineWidth = 2; g.beginPath(); g.ellipse(64, 40, 56, 20, 0, 0, Math.PI*2); g.fill(); g.stroke(); g.strokeStyle = '#a07a48'; g.lineWidth = 2.5; for (let i = 0; i < 14; i++) { g.beginPath(); g.moveTo(12 + i*7, 30 + (i % 3)*6); g.lineTo(28 + i*7, 50 - (i % 2)*8); g.stroke(); }
-      g.fillStyle = '#e8d24a'; g.beginPath(); g.arc(40, 30, 4, 0, Math.PI*2); g.fill(); g.fillStyle = '#c8d8dc'; g.beginPath(); g.arc(86, 28, 4, 0, Math.PI*2); g.fill(); });
-    const nest = cutout(plane(.9, .45), mat(NEST_T)), bird = cutout(plane(.7, .5), mat(TOUCAN_TEX)), crank = cutout(plane(.34, .34), mat(CRANK_T));
+      for (const [x, y, r] of [[34, 28, 6], [52, 24, 5], [70, 27, 7], [90, 26, 5], [60, 32, 4]]) { g.fillStyle = ['#2a6fd8', '#4a9ae8', '#1f4fa8', '#6ab0f0', '#3a7ad0'][x % 5]; g.strokeStyle = '#0e2a5a'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, r, 0, Math.PI*2); g.fill(); g.stroke(); }   // 파란 열매·조각·깃털
+      g.strokeStyle = '#2a6fd8'; g.lineWidth = 3; g.beginPath(); g.moveTo(98, 30); g.quadraticCurveTo(110, 10, 118, 6); g.stroke(); });
+    const nest = cutout(plane(1.6, .8), mat(NEST_T)), bird = cutout(plane(.7, .5), mat(TOUCAN_TEX)), crank = cutout(plane(.34, .34), mat(CRANK_T));
     const branch = cutout(plane(2.4, .22, false), mat(LOG_TEX)); onArt('nest', im => swapTex(NEST_T, im)); onArt('crank', im => swapTex(CRANK_T, im));
     const high = () => (P.upH || 0) > 4;
     TC.targets = () => { const st = pzStep(TC), L = [];
       L.push({ key:'pz-toucan', noSeen:true, x:NEST.x, h:DECK + 1.1, z:NEST.z, reach:3, me:bird, act:() => {
         if (!high()) { POKE_SND.toucan(1); return; }
-        if (st === 0 && pzSave.bead === 1) { pzSave.bead = 2; savePz(); paintBag(); POKE_SND.toucan(1); TC.gotT = clock; setTimeout(() => { tick(500, .3, .06, 'triangle'); setPzStep(TC, 1); }, 900); }
-        else if (st === 0) want(BEAD_T, NEST.x, DECK + 1.7, NEST.z); else POKE_SND.toucan(1); } });
+        if (st === 0 && pzSave.bead === 1) { pzSave.bead = 2; savePz(); paintBag(); POKE_SND.toucan(1); TC.gotT = clock; setTimeout(() => { tick(500, .3, .06, 'triangle'); setPzStep(TC, 1); }, 3300); }   // 구슬을 물고 먼 둥지에 다녀오며 태엽 손잡이를 물어 와 떨어뜨림
+        else { POKE_SND.toucan(1); TC.peckT = clock; } } });   // 구슬이 없으면 깍깍 울고 고개만 갸웃 (뭘 원하는지는 망원경으로 둥지를 보고 알아냄)
       if (st === 1) L.push({ key:'pz-crank', noSeen:true, x:DROP.x, h:.15, z:DROP.z, reach:2.5, act:() => { if ((P.upH || 0) > 1) return; take('crank', CRANK_T, DROP.x, DROP.z); setPzStep(TC, 2); } });
       return L; };
     TC.update = (dt, camX, camZ) => { const st = pzStep(TC), g = clock - TC.gotT;
-      place(nest, NEST, DECK + .7, camX, camZ); { const [x, z] = wrapNear(NEST.x + .9, NEST.z, camX, camZ); branch.position.set(x, DECK + .72, z); face(branch, x, z, camX, camZ); }
-      place(bird, NEST, DECK + .95 + (g < 1 ? Math.sin(g*Math.PI)*.25 : 0), camX, camZ); bird.rotation.z = g < 1.5 ? Math.sin(g*12)*.15 : Math.sin(clock*.7)*.05;
+      place(nest, FARN, FARH, camX, camZ); { const [x, z] = wrapNear(NEST.x + .9, NEST.z, camX, camZ); branch.position.set(x, DECK + .72, z); face(branch, x, z, camX, camZ); }
+      { const go = g < 3.2 ? Math.sin(Math.min(1, g/3.2)*Math.PI) : 0, bp = { x:NEST.x + wd(FARN.x - NEST.x, W)*go, z:NEST.z + wd(FARN.z - NEST.z, H)*go }; place(bird, bp, DECK + .95 + go*(FARH - DECK + .4) + (g < 1 ? Math.sin(g*Math.PI)*.25 : 0), camX, camZ); bird.rotation.z = g < 3.2 ? Math.sin(g*12)*.15 : clock - (TC.peckT || -9) < .8 ? Math.sin((clock - TC.peckT)*14)*.3 : Math.sin(clock*.7)*.05; }   // 먼 둥지로 날아갔다 돌아옴
       crank.visible = st === 1; if (crank.visible) { const f = Math.min(1, (clock - (TC.dropT || (TC.dropT = clock)))/.9); const [x, z] = wrapNear(NEST.x + (DROP.x - NEST.x)*f, NEST.z + (DROP.z - NEST.z)*f, camX, camZ); crank.position.set(x, (DECK + .7)*(1 - f*f) + .02, z); face(crank, x, z, camX, camZ); if (f >= 1 && !TC.thud) { TC.thud = true; pzSfx.thump(.12); popAt(DROP.x, DROP.z, .3, TC.on ??= () => pzStep(TC) === 1); } if (f >= 1) sparkleWhile(DROP.x, DROP.z, TC.on ??= () => pzStep(TC) === 1); } };
     PUZZLES.push(TC); }
 
