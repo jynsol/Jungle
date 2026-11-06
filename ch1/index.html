@@ -354,11 +354,11 @@ T.bigtree = ctex(320, 480, (g, w, h) => {
   g.beginPath(); g.moveTo(100, h); g.quadraticCurveTo(138, h - 36, 140, h - 110); g.lineTo(146, 90); g.lineTo(176, 90); g.lineTo(182, h - 110); g.quadraticCurveTo(186, h - 36, 222, h); g.closePath(); g.fill(); g.stroke();
   g.strokeStyle = '#3a2e20'; g.lineWidth = 2; for (let i = 0; i < 11; i++) { g.beginPath(); g.moveTo(150 + (i % 3)*9, 110 + i*30); g.quadraticCurveTo(160, 124 + i*30, 154 + (i % 2)*12, 136 + i*30); g.stroke(); }
   g.fillStyle = '#2a1e14'; g.beginPath(); g.ellipse(160, h - 150, 9, 14, 0, 0, Math.PI*2); g.fill();
-  for (let i = 0; i < 34; i++) ovate(g, 14 + (i*47) % 292, 6 + (i*29) % 120, 72 + (i % 3)*12, (i % 7)*.9 - 2.8, LEAVES[i % 4], 20); });
+  for (let i = 0; i < 34; i++) ovate(g, 14 + (i*47) % 292, 6 + (i*29) % 120, 72 + (i % 3)*12, (i % 7)*.9 - 2.8, 20, LEAVES[i % 4]); });
 T.deck = ctex(256, 256, (g, w, h) => { g.save(); g.beginPath(); g.arc(128, 128, 124, 0, Math.PI*2); g.clip();
   for (let i = 0; i < 12; i++) { g.fillStyle = i % 2 ? '#8a6438' : '#7a5530'; g.fillRect(0, i*22, w, 22); g.strokeStyle = '#4a3220'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, i*22); g.lineTo(w, i*22); g.stroke(); }
   g.restore(); g.strokeStyle = '#3a2618'; g.lineWidth = 8; g.beginPath(); g.arc(128, 128, 120, 0, Math.PI*2); g.stroke();
-  g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.arc(128, 128, 30, 0, Math.PI*2); g.fill(); });
+  g.fillStyle = '#4a3b2a'; g.strokeStyle = '#2a1e14'; g.lineWidth = 3; g.beginPath(); g.arc(128, 128, 30, 0, Math.PI*2); g.fill(); g.stroke(); g.strokeStyle = '#5a4834'; g.lineWidth = 2; for (const r of [10, 18, 25]) { g.beginPath(); g.arc(128, 128, r, 0, Math.PI*2); g.stroke(); } });
 const slothPaint = mode => ctex(96, 128, (g) => {
   g.lineJoin = 'round'; g.strokeStyle = '#3a2e22'; g.lineWidth = 7; g.lineCap = 'round'; g.beginPath(); g.moveTo(30, 6); g.quadraticCurveTo(24, 30, 36, 52); g.moveTo(66, 6); g.quadraticCurveTo(72, 30, 60, 52); g.stroke();
   g.strokeStyle = '#2a2016'; g.lineWidth = 2; for (const x of [26, 30, 34, 62, 66, 70]) { g.beginPath(); g.moveTo(x, 10); g.quadraticCurveTo(x - 2, 2, x + 3, 0); g.stroke(); }
@@ -389,6 +389,9 @@ const bubbleTex = (draw) => ctex(128, 112, (g) => { g.fillStyle = 'rgba(244,237,
 const BIG = { scale:.72 }, DECK = TREE_H, BR = 3.3, MY = 3.95;
 const SPOT = { sloth:[1.4, 1.6], ladder:[-1.4, 1.6], vine:[.35, 2.05], monkey:[.7, .9] };
 const bigTree = bill(T.bigtree, 7.5*BIG.scale, 13*BIG.scale, 0, 0, 0, { near:1.8 });
+const UP_FR = 1 - DECK/(13*BIG.scale);
+T.bigtreeUp = ctex(320, Math.round(480*UP_FR), (g) => g.drawImage(T.bigtree.userData.canvas, 0, 0, 320, Math.round(480*UP_FR), 0, 0, 320, Math.round(480*UP_FR)));
+const bigTreeUp = bill(T.bigtreeUp, 7.5*BIG.scale, 13*BIG.scale*UP_FR, 0, DECK - .02, 0, { near:1.2 });
 { const d = new THREE.Mesh(new THREE.CircleGeometry(2.45, 40), new THREE.MeshBasicMaterial({ map:T.deck, transparent:true, alphaTest:.3, side:THREE.DoubleSide })); d.rotation.x = -Math.PI/2; d.position.y = DECK; scene.add(d); }
 const brS = bill(T.log, 1.9, .32, SPOT.sloth[0], BR - .26, SPOT.sloth[1], { near:0 }), brM = bill(T.log, 1.5, .28, SPOT.monkey[0], MY - .26, SPOT.monkey[1], { near:0 });
 const slothB = bill(T.sloth.sleep, 1.1, 1.45, SPOT.sloth[0], BR - 1.45, SPOT.sloth[1], { near:0, push:.05 });
@@ -416,13 +419,13 @@ const mailbox = bill(artTex('mailbox'), .6, 1.5, -5.2, 0, 4.4, { near:0 });
 const flowers = [[5.4, 3.0], [6.1, 2.2], [5.0, 3.9]].map(([x, z]) => bill(artTex('whitespike'), .62, 1.18, x, 0, z, { near:0 }));
 
 /* 꼭대기 둥지 */
-const nestB = bill(T.nest, 1.5, .75, NX, TREE_H, NZ, { near:0 });
-const nestFluff = bill(T.fluff, .9, .55, NX, TREE_H + .35, NZ, { near:0, push:.05 });
-const nestStone = bill(T.hotstone, .5, .35, NX + .35, TREE_H + .4, NZ, { near:0, push:.1 });
-const nestEgg = bill(T.egg, .36, .46, NX - .15, TREE_H + .42, NZ, { near:0, push:.15 });
+const nestB = bill(T.nest, 1.0, .5, NX, TREE_H, NZ, { near:0 });
+const nestFluff = bill(T.fluff, .6, .36, NX, TREE_H + .22, NZ, { near:0, push:.05 });
+const nestStone = bill(T.hotstone, .34, .24, NX + .22, TREE_H + .26, NZ, { near:0, push:.1 });
+const nestEgg = bill(T.egg, .26, .33, NX - .1, TREE_H + .28, NZ, { near:0, push:.15 });
 const HOLE = { fluff:[-.42, (g) => { for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(20 + (i*29) % 56, 28 + (i*17) % 22, 12, 0, 7); g.fill(); } }], stone:[0, (g) => { g.beginPath(); g.ellipse(48, 40, 30, 20, 0, 0, 7); g.fill(); }], egg:[.42, (g) => { g.beginPath(); g.ellipse(48, 36, 18, 26, 0, 0, 7); g.fill(); }] };
-const holes = Object.fromEntries(Object.entries(HOLE).map(([k, [dx, f]]) => [k, bill(ctex(96, 72, (g) => { g.fillStyle = 'rgba(30,20,10,.55)'; f(g); g.globalCompositeOperation = 'source-atop'; g.strokeStyle = 'rgba(255,240,200,.9)'; g.lineWidth = 3; g.setLineDash([6, 5]); g.strokeRect(0, 0, 96, 72); }), .42, .32, NX + dx, TREE_H + .62, NZ, { near:0, push:.3, glow:true })]));
-const shell = bill(T.shell, .5, .34, NX, TREE_H + .5, NZ, { near:0, push:.2 });
+const holes = Object.fromEntries(Object.entries(HOLE).map(([k, [dx, f]]) => [k, bill(ctex(96, 72, (g) => { g.fillStyle = 'rgba(30,20,10,.55)'; f(g); g.globalCompositeOperation = 'source-atop'; g.strokeStyle = 'rgba(255,240,200,.9)'; g.lineWidth = 3; g.setLineDash([6, 5]); g.strokeRect(0, 0, 96, 72); }), .3, .23, NX + dx*.7, TREE_H + .45, NZ, { near:0, push:.3, glow:true })]));
+const shell = bill(T.shell, .36, .24, NX, TREE_H + .34, NZ, { near:0, push:.2 });
 const chick = bill(T.chick, .5, .5, NX, TREE_H + .5, NZ, { near:0, push:.2 });
 
 /* ============ 개울 ============ */
@@ -794,12 +797,12 @@ function inputVec(){ let ix = 0, iz = 0; if (keys.w || keys.arrowup) iz -= 1; if
 
 /* ============ 나무늘보와 원숭이 ============ */
 const ease2 = k => { k = Math.max(0, Math.min(1, k)); return k*k*(3 - 2*k); };
-function throwOrange(){ if (SL.orange) return; snd.tone && 0; setTimeout(() => snd.tick(1200, .03), 0); const under = Math.hypot(P.x - SPOT.sloth[0], P.z - SPOT.sloth[1]) < .85; SL.orange = { t:0, x0:SPOT.monkey[0], z0:SPOT.monkey[1], x1:P.x, z1:P.z, under }; }
+function throwOrange(){ if (SL.orange) return; snd.tone && 0; setTimeout(() => snd.tick(1200, .03), 0); SL.orange = { t:0, x0:SPOT.monkey[0], z0:SPOT.monkey[1], x1:P.x, z1:P.z, under:false }; }
 function pullVine(){ if (SL.trial || flags.sl >= 2) return true; if (flags.sl === 1 && flags.bb) { flags.bb = 0; flags.sl = 2; save(); return true; } SL.trial = { t:0, kind:flags.sl === 0 ? 'sleep' : flags.bb ? 'x' : 'empty' }; return true; }
 function setSL(n){ flags.sl = n; save(); if (n === 1) snd.hm(.06); if (n === 3) snd.munch(); if (n === 4) { snd.rope(.08); setTimeout(() => snd.thud(.12), 900); } if (n === 5) snd.chime(.06); }
 function updateSloth(dt, t){
   const st = flags.sl; if (st !== SL.last) { SL.t = 0; SL.last = st; } SL.t += dt; const el = SL.t, d = Math.hypot(P.x, P.z);
-  const high = P.y > 2.5; bigTree.visible = !high; bigTree.upd();
+  const high = P.y > 2.5; bigTree.visible = !high; bigTreeUp.visible = high; bigTree.upd();
   /* 바구니 높이 */
   const LOW = .02, HIGH = BR - 2.2; let bh = LOW;
   if (st === 2) bh = el < 2 ? LOW + (HIGH - LOW)*ease2(el/2) : el < 4.2 ? HIGH : LOW + (HIGH - LOW)*(1 - ease2((el - 4.2)/1.6));
@@ -825,7 +828,8 @@ function updateSloth(dt, t){
   if (st === 0 && P.mode === 'ground' && d < 4.5 && !SL.orange && (SL.throwT -= dt) <= 0) { SL.throwT = 3 + Math.random()*2; throwOrange(); }
   const o = SL.orange;
   if (o) { o.t += dt; const k = o.t; let px, pz, py; orangeB.visible = true;
-    if (k < .9) { const u = k/.9; px = o.x0 + (o.x1 - o.x0)*u; pz = o.z0 + (o.z1 - o.z0)*u; py = MY + (1.2 - MY)*u + Math.sin(u*Math.PI)*1.4; }
+    if (k < .9) { const u = k/.9; o.x1 += (P.x - o.x1)*Math.min(1, dt*2); o.z1 += (P.z - o.z1)*Math.min(1, dt*2); px = o.x0 + (o.x1 - o.x0)*u; pz = o.z0 + (o.z1 - o.z0)*u; py = MY + (1.2 - MY)*u + Math.sin(u*Math.PI)*1.4;
+      if (u > .97 && !o.judged) { o.judged = true; const head = Math.hypot(P.x - o.x1, P.z - o.z1) < 1.2; o.under = head && Math.hypot(P.x - SPOT.sloth[0], P.z - SPOT.sloth[1]) < 1.6; } }
     else if (o.under) { const u = Math.min(1, (k - .9)/.6); px = o.x1; pz = o.z1; py = 1.2 + (BR - 1 - 1.2)*Math.sin(u*Math.PI/2);
       if (u >= 1 && !o.hit2) { o.hit2 = true; if (flags.sl === 0) setSL(1); }
       if (k > 1.5) { const u2 = Math.min(1, (k - 1.5)/.7); py = BR - 1 - (BR - 1.2)*u2*u2; } }
@@ -836,10 +840,10 @@ function updateSloth(dt, t){
   const sk = (t - SL.starT)/1.3; stars.forEach((b, i) => { b.visible = sk >= 0 && sk < 1; if (b.visible) { const a = t*5 + i*1.57; b.at(P.x + Math.cos(a)*.28, P.y + 1.2 + Math.sin(a*2)*.04, P.z + Math.sin(a)*.28); b.op = 1 - sk; } });
   /* 생각 풍선 */
   SL.wantT = Math.max(0, SL.wantT - dt); wantB.visible = SL.wantT > 0 || (st === 1 && !flags.bb && d < 5 && P.mode === 'ground' && Math.sin(t*.6) > .3); wantB.at(sx, BR + .25, sz);
-  SL.wakeT = Math.max(0, SL.wakeT - dt); wakeB.visible = SL.wakeT > 0; wakeB.at(P.x, P.y + 1.35, P.z);
+  SL.wakeT = Math.max(0, SL.wakeT - dt); wakeB.visible = SL.wakeT > 0 && flags.sl === 0 && P.mode === 'ground'; wakeB.at(P.x, P.y + 1.35, P.z);
   bananaBunch.visible = !flags.banana;
   /* 나무 밑에선 위를 올려다봄 */
-  CAM.lookUp = (P.mode === 'ground' && d < 4.8 && !P.moving && st < 5) ? 1 : 0;
+  CAM.near = (P.mode === 'ground' && d < 6 && st < 5) ? 1 : 0;
 }
 
 function step(dt){
@@ -879,7 +883,7 @@ function step(dt){
   for (const k in holes) holes[k].visible = !S.nest[k] && !flags.hatched;
   if (P.mode === 'top' && !flags.sawNest) { flags.sawNest = 1; save(); }
   nestFluff.visible = !!S.nest.fluff; nestStone.visible = !!S.nest.stone; nestEgg.visible = !!S.nest.egg && !flags.hatched;
-  if (hatchT > 0 && !flags.hatched) { hatchT += dt; const sh = hatchT > 1 ? Math.sin(t*40)*.03*Math.min(1, hatchT - 1) : 0; nestEgg.at(NX - .15 + sh, TREE_H + .42, NZ); if (hatchT > 4) { flags.hatched = 1; save(); } }
+  if (hatchT > 0 && !flags.hatched) { hatchT += dt; const sh = hatchT > 1 ? Math.sin(t*40)*.03*Math.min(1, hatchT - 1) : 0; nestEgg.at(NX - .1 + sh, TREE_H + .28, NZ); if (hatchT > 4) { flags.hatched = 1; save(); } }
   shell.visible = !!flags.hatched && !flags.maskTaken; chick.visible = !!flags.hatched && (hatchT === 0 || hatchT < 9);
   if (flags.hatched) { if (hatchT > 0) hatchT += dt; const k = hatchT > 0 ? Math.max(0, hatchT - 4) : 9; chick.at(NX + Math.sin(k)*k*.8, TREE_H + .5 + k*1.2, NZ + Math.cos(k*1.3)*k*.6); chick.visible = k < 6; }
   /* 갈대와 알 */
@@ -931,11 +935,12 @@ function step(dt){
   /* 카메라: 등 뒤에서 따라감 */
   CAM.manual = Math.max(0, (CAM.manual || 0) - dt);
   if (P.moving && !CAM.manual) { const want = Math.atan2(-P.fx, -P.fz); let d = want - CAM.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); CAM.yaw += d*Math.min(1, dt*(P.mode === 'climb' ? 2.6 : 1.1)); }
-  let cd = P.mode === 'top' ? 3.2 : CAM.dist; const chh = P.mode === 'top' ? 1.9 : CAM.h;
+  CAM.nk = (CAM.nk || 0) + ((CAM.near || 0) - (CAM.nk || 0))*Math.min(1, dt*1.5);
+  let cd = P.mode === 'top' ? 3.2 : CAM.dist + CAM.nk*1.6; const chh = P.mode === 'top' ? 1.9 : CAM.h + CAM.nk*.9;
   let wx = P.x + Math.sin(CAM.yaw)*cd, wz = P.z + Math.cos(CAM.yaw)*cd; const wy = P.y + chh;
   if (P.mode !== 'top' && P.y < 3) { const rr = Math.hypot(wx, wz); if (rr < TRUNK_R + 1) { wx *= (TRUNK_R + 1)/(rr || 1); wz *= (TRUNK_R + 1)/(rr || 1); } }
   CAM.x += (wx - CAM.x)*Math.min(1, dt*4); CAM.y += (wy - CAM.y)*Math.min(1, dt*4); CAM.z += (wz - CAM.z)*Math.min(1, dt*4);
-  camera.position.set(CAM.x, CAM.y, CAM.z); { const [fx, fz] = camFwd(), ah = P.mode === 'top' ? 2 : 3; CAM.up = (CAM.up || 0) + ((CAM.lookUp || 0) - (CAM.up || 0))*Math.min(1, dt*.8); camera.lookAt(P.x + fx*ah, P.y + (P.mode === 'top' ? .55 : 1.05) + CAM.up*2.4, P.z + fz*ah); } U.uPlayer.value.set(P.x, P.y, P.z);
+  camera.position.set(CAM.x, CAM.y, CAM.z); { const [fx, fz] = camFwd(), ah = P.mode === 'top' ? 2 : 3; camera.lookAt(P.x + fx*ah, P.y + (P.mode === 'top' ? .55 : 1.05) + (CAM.nk || 0)*1.5, P.z + fz*ah); } U.uPlayer.value.set(P.x, P.y, P.z);
   hintT -= dt; if (hintT <= 0) document.getElementById('hint').style.display = 'none';
   saveT += dt; if (saveT > 2) { saveT = 0; S.x = P.mode === 'ground' ? P.x : S.x; S.z = P.mode === 'ground' ? P.z : S.z; save(); }
 }
@@ -947,7 +952,7 @@ if (flags.ended) ending();
 
 function loop(now){ const dt = Math.min(.1, (now - last)/1000); last = now; step(dt); renderer.render(scene, camera); requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
-window.__g = { scr:toScreen, setSel:k => { sel = k; drawInv(); }, tapItem, P, S, flags, ACTS, tap, useOn, frogTap, FROGS, walkable, findPath, CAM, give:k => { give(k); drawInv(); } };
+window.__g = { SL, wakeB, scr:toScreen, setSel:k => { sel = k; drawInv(); }, tapItem, P, S, flags, ACTS, tap, useOn, frogTap, FROGS, walkable, findPath, CAM, give:k => { give(k); drawInv(); } };
 </script>
 </body>
 </html>
