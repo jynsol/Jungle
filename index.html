@@ -1182,8 +1182,14 @@ const SHORTCUTS = [];
   // 장 물건은 그 장으로 들어가는 둘레길에서 몇 걸음 들어간 샛길 끝에
   const onArc = (sc, fromEnd, side) => { const pts = sc.pts, n = Math.max(4, pts.length - 1 - Math.round(fromEnd*4)), p = pts[n], q = pts[n - 4], dx = wd(p[0] - q[0], W), dy = wd(p[1] - q[1], H), l = Math.hypot(dx, dy) || 1; return [p[0] - dy/l*side, p[1] + dx/l*side]; };
   const put = (k, [x, y], r) => { const s = STORY_SPOTS.find(q => q.key === k); s.x = wrapX(Math.floor(x) + .5); s.y = wrapY(Math.floor(y) + .5); clear(s.x, s.y, r); };
-  put('gramophone', onArc(SHORTCUTS[1], 12, -6), 1.8);   // 범선 → 물가 길: 물가 조금 전
-  put('clock', onArc(SHORTCUTS[2], 20, 6), 1.8); put('piano', onArc(SHORTCUTS[2], 10, -6), 2.4); }   // 물가 → 폐허 길: 먼저 괘종시계, 신전 가까이 피아노
+  const dryArc = (sc, fromEnd, side) => {   // 둘레길에서 물을 건너지 않고 바로 닿는 샛길 자리 (물 건너편에 보이기만 하고 못 가는 일이 없게)
+    for (const fe of [fromEnd, fromEnd - 2, fromEnd + 2, fromEnd - 4, fromEnd + 4]) for (const sd of [side, -side, side*.6, -side*.6]) {
+      const q = onArc(sc, fe, sd), n = Math.max(4, sc.pts.length - 1 - Math.round(fe*4)), p = sc.pts[n], dx = wd(q[0] - p[0], W), dy = wd(q[1] - p[1], H), L = Math.hypot(dx, dy); let ok = true;
+      for (let t = 0; t <= L + 1.5 && ok; t += .3) { const k = id(Math.floor(p[0] + dx*t/L), Math.floor(p[1] + dy*t/L)); if (type[k] === WATER || type[k] === RUIN) ok = false; }
+      if (ok) return q; }
+    return onArc(sc, fromEnd, side*.4); };
+  put('gramophone', dryArc(SHORTCUTS[1], 12, -4), 1.8);   // 범선 → 물가 길: 물가 조금 전, 길에서 몇 걸음 (물 건너지 않게)
+  put('clock', dryArc(SHORTCUTS[2], 20, 6), 1.8); put('piano', dryArc(SHORTCUTS[2], 10, -6), 2.4); }   // 물가 → 폐허 길: 먼저 괘종시계, 신전 가까이 피아노
 // 샛길: 소리 없는 볼거리마다 가까운 짐승 길에서 좁은 오솔길이 갈라져 나감 (풀이 눌린 한 줄)
 { const main = []; for (let k = 0; k < W*H; k++) if (TRAIL[k]) main.push(k);
   const goals = [...SITES.map(s => ({ x:s.cx, y:s.cy })), ...STORY_SPOTS.map(s => ({ x:s.x, y:s.y })), { x:LOOKOUT.x, y:LOOKOUT.y }, { x:WATERFALL.x + 3.5, y:WATERFALL.y + 2.5 }];
@@ -1314,7 +1320,7 @@ for (const b of TP) if (hash(b.k*103) < .05 && !border(b.k % W, b.k / W | 0)) { 
 
 /* 기적의 자리, 앵무새, 노인 */
 const altarGeo = plane(2.2, 1.1);
-const ALTARS = []; for (const s of SITES) if (s.key !== 'mirror' && s.key !== 'butterflies') { const me = cutout(altarGeo, mat(ALTAR_TEX)); me.position.set(s.cx, 0, s.cy + .95); ALTARS.push(me); }
+const ALTARS = []; for (const s of SITES) if (s.key !== 'mirror' && s.key !== 'butterflies') { const me = cutout(altarGeo, mat(ALTAR_TEX)); me.position.set(s.cx, 0, s.cy + .95); me.userData.site = s.key; ALTARS.push(me); }
 const personGeo = plane(.76, 1.14);
 const oldman = cutout(personGeo, mat(OLDMAN_TEX)); onArt('oldman', im => { swapTex(OLDMAN_TEX, im); fitGeo(oldman, 1.14, im); }); oldman.position.set(SITE.oldman.cx + 1.6, 0, SITE.oldman.cy + .6);
 const parrotGeo = plane(.42, .84);
@@ -2477,14 +2483,18 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
     g.fillStyle = '#7a5a36'; g.strokeStyle = RG.line; g.lineWidth = 3; g.fillRect(24, 70, 112, 104); g.strokeRect(24, 70, 112, 104);
     g.fillStyle = '#c8a860'; g.beginPath(); g.moveTo(6, 78); g.lineTo(80, 6); g.lineTo(154, 78); g.closePath(); g.fill(); g.stroke();
     g.strokeStyle = '#a08040'; g.lineWidth = 2; for (let i = 0; i < 10; i++) { g.beginPath(); g.moveTo(14 + i*14, 74); g.lineTo(80, 10); g.stroke(); }
-    g.fillStyle = '#5a3c22'; g.fillRect(34, 76, 92, 34); g.strokeStyle = '#3a2618'; g.lineWidth = 3; g.strokeRect(34, 76, 92, 34);   // 문 위 나무판의 새김 그림 (멀리서도 셋이 보이게 크게)
-    LOCK_ANS.forEach((si, n) => drawSym(g, SYMS[si], 52 + n*28, 93, 12, '#f3e2b0'));
+    g.fillStyle = '#5a3c22'; g.fillRect(58, 86, 44, 20); g.strokeStyle = '#3a2618'; g.lineWidth = 2; g.strokeRect(58, 86, 44, 20);   // 문 위 나무판 (자물쇠 답은 두 갈래 돌에 새겨져 있음)
     g.fillStyle = '#2a1c12'; g.fillRect(64, 112, 32, 62);
     if (peek) { g.fillStyle = '#0a0604'; g.fillRect(64, 112, 32, 62); g.fillStyle = '#ffe36a'; for (const x of [74, 86]) { g.beginPath(); g.ellipse(x, 132, 3.5, 2.2, 0, 0, Math.PI*2); g.fill(); } }
     else { g.fillStyle = '#5a3c22'; g.fillRect(66, 114, 28, 58); g.fillStyle = '#c9a046'; g.beginPath(); g.arc(88, 144, 2.5, 0, Math.PI*2); g.fill(); }
     g.fillStyle = '#ffd87a'; g.fillRect(106, 124, 18, 16); g.strokeStyle = '#4a3220'; g.lineWidth = 2; g.strokeRect(106, 124, 18, 16);
   });
   const HUT_T = hutPaint(false), HUT_PEEK_T = hutPaint(true);
+  { const fa = ALTARS.find(m => m.userData.site === 'fork');   // 자물쇠 답: 오두막에서 서쪽, 두 갈래 돌 앞면에 그림 셋이 크게 새겨져 있음
+    if (fa) fa.material = mat(ctex(160, 80, (g, w, h) => { g.fillStyle = COLORS.ruin; g.strokeStyle = '#5a3218'; g.lineWidth = 3; g.beginPath(); g.moveTo(10, h-2); g.lineTo(26, 12); g.lineTo(w-26, 12); g.lineTo(w-10, h-2); g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = 'rgba(60,30,14,.35)'; g.fillRect(28, 20, w - 56, 52); LOCK_ANS.forEach((si, n) => drawSym(g, SYMS[si], 50 + n*30, 46, 13, '#f3e2b0')); })); }
+  const FORK_C = document.createElement('canvas'); FORK_C.width = 96; FORK_C.height = 64;   // 생각 풍선: 빈 칸 셋이 있는 돌 (어딘가의 돌에 그림이 있었지?)
+  { const g = FORK_C.getContext('2d'); if (g) { g.fillStyle = COLORS.ruin; g.strokeStyle = '#5a3218'; g.lineWidth = 3; g.beginPath(); g.moveTo(6, 60); g.lineTo(16, 10); g.lineTo(80, 10); g.lineTo(90, 60); g.closePath(); g.fill(); g.stroke(); g.strokeStyle = '#f3e2b0'; g.lineWidth = 2; g.setLineDash([3, 3]); for (let n = 0; n < 3; n++) { g.beginPath(); g.arc(28 + n*20, 35, 7, 0, Math.PI*2); g.stroke(); } } }
   const LENS_T = ctex(48, 48, (g) => { g.fillStyle = 'rgba(190,230,240,.85)'; g.strokeStyle = '#b08a3a'; g.lineWidth = 5; g.beginPath(); g.arc(24, 24, 18, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = 'rgba(255,255,255,.9)'; g.beginPath(); g.ellipse(17, 17, 5, 3, -.6, 0, Math.PI*2); g.fill(); });
   const BIRDHEAD_T = ctex(48, 48, (g) => { g.fillStyle = '#3e6fb0'; g.strokeStyle = RG.line; g.lineWidth = 2; g.beginPath(); g.arc(24, 28, 14, 0, Math.PI*2); g.fill(); g.stroke(); g.fillStyle = '#f2c230'; g.beginPath(); g.moveTo(36, 26); g.lineTo(47, 30); g.lineTo(36, 33); g.closePath(); g.fill(); g.fillStyle = '#fff'; g.beginPath(); g.arc(29, 24, 4, 0, Math.PI*2); g.fill(); g.fillStyle = '#111'; g.beginPath(); g.arc(30, 24, 2, 0, Math.PI*2); g.fill(); });
   window.LENS_T = LENS_T; LENS_T.userData.keep = true;
@@ -2546,7 +2556,7 @@ const PLATS = [];   // 올라가 걸을 수 있는 발판 { x, y, r, inner, h }
   document.body.append(lockBox);
   const dialVal = [0, 0, 0], $dials = lockBox.querySelector('#dials');
   lockBox.querySelector('#lockX').innerHTML = ICON(IC.close);
-  const closeLock = () => { lockBox.hidden = true; cv.focus(); if (pzStep(SL) === 5) setTimeout(() => wants.push({ img:HUTDOOR_C(), x:SPOT.chest.x, h:DECK + 1.1, z:SPOT.chest.z, until:clock + 3.5 }), 300); };   // 못 열고 닫으면 상자 위에 오두막 문(그림 셋)이 떠오름
+  const closeLock = () => { lockBox.hidden = true; cv.focus(); if (pzStep(SL) === 5) setTimeout(() => wants.push({ img:FORK_C, x:SPOT.chest.x, h:DECK + 1.1, z:SPOT.chest.z, until:clock + 3.5 }), 300); };   // 못 열고 닫으면 상자 위에 빈 칸 셋이 있는 돌이 떠오름 (두 갈래 돌)
   lockBox.querySelector('#lockX').addEventListener('click', closeLock);
   lockBox.addEventListener('click', e => { if (e.target === lockBox) closeLock(); });
   function paintDials(){ $dials.replaceChildren(...dialVal.map((v, n) => { const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', `다이얼 ${n + 1}`);
@@ -3231,7 +3241,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     GR.targets = () => { const st = pzStep(GR), L = [{ key:'pz-gramo', noSeen:true, x:at.x, h:.8, z:at.z, reach:3, act:() => {
         if (st === 0 && pzSave.crank === 1) { pzSave.crank = 2; savePz(); paintBag(); tick(300, .4, .06, 'square'); play(); setTimeout(() => setPzStep(GR, 1), 6400); }
         else if (st === 0) want(CRANK_T, at.x, 1.6, at.z); else play(); } }];
-      if (st === 1) L.push({ key:'pz-net', noSeen:true, x:NETP.x, h:.3, z:NETP.z, reach:2.5, act:() => { take('net', NET_T, NETP.x, NETP.z); setPzStep(GR, 2); } });
+      if (st === 1) L.push({ key:'pz-net', noSeen:true, x:NETP.x, h:.3, z:NETP.z, reach:2.5, act:() => { take('net', NET_T, NETP.x, NETP.z); setPzStep(GR, 2); setTimeout(() => want(SHRIMP_T, P.x, 2.1, P.y), 2000); } });   // 그물을 들면 새우가 떠오름 (이걸로 뭘 건지지?)
       return L; };
     GR.update = (dt, camX, camZ) => { const st = pzStep(GR), gd = wdist(P.x, P.y, at.x, at.z);
       if (st === 0 && gd < 11 && (GR.hissT = (GR.hissT ?? 0) - dt) <= 0) { GR.hissT = 1.6; const v = .035*(1 - gd/11); for (let i = 0; i < 5; i++) setTimeout(() => tick(2600 + Math.random()*1800, .02, v, 'square'), i*260 + Math.random()*120); }   // 바늘이 판을 긁는 소리: 다가가면 들림
@@ -3273,6 +3283,7 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
     const POOL = { x:WATERFALL.x, z:WATERFALL.y - 1 }, LEDGE = { x:X + 4, z:Y + 1.7 };
     const setBlock = on => { setT(X + 3, Y + 1, on ? RUIN : FLOOR); setT(X + 4, Y + 1, on ? RUIN : FLOOR); }; if (pzStep(WF) === 0) setBlock(true);
     const flam = [-.55, 0, .55].map(() => cutout(plane(.5, 1.0), mat(FLAMINGO_TEX)));
+    const SHR = { x:POOL.x - 1.2, z:POOL.z + .4 }, shrimps = [0, 1, 2].map(() => cutout(plane(.24, .18, false), mat(SHRIMP_T)));   // 웅덩이의 새우 (처음부터 보임: 플라밍고가 먹고 싶은 것)
     const WET_T = ctex(256, 96, (g, w, h) => { g.fillStyle = '#3a4440'; g.fillRect(0, 0, w, h); g.fillStyle = '#2e3834'; for (let i = 0; i < 24; i++) { g.beginPath(); g.ellipse((i*61) % w, (i*29) % h, 26, 12, (i % 4)*.5, 0, Math.PI*2); g.fill(); } g.strokeStyle = 'rgba(150,200,190,.25)'; g.lineWidth = 2; for (let i = 0; i < 9; i++) { g.beginPath(); g.moveTo((i*31) % w, 0); g.lineTo((i*31) % w + 4, h); g.stroke(); } });
     WET_T.wrapS = THREE.RepeatWrapping; onArt('cave_wall', im => swapTex(WET_T, im));
     const CH = 2.6, walls = [];
@@ -3310,7 +3321,9 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
         if (solved()) { pzSfx.thump(.15); [0, 1, 2].forEach(k => setTimeout(() => tick(150 + k*30, .5, .06, 'sawtooth'), 300 + k*200)); setTimeout(() => { setPzStep(WF, 2); CARD.paint(); }, 900); } return; }
       if (solved() && !hasOcelot() && Math.abs(x - 150) < 30 && y > 60 && y < 130) { giveMask('ocelot'); pzSfx.chime(.1); setPzStep(WF, 3); CARD.paint(); } };
     WF.targets = () => { const st = pzStep(WF), L = [];
-      if (pzSave.net === 1 && !pzSave.shrimp) L.push({ key:'pz-pool', noSeen:true, x:POOL.x - 1.2, h:.05, z:POOL.z + .4, reach:3, act:() => { tick(600, .2, .05); take('shrimp', SHRIMP_T, POOL.x - 1.2, POOL.z + .4); } });
+      if (!pzSave.shrimp) L.push({ key:'pz-pool', noSeen:true, x:SHR.x, h:.15, z:SHR.z, reach:3, me:shrimps[0], act:() => {   // 웅덩이 가장자리에서 분홍 새우가 퐁퐁 뜀
+        if (pzSave.net !== 1) { WF.dartT = clock; tick(500, .08, .04); want(NET_T, SHR.x, 1.2, SHR.z); return; }   // 손으로는 쏙 빠져나감 → 그물을 떠올림
+        tick(600, .2, .05); take('shrimp', SHRIMP_T, SHR.x, SHR.z); } });
       if (st === 0) L.push({ key:'pz-flamingo', noSeen:true, x:LEDGE.x, h:.8, h0:.2, h1:1.0, z:LEDGE.z, reach:3.5, me:flam[1], act:() => {
         if (pzSave.shrimp === 1) { pzSave.shrimp = 2; savePz(); paintBag(); tick(900, .15, .05); WF.movedT = clock; setBlock(false); setPzStep(WF, 1); } else want(SHRIMP_T, LEDGE.x, 1.5, LEDGE.z); } });
       if (CV.inside(P.x, P.y)) {
@@ -3320,6 +3333,10 @@ addEventListener('keydown', e => { if (e.target === $say || modalOpen()) return;
       return L; };
     let dripT = 1;
     WF.update = (dt, camX, camZ) => { const st = pzStep(WF), m = st >= 1 ? Math.min(1, (clock - WF.movedT)/3) : 0;
+      shrimps.forEach((sm, i) => { sm.visible = !pzSave.shrimp; if (!sm.visible) return; const ph = (clock*.55 + i*.37) % 1, dart = clock - (WF.dartT || -9) < 1.2, hop = ph < .22 ? Math.sin(ph/.22*Math.PI) : 0;   // 가끔 물 위로 튀어 오름
+        place(sm, { x:SHR.x + (i - 1)*.35 + (dart ? (i - 1)*.6 : 0), z:SHR.z + Math.sin(i*2)*.2 }, .02 + hop*.45, camX, camZ); sm.rotation.z = hop ? Math.sin(ph*28)*.5 : 0;
+        if (i === 0 && ph < .02 && !WF.plop && wdist(P.x, P.y, SHR.x, SHR.z) < 12) { WF.plop = true; tick(1700, .05, .03*(1 - wdist(P.x, P.y, SHR.x, SHR.z)/12), 'sine'); } if (i === 0 && ph > .1) WF.plop = false; });
+      if (st === 0 && !pzSave.shrimp && wdist(P.x, P.y, LEDGE.x, LEDGE.z) < 3 && (WF.askT = (WF.askT ?? 0) - dt) <= 0) { WF.askT = 9; want(SHRIMP_T, LEDGE.x, 1.5, LEDGE.z); }   // 다가가면 플라밍고가 새우를 떠올림 (배고파서 길을 안 비킴)
       flam.forEach((f, i) => { const p = { x:LEDGE.x + (i - 1)*.45 + m*(1.6 + i*.5), z:LEDGE.z + m*(1.4 + i*.3) }; place(f, p, m > 0 && m < 1 ? Math.abs(Math.sin(clock*6 + i))*.04 : 0, camX, camZ); });
       for (const w of walls) { const [x, z] = wrapNear(w.x, w.z, camX, camZ); w.m.position.set(x, 0, z); }
       { const [x, z] = wrapNear(X + 1, Y - 7.5, camX, camZ); roof.position.set(x, CH, z); roof.visible = CV.inside(P.x, P.y); }
@@ -3570,6 +3587,7 @@ const $energy = document.createElement('div'); $energy.hidden = true;   // 기�
 function underTree(x, y){ for (let ty = (y|0) - 1; ty <= (y|0) + 1; ty++) for (let tx = (x|0) - 1; tx <= (x|0) + 1; tx++) if (type[id(tx, ty)] === TREE && wdist(x, y, tx + .5, ty + .5) < 1.4) return true; return false; }
 function gainEnergy(n){ energy = Math.min(100, energy + n); }
 function updateEnergy(dt){
+  energy = 100; faint = 0; fainted = false; speedMul = 1; return;   // 기운(체력)은 뺌: 지쳐서 느려지거나 쓰러지는 일 없음
   const st = stormLevel(), nearF = nearFire(P.x, P.y);
   wet = st > .3 && !nearF && !underTree(P.x, P.y);
   let d = 0;
@@ -3595,6 +3613,7 @@ function updateEnergy(dt){
   $energy.textContent = '기운 ' + '●'.repeat(dots) + '○'.repeat(5 - dots) + (wet ? ' · 젖음' : '') + (energy < 30 ? ' · 지침' : '');
 }
 function drawEnergyOverlay(){
+  return;   // 기운을 뺐으니 가장자리 어두워짐도 없음
   if (energy < 50 && faint === 0) {   // 지칠수록 가장자리가 어두워짐
     const g = ctx.createRadialGradient(vw/2, vh/2, Math.min(vw, vh)*.25, vw/2, vh/2, Math.max(vw, vh)*.7);
     g.addColorStop(0, 'rgba(10,8,20,0)'); g.addColorStop(1, `rgba(10,8,20,${(1 - energy/50)*.7})`); ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
@@ -4160,7 +4179,7 @@ function draw(dt = .016){
 }
 
 /* ---- 저장 (내 위치와 그림첩, 이 브라우저에) ---- */
-if (location.search.includes('dbg')) window.__g = { scene, camera, P, keys, REGIONS, SITES, STORY_SPOTS, FIRE, WATERFALL, giveMask, get bag(){ return bag; }, PUZZLES, pzSave, lookTargets, sing, get clock(){ return clock; }, get yaw(){ return yaw; }, set yaw(v){ yaw = v; }, get pitch(){ return pitch; }, set pitch(v){ pitch = v; } };   // 시험용 (주소에 ?dbg)
+if (location.search.includes('dbg')) window.__g = { scene, camera, P, keys, REGIONS, SITES, STORY_SPOTS, FIRE, WATERFALL, giveMask, get bag(){ return bag; }, PUZZLES, pzSave, lookTargets, sing, get clock(){ return clock; }, get yaw(){ return yaw; }, set yaw(v){ yaw = v; }, get pitch(){ return pitch; }, set pitch(v){ pitch = v; }, get map(){ return type; } };   // 시험용 (주소에 ?dbg)
 const KEY = 'denggul-v3';
 function save(){ if (window.__resetting) return; try { localStorage.setItem(KEY, JSON.stringify({ p:[P.x,P.y], found, c:clock })); } catch (e) {} }
 function load(){
