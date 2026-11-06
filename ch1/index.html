@@ -343,7 +343,7 @@ const trunk = new THREE.Mesh(new THREE.CylinderGeometry(TRUNK_R*.92, TRUNK_R*1.1
 trunk.position.set(0, TREE_H/2, 0); scene.add(trunk);
 { const top = new THREE.Mesh(new THREE.CircleGeometry(TRUNK_R*.92, 28), new THREE.MeshBasicMaterial({ color:'#5a4a38' })); top.rotation.x = -Math.PI/2; top.position.y = TREE_H + .01; scene.add(top); }
 /* 판뿌리: 줄기 둘레의 세운 판 */
-for (let i = 0; i < 7; i++) { const a = i/7*Math.PI*2 + .3; if (Math.abs(((a - Math.PI/2 + Math.PI*3) % (Math.PI*2)) - Math.PI) < .5) continue;
+for (let i = 0; i < 7; i++) { const a = i/7*Math.PI*2 + .3; if (Math.abs(((a - (Math.PI/2 + .55) + Math.PI*3) % (Math.PI*2)) - Math.PI) < .8) continue;
   const fin = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(2.2, 0), new THREE.Vector2(0, 3.2)])), new THREE.MeshBasicMaterial({ map:T.trunk, side:THREE.DoubleSide }));
   fin.position.set(Math.cos(a)*TRUNK_R*.95, 0, Math.sin(a)*TRUNK_R*.95); fin.rotation.y = -a; scene.add(fin); }
 /* 나뭇잎 지붕: 꼭대기 둘레 */
@@ -355,17 +355,15 @@ const cradleGown = bill(T.gown, .5, .5, 3.0, 1.62, 5.0, { near:0, push:.08 });
 const mailbox = bill(artTex('mailbox'), .6, 1.5, -5.2, 0, 4.4, { near:0 });
 const flowers = [[5.4, 3.0], [6.1, 2.2], [5.0, 3.9]].map(([x, z]) => bill(artTex('whitespike'), .62, 1.18, x, 0, z, { near:0 }));
 /* 오르는 길 (홈 셋이 다 차면 자라남) */
-const HX = { R:4.35, a0:Math.PI/2 + .55, turns:.62 };
-HX.L = HX.R*Math.PI*2*HX.turns; HX.pitch = TREE_H/HX.L;
-const A_END = HX.a0 - HX.L/HX.R, NX = Math.cos(A_END - 2.3)*2.15, NZ = Math.sin(A_END - 2.3)*2.15;
+const A_L = Math.PI/2 + .55, NX = Math.cos(A_L - 1.35)*2.15, NZ = Math.sin(A_L - 1.35)*2.15;
+const LAD = { bx:Math.cos(A_L)*3.55, bz:Math.sin(A_L)*3.55, tx:Math.cos(A_L)*2.3, tz:Math.sin(A_L)*2.3 };
 /* 위로 이어지는 줄기 (둥지는 굵은 가지 위, 줄기 옆) */
 { const up = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.55, 12, 20, 1, true), new THREE.MeshBasicMaterial({ map:T.trunk })); up.position.set(0, TREE_H + 6, 0); scene.add(up); }
-const helixAt = s => { const a = HX.a0 - s/HX.R; return [Math.cos(a)*HX.R, Math.min(TREE_H, s*HX.pitch), Math.sin(a)*HX.R, a]; };
-const STEPS = Math.ceil(HX.L/.9);
-const stepMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1.7, .22, 1.05), new THREE.MeshBasicMaterial({ map:T.step }), STEPS); scene.add(stepMesh);
-let helixGrow = 1;
-function placeSteps(k){ const n = Math.floor(STEPS*k); stepMesh.count = n; for (let i = 0; i < n; i++) { const [x, y, z, a] = helixAt(i*.9 + .45); const ry = -a; M4.compose(V3.set(x, y - .11, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0)), SC.set(1, 1, 1)); stepMesh.setMatrixAt(i, M4); } stepMesh.instanceMatrix.needsUpdate = true; }
-placeSteps(helixGrow);
+/* 줄사다리: 줄기에 기대어 늘어짐 */
+T.ladder = ctex(128, 512, (g) => { g.strokeStyle = '#8a6a3a'; g.lineWidth = 7; g.beginPath(); g.moveTo(22, 0); g.bezierCurveTo(16, 170, 26, 340, 20, 512); g.moveTo(106, 0); g.bezierCurveTo(112, 170, 100, 340, 108, 512); g.stroke();
+  g.strokeStyle = '#5a3a1a'; g.lineWidth = 9; for (let y = 24; y < 512; y += 44) { g.beginPath(); g.moveTo(18, y + 4); g.lineTo(110, y); g.stroke(); } });
+{ const m = flat(T.ladder, 1.1, TREE_H + .5, Math.cos(A_L)*3.25, 0, Math.sin(A_L)*3.25, Math.PI/2 - A_L); }
+
 /* 꼭대기 둥지 */
 const nestB = bill(T.nest, 1.5, .75, NX, TREE_H, NZ, { near:0 });
 const nestFluff = bill(T.fluff, .9, .55, NX, TREE_H + .35, NZ, { near:0, push:.05 });
@@ -412,6 +410,8 @@ const cords = {}; for (const k in CORD_Z) { const m = flat(T.cords[k][0], .22, .
 /* ============ 반딧불 덤불과 거미줄 (북쪽에서 봄) ============ */
 const FFB = { x:-1.2, z:48.6 };
 bill(T.ffbush, 3.2, 2.6, FFB.x, 0, FFB.z, { near:0 });
+const FFF = [[FFB.x + 2.3, FFB.z - 1.3], [FFB.x + 2.9, FFB.z - .7]];
+FFF.forEach(([x, z]) => bill(artTex('whitespike'), .62, 1.18, x, 0, z, { near:0 }));
 const ffs = Array.from({ length:18 }, (_, i) => ({ m:flat(T.glow, .28, .28, 0, 0, 0, 0, { blend:true, add:true, center:true, glow:true }), ph:hash(i)*6.28, r:.5 + hash(i + 4)*1.2 }));
 const WEB = { x:5.5, z:48.2, y:.2, w:2.4, h:2.4 };
 flat(T.web, WEB.w, WEB.h, WEB.x, WEB.y, WEB.z, Math.PI);
@@ -432,7 +432,7 @@ const EXIT = FLOWER_CP[FLOWER_CP.length - 1];
 
 /* ============ 나 ============ */
 const P = { x:S.x, z:S.z, y:0, fx:0, fz:-1, moving:false, row:1, flip:0, frame:0, ft:0, mode:S.mode || 'ground', s:S.s || 0, stone:-1 };
-if (P.mode === 'helix') P.mode = 'ground';
+if (P.mode === 'climb') P.mode = 'ground';
 const frames = []; const playerB = bill(T.shadow, 1.17, 1.75, P.x, 0, P.z, { near:0 });
 const shadow = flat(T.shadow, 1.2, .7, P.x, .03, P.z, 0, { center:true, blend:true }); shadow.rotation.x = -Math.PI/2;
 const maskB = bill(T.mask, .3, .3, 0, 0, 0, { near:0, push:.12 });
@@ -469,7 +469,7 @@ let route = null, routeAct = null;
 const ACTS = [];
 function act(o){ ACTS.push(Object.assign({ r:.6, reach:2.4, level:'ground', vis:() => true }, o)); }
 
-function nope(x, y, z){ const p = toScreen(x, y, z); const d = document.createElement('div'); d.className = 'no'; d.textContent = '✕'; d.style.left = p[0] + 'px'; d.style.top = p[1] + 'px'; document.body.append(d); setTimeout(() => d.remove(), 800); }
+function nope(){}
 function gain(k, x, y, z){ give(k); save(); drawInv(); const p = toScreen(x, y, z); const c = iconCanvas(k); c.className = 'fx'; c.style.left = (p[0] - 28) + 'px'; c.style.top = (p[1] - 28) + 'px'; document.body.append(c);
   const slot = [...document.querySelectorAll('.slot')].find(s => s.dataset.k === k); const r = slot ? slot.getBoundingClientRect() : { left:innerWidth/2, top:innerHeight - 60 };
   requestAnimationFrame(() => requestAnimationFrame(() => { c.style.transform = `translate(${r.left - p[0] + 28}px, ${r.top - p[1] + 28}px) scale(.8)`; c.style.opacity = .3; })); setTimeout(() => c.remove(), 700); }
@@ -483,8 +483,8 @@ act({ id:'mail', x:-5.2, y:1.1, z:4.4, r:.6, on(){ showHint(); return true; } })
 /* 흰 꽃 */
 act({ id:'flower', x:5.5, y:.7, z:3.0, r:.9, want:['bottle'], on(it){ if (it === 'bottle') { swapItem('bottle', 'fbottle'); save(); drawInv(); return true; } if (has('flower') || has('fbottle') || has('ffbottle') || flags.hung) return false; gain('flower', 5.5, .9, 3.0); return true; } });
 /* 오르는 길 첫 칸 */
-act({ id:'stepsBottom', x:helixAt(.5)[0], y:.4, z:helixAt(.5)[2], r:.9, reach:2.2, on(){ P.mode = 'helix'; P.s = .3; route = null; P.auto = HX.L + .3; return true; } });
-act({ id:'stepsTop', level:'top', x:helixAt(HX.L - .4)[0], y:TREE_H + .3, z:helixAt(HX.L - .4)[2], r:.9, reach:2.2, on(){ P.mode = 'helix'; P.s = HX.L - .3; P.auto = -.3; return true; } });
+act({ id:'ladder', x:LAD.bx, y:1.4, z:LAD.bz, r:.9, reach:2.4, on(){ startClimb(true); return true; } });
+act({ id:'ladderTop', level:'top', x:Math.cos(A_L)*2.9, y:TREE_H + .5, z:Math.sin(A_L)*2.9, r:.7, reach:2.4, on(){ startClimb(false); return true; } });
 /* 둥지 */
 act({ id:'nest', level:'top', want:['fluff', 'stone', 'egg'], x:NX, y:TREE_H + .3, z:NZ, r:.8, reach:2.6, on(it){
   if (flags.hatched) { if (!flags.maskTaken) { flags.maskTaken = 1; gain('mask', NX, TREE_H + .5, NZ); return true; } return false; }
@@ -530,7 +530,7 @@ const ROOM_HIT = [
 let roomPan = 0;
 function roomBox(){ let k = Math.min(innerWidth/1600, innerHeight/1000); if (innerWidth/innerHeight < 1.2) k = innerHeight*.82/1000; const w = 1600*k, h = 1000*k, over = Math.max(0, (w - innerWidth)/2); roomPan = Math.max(-over, Math.min(over, roomPan)); return { k, w, h, x:(innerWidth - w)/2 + roomPan, y:(innerHeight - h)/2 }; }
 const roomPt = (u, v) => { const b = roomBox(); return [b.x + u*b.w, b.y + v*b.h]; };
-function noAt(x, y){ const d = document.createElement('div'); d.className = 'no'; d.textContent = '✕'; d.style.left = x + 'px'; d.style.top = y + 'px'; document.body.append(d); setTimeout(() => d.remove(), 800); }
+function noAt(){}
 function flyFrom(k, at){ const c = iconCanvas(k); c.className = 'fx'; c.style.left = (at[0] - 28) + 'px'; c.style.top = (at[1] - 28) + 'px'; document.body.append(c); const slot = [...document.querySelectorAll('.slot')].find(s => s.dataset.k === k); const r = slot ? slot.getBoundingClientRect() : { left:innerWidth/2, top:innerHeight - 60 };
   requestAnimationFrame(() => requestAnimationFrame(() => { c.style.transform = `translate(${r.left - at[0] + 28}px, ${r.top - at[1] + 28}px) scale(.8)`; c.style.opacity = .3; })); setTimeout(() => c.remove(), 700); }
 function drawRoom(){
@@ -651,7 +651,19 @@ const endPtr = e => { if (!ptr || e.pointerId !== ptr.id) return; if (!ptr.drag 
 cvs.addEventListener('pointerup', endPtr); cvs.addEventListener('pointercancel', () => { ptr = null; joy = null; });
 cvs.addEventListener('contextmenu', e => e.preventDefault());
 
-function curLevel(){ return P.mode === 'top' ? 'top' : P.mode === 'helix' ? 'helix' : 'ground'; }
+function curLevel(){ return P.mode === 'top' ? 'top' : P.mode === 'climb' ? 'climb' : 'ground'; }
+/* 사다리 오르내리기: 밑으로 가서 → 오르고 → 발판으로 (내려올 땐 거꾸로) */
+function startClimb(up){ if (P.mode === 'climb') return; route = null; P.goal = null; P.climb = { up, t:0, x0:P.x, z0:P.z }; P.mode = 'climb'; }
+const ease = x => x*x*(3 - 2*x);
+function updateClimb(dt){ const c = P.climb; c.t += dt/2.2; const k = Math.min(1, c.t);
+  if (c.up) { if (k < .2) { const u = ease(k/.2); P.x = c.x0 + (LAD.bx - c.x0)*u; P.z = c.z0 + (LAD.bz - c.z0)*u; P.y = 0; P.fx = LAD.bx - c.x0; P.fz = LAD.bz - c.z0; }
+    else if (k < .85) { P.x = LAD.bx; P.z = LAD.bz; P.y = TREE_H*ease((k - .2)/.65); P.fx = -LAD.bx; P.fz = -LAD.bz; }
+    else { const u = ease((k - .85)/.15); P.x = LAD.bx + (LAD.tx - LAD.bx)*u; P.z = LAD.bz + (LAD.tz - LAD.bz)*u; P.y = TREE_H; } }
+  else { if (k < .15) { const u = ease(k/.15); P.x = c.x0 + (LAD.bx - c.x0)*u; P.z = c.z0 + (LAD.bz - c.z0)*u; P.y = TREE_H; P.fx = LAD.bx; P.fz = LAD.bz; }
+    else if (k < .85) { P.x = LAD.bx; P.z = LAD.bz; P.y = TREE_H*(1 - ease((k - .15)/.7)); P.fx = -LAD.bx; P.fz = -LAD.bz; }
+    else { const u = ease((k - .85)/.15); P.x = LAD.bx*(1 + .35*u); P.z = LAD.bz*(1 + .35*u); P.y = 0; P.fx = LAD.bx; P.fz = LAD.bz; } }
+  P.moving = true;
+  if (k >= 1) { P.mode = c.up ? 'top' : 'ground'; P.climb = null; if (P.mode === 'top') { P.x = LAD.tx; P.z = LAD.tz; } } }
 function tap(sx, sy){
   if (flags.ended || inRoom) return;
   let best = null, bd = 1e9;
@@ -660,19 +672,20 @@ function tap(sx, sy){
     const rp = Math.max(26, a.r/dist*innerHeight*.9); const d = Math.hypot(px - sx, py - sy); if (d < rp && dist < bd) { bd = dist; best = a; } }
   if (best) return useOn(best);
   // 땅을 누르면 그쪽으로 걸어감
-  if (P.mode === 'helix') { P.auto = sy < innerHeight*.45 ? HX.L + .3 : -.3; return; }
+  if (P.mode === 'climb') return;
   const ray = new THREE.Raycaster(); ray.setFromCamera({ x:sx/innerWidth*2 - 1, y:-(sy/innerHeight*2 - 1) }, camera);
   const planeY = P.mode === 'top' ? TREE_H : 0; const t = (planeY - ray.ray.origin.y)/ray.ray.direction.y; if (!(t > 0)) return;
   const hx = ray.ray.origin.x + ray.ray.direction.x*t, hz = ray.ray.origin.z + ray.ray.direction.z*t;
-  if (P.mode === 'top') { const d = Math.hypot(hx, hz); if (d > 2.7) { P.mode = 'helix'; P.s = HX.L - .2; P.auto = -.3; P.goal = null; return; } P.goal = [hx, hz]; P.downAll = false; return; }
+  if (P.mode === 'top') { const d = Math.hypot(hx, hz); if (d > 2.7) { startClimb(false); return; } P.topGoal = { a:Math.atan2(hz, hx) }; return; }
   if (P.mode !== 'ground') return;
   route = findPath(P.x, P.z, [hx, hz], .6); routeAct = null;
 }
 function useOn(a){
   const lv = curLevel();
-  if (a.level === 'top' && lv !== 'top') { if (lv === 'helix') P.auto = HX.L + .3; return; }
+  if (lv === 'climb') return;
+  if (a.level === 'top' && lv !== 'top') { useOn(ACTS.find(o => o.id === 'ladder')); return; }
   if (a.level === 'ground' && lv === 'top') return;
-  if (a.reach < 50) { const d = Math.hypot(P.x - a.x, P.z - a.z); if (d > a.reach) { if (lv === 'ground') { route = findPath(P.x, P.z, [a.x, a.z], a.reach - .3); routeAct = route ? () => useOn(a) : null; } return; } }
+  if (a.reach < 50) { const d = Math.hypot(P.x - a.x, P.z - a.z); if (d > a.reach) { if (lv === 'top') { P.topGoal = { a:Math.atan2(a.z, a.x), act:a }; return; } if (lv === 'ground') { route = findPath(P.x, P.z, [a.x, a.z], a.reach - .3); routeAct = route ? () => useOn(a) : null; } return; } }
   const it = sel && has(sel) ? sel : null;
   const r = it && !(a.want || []).includes(it) ? false : a.on(it);
   if (r === false) nope(a.x, a.y, a.z);
@@ -701,20 +714,13 @@ function step(dt){
   }
   P.moving = false;
   if (P.mode === 'ground' && mv) { const sp = SPEED*slow(P.x, P.z), nx = P.x + mv[0]*sp*dt, nz = P.z + mv[1]*sp*dt; if (moveTry(nx, nz)) { P.moving = true; P.fx = mv[0]; P.fz = mv[1]; } else route = null;
-    // 오르는 길로 들어섬
-    if (helixGrow >= 1) { const [hx, , hz] = helixAt(.3); if (Math.hypot(P.x - hx, P.z - hz) < .7) { const [tx, , tz] = helixAt(1.3); if ((tx - hx)*mv[0] + (tz - hz)*mv[1] > 0) { P.mode = 'helix'; P.s = .35; route = null; } } } }
-  if (P.mode === 'top') { if (mv) { const nx = P.x + mv[0]*SPEED*.8*dt, nz = P.z + mv[1]*SPEED*.8*dt; const d = Math.hypot(nx, nz); if (d < 2.6 && d > 1.85) { P.x = nx; P.z = nz; P.moving = true; P.fx = mv[0]; P.fz = mv[1]; } else P.goal = null;
-      const r1 = Math.hypot(P.x, P.z); if (r1 > 2.2 && (mv[0]*P.x + mv[1]*P.z)/r1 > .2) { const aEnd = HX.a0 - HX.L/HX.R; let da = Math.atan2(P.z, P.x) - aEnd; da = Math.atan2(Math.sin(da), Math.cos(da)); if (Math.abs(da) < 1.1) { P.mode = 'helix'; P.s = HX.L - .2; P.goal = null; P.auto = null; } } } P.y = TREE_H; }
-  if (P.mode === 'helix') {
-    const iv = inputVec(); let ds = 0;
-    const [x0, , z0] = helixAt(P.s), [x1, , z1] = helixAt(P.s + .1); const tx = (x1 - x0)/.1, tz = (z1 - z0)/.1;
-    if (iv) { P.auto = null; ds = (iv[0]*tx + iv[1]*tz)*SPEED*.85*dt; }
-    else if (P.auto != null) { const d = P.auto - P.s; ds = Math.sign(d)*Math.min(Math.abs(d), SPEED*.85*dt); if (Math.abs(d) < .05) P.auto = null; }
-    if (ds) { P.s += ds; P.moving = true; P.fx = tx*Math.sign(ds); P.fz = tz*Math.sign(ds); }
-    if (P.s < 0) { P.mode = 'ground'; const [hx, , hz, a] = helixAt(0); P.x = hx + Math.cos(a)*.0; P.z = hz; P.y = 0; P.auto = null; }
-    else if (P.s > HX.L) { P.mode = 'top'; const [hx, , hz] = helixAt(HX.L); P.x = hx*.55; P.z = hz*.55; P.y = TREE_H; P.auto = null; }
-    else { const [hx, hy, hz] = helixAt(P.s); P.x = hx; P.y = hy; P.z = hz; }
-  }
+    if (Math.hypot(P.x - LAD.bx, P.z - LAD.bz) < .7 && (mv[0]*-LAD.bx + mv[1]*-LAD.bz) > .5) startClimb(true); }
+  if (P.mode === 'top' && P.topGoal && !inputVec()) { const g0 = P.topGoal, a0 = Math.atan2(P.z, P.x); let da = g0.a - a0; da = Math.atan2(Math.sin(da), Math.cos(da)); const r0 = 2.3, step = SPEED*.8*dt/r0;
+    if (Math.abs(da) < .08 || (g0.act && Math.hypot(P.x - g0.act.x, P.z - g0.act.z) < g0.act.reach - .2)) { P.topGoal = null; if (g0.act) useOn(g0.act); }
+    else { const na = a0 + Math.sign(da)*Math.min(Math.abs(da), step); const nx = Math.cos(na)*r0, nz = Math.sin(na)*r0; P.fx = nx - P.x; P.fz = nz - P.z; P.x = nx; P.z = nz; P.moving = true; } }
+  if (P.mode === 'top') { if (mv) { P.topGoal = null; const nx = P.x + mv[0]*SPEED*.8*dt, nz = P.z + mv[1]*SPEED*.8*dt; const d = Math.hypot(nx, nz); if (d < 2.6 && d > 1.85) { P.x = nx; P.z = nz; P.moving = true; P.fx = mv[0]; P.fz = mv[1]; } else P.goal = null;
+      const r1 = Math.hypot(P.x, P.z); if (r1 > 2.2 && (mv[0]*P.x + mv[1]*P.z)/r1 > .2) { let da = Math.atan2(P.z, P.x) - A_L; da = Math.atan2(Math.sin(da), Math.cos(da)); if (Math.abs(da) < .6) startClimb(false); } } if (P.mode === 'top') P.y = TREE_H; }
+  if (P.mode === 'climb') updateClimb(dt);
   if (P.mode === 'ground') P.y = 0;
   /* 징검다리 위 */
   if (P.jump) { const j = P.jump; j.t += dt/.42; const k = Math.min(1, j.t); P.x = j.x0 + (j.x1 - j.x0)*k; P.z = j.z0 + (j.z1 - j.z0)*k; P.y = Math.sin(k*Math.PI)*.6 + (j.si >= 0 ? .1 : 0); P.moving = true; P.fx = j.x1 - j.x0; P.fz = j.z1 - j.z0;
@@ -746,6 +752,7 @@ function step(dt){
   /* 반딧불 */
   ffScatter = Math.max(0, ffScatter - dt*.5); ffGather = Math.max(0, ffGather - dt*.5);
   ffs.forEach((f, i) => { const sc = 1 + ffScatter*4; let x = FFB.x + Math.cos(t*.7 + f.ph)*f.r*sc, y = 1.1 + Math.sin(t*1.3 + f.ph*2)*.5 + ffScatter*2, z = FFB.z - .6 + Math.sin(t*.9 + f.ph)*f.r*.6*sc;
+    if (i < 7 && !ffScatter) { const fl = FFF[i % 2], w = .5 + .5*Math.sin(t*.25 + i*1.7); const fx = fl[0] + Math.cos(t*1.1 + f.ph)*.25, fy = .95 + Math.sin(t*1.7 + f.ph)*.12, fz = fl[1] + Math.sin(t*1.1 + f.ph)*.25; x += (fx - x)*w; y += (fy - y)*w; z += (fz - z)*w; }
     if (ffGather > 0) { x += (P.x - x)*(1 - ffGather); z += (P.z - z)*(1 - ffGather); y += (1.1 - y)*(1 - ffGather); }
     f.m.visible = !flags.ff || ffGather > 0; f.m.position.set(x, y, z); f.m.lookAt(camera.position); f.m.material.opacity = .5 + .5*Math.sin(t*3 + f.ph*5); });
   /* 거미 */
@@ -780,7 +787,7 @@ function step(dt){
   maskB.visible = !!flags.maskOn; if (flags.maskOn) { maskB.m.material.uniforms.map.value = P.row === 0 ? T.maskBack : T.mask; maskB.at(P.x + (P.row === 2 ? (P.flip ? -.08 : .08)*0 : 0), P.y + 1.28, P.z); }
   /* 카메라: 등 뒤에서 따라감 */
   CAM.manual = Math.max(0, (CAM.manual || 0) - dt);
-  if (P.moving && !CAM.manual) { const want = Math.atan2(-P.fx, -P.fz); let d = want - CAM.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); CAM.yaw += d*Math.min(1, dt*(P.mode === 'helix' ? 2.2 : 1.1)); }
+  if (P.moving && !CAM.manual) { const want = Math.atan2(-P.fx, -P.fz); let d = want - CAM.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); CAM.yaw += d*Math.min(1, dt*(P.mode === 'climb' ? 2.6 : 1.1)); }
   let cd = P.mode === 'top' ? 4.6 : CAM.dist; const chh = P.mode === 'top' ? 2.6 : CAM.h;
   if (P.mode !== 'top') for (let k = 0; k < 30 && Math.hypot(P.x + Math.sin(CAM.yaw)*cd, P.z + Math.cos(CAM.yaw)*cd) < TRUNK_R + 1.0; k++) cd -= .2;
   const wx = P.x + Math.sin(CAM.yaw)*cd, wz = P.z + Math.cos(CAM.yaw)*cd, wy = P.y + chh;
