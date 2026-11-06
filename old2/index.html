@@ -89,14 +89,14 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--marigold);outli
 <div class="veil" id="nameVeil" hidden><form class="namebox panel" id="nameForm"><h2>숲에서 불릴 이름</h2><p>함께 들어온 사람들 머리 위에 보여요.</p><input id="nameInput" maxlength="12" placeholder="예: 느린 앵무새" aria-label="이름"><button type="submit">숲으로 들어가기</button></form></div>
 <div class="veil" id="albumVeil" hidden><div class="album panel"><header><h2>기적 그림첩<span id="albumCount"></span></h2><button id="albumClose" type="button">닫기</button></header><div class="grid" id="grid"></div></div></div>
 
-<script src="config.js"></script>
+<script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 /* ================= 그래픽 교체용 =================
    assets/ 폴더에 아래 이름의 png를 넣으면 색 대신 그 그림으로 그려져요. 없는 파일은 색으로 그려요.
    한 칸 = 28px. 자세한 크기는 README 참고. */
-const ASSETS = { floor:'assets/floor.png', bush:'assets/bush.png', leaf:'assets/leaf.png', tree:'assets/tree.png',
-  water:'assets/water.png', ruin:'assets/ruin.png', player:'assets/player.png', parrot:'assets/parrot.png' };
+const ASSETS = { floor:'../assets/floor.png', bush:'../assets/bush.png', leaf:'../assets/leaf.png', tree:'../assets/tree.png',
+  water:'../assets/water.png', ruin:'../assets/ruin.png', player:'../assets/player.png', parrot:'../assets/parrot.png' };
 const COLORS = {
   floor:'#6f8a3e', floorMark:'#86a24a', bush:'#1e5a3c', bent:'#3c7a44',
   leaves:['#2f8f4e','#4fae4c','#1f6f5c','#8cc44a'], leafLine:'#123a28',
